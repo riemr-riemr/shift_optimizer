@@ -1,0 +1,44 @@
+<!--  templates/test-schedule.html  -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title th:text="${#temporals.format(month, 'yyyy年MM月')} + ' のシフト'">Shift schedule</title>
+
+  <!-- Simple reset + 軽い装飾 -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/modern-css-reset/dist/reset.min.css" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: center; }
+    th { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+
+<h1 th:text="${#temporals.format(month, 'yyyy年MM月')} + ' のシフト'">2025-07 のシフト</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>日付</th>
+      <th th:each="e : ${employeeList}"
+          th:text="${e.name}">EMP</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <!-- 1 行＝1 日 -->
+    <tr th:each="d : ${dayList}">
+      <td th:text="${#temporals.format(d, 'MM/dd (E)')}">07/01 (Tue)</td>
+
+      <!-- 1 列＝1 社員 -->
+      <td th:each="e : ${employeeList}"
+          th:text="${#maps.get(assignmentMap, d)?.get(e)?.shiftType ?: '-'}">-</td>
+    </tr>
+  </tbody>
+</table>
+
+</body>
+</html>
