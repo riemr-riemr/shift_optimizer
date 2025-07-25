@@ -313,12 +313,39 @@
   <!-- ① 月次取得 -->
   <select id="selectByMonth"
     parameterType="map"
-    resultType="io.github.riemr.shift.domain.ShiftAssignment">
+    resultMap="BaseResultMap">
     <![CDATA[
-      SELECT *
-        FROM shift_assignment
-      WHERE start_at >= #{from}
-        AND start_at <  #{to}
+      SELECT
+          sa.shift_id,
+          sa.store_code,
+          sa.employee_code,
+          sa.register_no,
+          sa.start_at,
+          sa.end_at,
+          sa.created_by
+        FROM shift_assignment sa
+       WHERE sa.start_at >= #{from}
+         AND sa.start_at <  #{to}
+       ORDER BY sa.start_at, sa.register_no
+    ]]>
+  </select>
+
+  <!-- 日次取得 -->
+  <select id="selectByDate"
+    parameterType="java.time.LocalDate"
+    resultMap="BaseResultMap">
+    <![CDATA[
+      SELECT
+          sa.shift_id,
+          sa.store_code,
+          sa.employee_code,
+          sa.register_no,
+          sa.start_at,
+          sa.end_at,
+          sa.created_by
+        FROM shift_assignment sa
+       WHERE DATE(sa.start_at) = #{date}
+       ORDER BY sa.start_at, sa.register_no
     ]]>
   </select>
 
@@ -335,5 +362,33 @@
       #{id}
     </foreach>
   </update>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.domain.ShiftAssignment">
+    INSERT INTO shift_assignment
+          (store_code,
+           employee_code,
+           register_no,
+           start_at,
+           end_at,
+           created_by)
+    VALUES (
+          #{storeCode},
+          #{employeeCode},
+          #{registerNo},
+          #{startAt},
+          #{endAt},
+          'auto'
+        )
+    ON CONFLICT (store_code, employee_code, start_at)
+    DO UPDATE SET
+      end_at         = EXCLUDED.end_at,
+      register_no    = EXCLUDED.register_no
+  </insert>
+
+  <delete id="deleteByProblemId" parameterType="long">
+    delete from public.shift_assignment
+    where extract(year from start_at) = #{problemId} / 100
+      and extract(month from start_at) = #{problemId} % 100
+  </delete>
 
 </mapper>

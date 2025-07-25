@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section>
+  <h1 class="text-xl font-bold mb-4">従業員×レジ 習熟度入力</h1>
+  <form th:action="@{/skills}" th:object="${skillForm}" method="post">
+    <table class="table-fixed border">
+      <thead>
+        <tr>
+          <th class="w-32">従業員＼レジ</th>
+          <th th:each="reg : ${matrixDto.registers}" th:text="${reg.registerNo}" class="w-20"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr th:each="emp : ${matrixDto.employees}">
+          <th th:text="${emp.employeeCode}"></th>
+          <td th:each="reg : ${matrixDto.registers}" class="text-center">
+            <!--
+              0 → ×   1 → △   2 → ○   3 → ◎   4 → ◎（最上位を重複表示。必要に応じて変更して下さい）
+            -->
+            <select class="select"
+                    th:onchange="updateCell('${emp.employeeCode}','${reg.registerNo}', this.value)">
+              <option th:value="0" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 0">×</option>
+              <option th:value="1" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 1">△</option>
+              <option th:value="2" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 2">○</option>
+              <option th:value="3" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 3">◎</option>
+              <option th:value="4" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 4">◎</option>
+            </select>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- hidden inputs -->
+    <div id="hiddenArea"></div>
+    <button type="submit" class="btn btn-primary mt-4">保存</button>
+  </form>
+
+  <script>
+    /**
+     * セル変更時に hidden input を生成／更新し、
+     *   emp|reg|val 形式で値を保持する
+     */
+    function updateCell(emp, reg, val) {
+      const id = `${emp}|${reg}`;
+      let hidden = document.getElementById(id);
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'cellList';
+        hidden.id = id;
+        document.getElementById('hiddenArea').appendChild(hidden);
+      }
+      hidden.value = `${emp}|${reg}|${val}`;
+    }
+  </script>
+</section>
+</html>

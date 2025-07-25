@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>需要人数登録</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/5.3.3/css/bootstrap.min.css}">
+</head>
+<body class="container mt-4">
+
+<h1 class="mb-3">需要人数登録</h1>
+
+<!-- ===== 検索フォーム (GET) ===== -->
+<form class="row row-cols-lg-auto g-2 align-items-end mb-4"
+      method="get" th:action="@{/register-demand}">
+    <div class="col">
+        <label for="date" class="form-label mb-0">日付</label>
+        <input id="date" name="date" type="date"
+               class="form-control"
+               th:value="${#temporals.format(command?.targetDate, 'yyyy-MM-dd')}"/>
+    </div>
+    <div class="col">
+        <button class="btn btn-secondary">検索</button>
+    </div>
+</form>
+
+<!-- ===== 登録フォーム (POST) ===== -->
+<form th:action="@{/register-demand}" th:object="${command}" method="post"
+      th:if="${command != null}">
+
+    <div th:if="${_csrf != null}">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    </div>
+    <input type="hidden" th:field="*{storeCode}"/>
+    <input type="hidden" th:field="*{targetDate}"/>
+
+    <table class="table table-sm table-bordered">
+        <thead class="table-light">
+        <tr><th>時間</th><th>必要台数</th></tr></thead>
+        <tbody>
+        <tr th:each="hour,stat : *{hours}">
+            <td class="align-middle text-center"
+                th:text="${#numbers.formatInteger(hour.hour.hour,2)} + ':00'"></td>
+
+            <!-- hour.hour = LocalTime -->
+            <input type="hidden"
+                th:field="*{hours[__${stat.index}__].hour}"
+                th:value="${#temporals.format(hour.hour,'HH:mm')}" />
+
+            <td>
+                <input type="number" min="0" step="1" class="form-control"
+                       th:field="*{hours[__${stat.index}__].requiredUnits}"
+                       th:value="${hour.requiredUnits}"/>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-end">
+        <button class="btn btn-primary">保存</button>
+    </div>
+</form>
+
+<script th:src="@{/webjars/bootstrap/5.3.3/js/bootstrap.bundle.min.js}"></script>
+</body>
+</html>

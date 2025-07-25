@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Shift App</title>
+  <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="p-4">
+  <!-- 共通ヘッダ -->
+  <header class="mb-6 border-b pb-2">
+    <h1 class="text-2xl font-bold">Shift Management</h1>
+  </header>
+
+  <!-- ここに各画面の内容が入る -->
+  <main th:fragment="layout(content)">
+    <div th:replace="${content}"></div>
+  </main>
+
+  <!-- 共通フッタ -->
+  <footer class="mt-8 text-sm text-gray-500">© 2025</footer>
+</body>
+</html>

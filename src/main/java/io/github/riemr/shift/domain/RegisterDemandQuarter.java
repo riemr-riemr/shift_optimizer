@@ -38,7 +38,7 @@ public class RegisterDemandQuarter implements Serializable {
      *
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
-    private Date slotTime;
+    private java.time.LocalTime slotTime;
 
     /**
      *
@@ -137,7 +137,7 @@ public class RegisterDemandQuarter implements Serializable {
      *
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
-    public Date getSlotTime() {
+    public java.time.LocalTime getSlotTime() {
         return slotTime;
     }
 
@@ -149,7 +149,7 @@ public class RegisterDemandQuarter implements Serializable {
      *
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
-    public void setSlotTime(Date slotTime) {
+    public void setSlotTime(java.time.LocalTime slotTime) {
         this.slotTime = slotTime;
     }
 

@@ -98,13 +98,25 @@ public interface ShiftAssignmentMapper {
      */
     int updateByPrimaryKey(ShiftAssignment row);
 
+    int deleteByProblemId(long problemId);
+
     /** 指定月に含まれるシフトをすべて取得 */
     List<ShiftAssignment> selectByMonth(@Param("from") LocalDate from,
             @Param("to") LocalDate to);
+
+    List<ShiftAssignment> selectByDate(@Param("date") LocalDate date);
 
     /**
      * Solver 結果をまとめて書き戻す
      * key: shiftId, value: employeeCode
      */
     int bulkUpdateEmployee(@Param("map") Map<Long, String> map);
+
+        /**
+     * 主キー(id) 衝突時は更新、それ以外は INSERT します。
+     *
+     * @param entity ShiftAssignment
+     * @return 影響行数 (INSERT=1 / UPDATE=1 / 失敗=0)
+     */
+    int upsert(ShiftAssignment entity);
 }

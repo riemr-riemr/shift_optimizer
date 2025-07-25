@@ -2,6 +2,8 @@ package io.github.riemr.shift.infrastructure.mapper;
 
 import io.github.riemr.shift.domain.EmployeeRequest;
 import io.github.riemr.shift.domain.EmployeeRequestExample;
+
+import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
@@ -93,4 +95,6 @@ public interface EmployeeRequestMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(EmployeeRequest row);
+
+    List<EmployeeRequest> selectByMonth(@Param("targetDate") LocalDate targetDate);
 }

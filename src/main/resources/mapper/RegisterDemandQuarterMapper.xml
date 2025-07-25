@@ -277,4 +277,45 @@
       required_units = #{requiredUnits,jdbcType=INTEGER}
     where demand_id = #{demandId,jdbcType=BIGINT}
   </update>
+
+  <!-- ❶ 時給表示用に 15 分データを取得 -->
+  <select id="selectByStoreAndDate" resultMap="BaseResultMap">
+    SELECT
+      store_code,
+      demand_date,
+      slot_time,
+      required_units
+    FROM register_demand_quarter
+    WHERE store_code = #{storeCode}
+    AND demand_date = #{targetDate}
+    ORDER BY slot_time
+  </select>
+
+  <!-- ❷ 既存データを全削除 -->
+  <delete id="deleteByStoreAndDate">
+    DELETE FROM register_demand_quarter
+    WHERE store_code = #{storeCode}
+    AND demand_date = #{targetDate}
+  </delete>
+
+  <!-- ❸ バルク INSERT -->
+  <insert id="batchInsert">
+    INSERT INTO register_demand_quarter
+        (store_code, demand_date, slot_time, required_units)
+    VALUES
+  <foreach collection="list" item="item" separator=",">
+    (#{item.storeCode}, #{item.demandDate}, #{item.slotTime}, #{item.requiredUnits})
+  </foreach>
+  </insert>
+  <select id="selectByMonth" resultMap="BaseResultMap">
+    SELECT
+      store_code,
+      demand_date,
+      slot_time,
+      required_units
+    FROM register_demand_quarter
+    WHERE TO_CHAR(demand_date, 'YYYY-MM') = TO_CHAR(#{targetMonth}, 'YYYY-MM')
+    ORDER BY slot_time
+  </select>
+
 </mapper>

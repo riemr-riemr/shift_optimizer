@@ -30,9 +30,10 @@ CREATE TABLE register (
     short_name       VARCHAR(10),
     open_priority    INT NOT NULL DEFAULT 99,
     register_type    VARCHAR(10) NOT NULL,
-    is_auto_open_target BOOLEAN NOT NULL DEFAULT TRUE
+    is_auto_open_target BOOLEAN NOT NULL DEFAULT FALSE,
+    max_allowance    INT NOT NULL DEFAULT 60,
+    PRIMARY KEY (store_code, register_no)
 );
-CREATE UNIQUE INDEX uq_register_store_code ON register(store_code, register_no);
 
 -- ------------------------------------------------
 -- 3. employee : 従業員マスタ
@@ -67,7 +68,7 @@ CREATE TABLE employee_register_skill (
 -- ------------------------------------------------
 CREATE TABLE register_demand_quarter (
     demand_id      BIGSERIAL PRIMARY KEY,
-    store_code       VARCHAR(10) REFERENCES store(store_code),
+    store_code     VARCHAR(10) REFERENCES store(store_code),
     demand_date    DATE NOT NULL,
     slot_time      TIME NOT NULL,
     required_units INT  NOT NULL
@@ -80,8 +81,8 @@ CREATE UNIQUE INDEX uq_demand ON register_demand_quarter(store_code, demand_date
 CREATE TABLE shift_assignment (
     shift_id      BIGSERIAL PRIMARY KEY,
     store_code    VARCHAR(10) NOT NULL,
-    employee_code VARCHAR(10) NOT NULL,
-    register_no   INT         NOT NULL,
+    employee_code VARCHAR(10),
+    register_no   INT,
     start_at      TIMESTAMP   NOT NULL,
     end_at        TIMESTAMP   NOT NULL,
     created_by    VARCHAR(20) NOT NULL DEFAULT 'auto',

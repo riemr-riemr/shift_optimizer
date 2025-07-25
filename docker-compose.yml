@@ -1,12 +1,5 @@
 version: '3.8'
 services:
-  app:
-    build: .
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
-
   db:
     image: postgres:16
     container_name: shift-db
@@ -14,7 +7,47 @@ services:
       POSTGRES_DB: shiftdb
       POSTGRES_USER: shiftuser
       POSTGRES_PASSWORD: shiftpass
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     volumes:
+      - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: shift-app
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8080:8080", "5005:5005"] # 5005デバッグポート
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shiftdb
+      SPRING_DATASOURCE_USERNAME: shiftuser
+      SPRING_DATASOURCE_PASSWORD: shiftpass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    restart: on-failure
+
+  data-import:
+    build: .
+    profiles: ["batch"]
+    depends_on:
+      db: { condition: service_healthy }
+    command: >
+      java -jar /app.jar
+      --spring.profiles.active=batch
+      --spring.batch.job.names=masterImportJob
+      --spring.main.web-application-type=none
+      --csv.dir=/csv
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shiftdb
+      SPRING_DATASOURCE_USERNAME: shiftuser
+      SPRING_DATASOURCE_PASSWORD: shiftpass
+    volumes:
+      - ./docker/csv:/csv
+
+volumes:
+  pgdata:

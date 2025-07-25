@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>月次シフト計算</title>
+  <link rel="stylesheet" href="/webjars/bootstrap/5.3.3/css/bootstrap.min.css"/>
+</head>
+<body class="p-4">
+<h1>月次シフト計算</h1>
+
+<div class="d-flex gap-2 align-items-end">
+  <div>
+    <label class="form-label">対象月</label>
+    <input type="month" id="month" class="form-control">
+  </div>
+  <button id="btnCalc" class="btn btn-primary">計算開始</button>
+  <div>
+    <label class="form-label">対象日</label>
+    <input type="date" id="date" class="form-control">
+  </div>
+  <button id="btnSearch" class="btn btn-secondary">検索</button>
+</div>
+
+<div id="progressArea" class="progress my-3" style="height:24px; display:none;">
+  <div id="bar" class="progress-bar progress-bar-striped" style="width:0%">0%</div>
+</div>
+
+<style>
+  .shift-grid-container {
+    display: grid;
+    grid-template-columns: auto repeat(96, 1fr); /* Register column + 96 (24 hours * 4) 15-min slots */
+    gap: 1px;
+    border: 1px solid #ccc;
+    margin-top: 20px;
+    overflow-x: auto;
+  }
+  .grid-header, .grid-cell {
+    padding: 5px;
+    text-align: center;
+    background-color: #f8f8f8;
+    border: 1px solid #eee;
+    white-space: nowrap;
+  }
+  .grid-header.time-slot {
+    font-size: 0.8em;
+    background-color: #e0e0e0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .grid-row-header {
+    font-weight: bold;
+    background-color: #f0f0f0;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .grid-cell.assigned {
+    background-color: #d4edda; /* Example color */
+    color: #155724;
+    font-weight: bold;
+  }
+  .grid-cell.assigned.color-0 { background-color: #d4edda; }
+  .grid-cell.assigned.color-1 { background-color: #cce5ff; }
+  .grid-cell.assigned.color-2 { background-color: #fff3cd; }
+  .grid-cell.assigned.color-3 { background-color: #f8d7da; }
+  .grid-cell.assigned.color-4 { background-color: #e2e3e5; }
+</style>
+
+<div id="shiftGrid" class="shift-grid-container" style="display:none;"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+// Function to generate a consistent color based on employee name
+function getEmployeeColorClass(employeeName) {
+  let hash = 0;
+  for (let i = 0; i < employeeName.length; i++) {
+    hash = employeeName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return `color-${Math.abs(hash) % 5}`; // Use 5 distinct colors
+}
+
+$('btnCalc').onclick=async()=>{
+  const m=$('month').value;
+  if(!m){alert('月を選択してください');return;}
+  const ticket=await fetch('/shift/api/calc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:m})}).then(r=>r.json());
+  $('progressArea').style.display='';
+  tick(ticket.problemId, m);
+};
+
+$('btnSearch').onclick=async()=>{
+  const d=$('date').value;
+  if(!d){alert('日付を選択してください');return;}
+  loadResult(d);
+};
+
+async function tick(id, month){
+  const st=await fetch(`/shift/api/calc/status/${id}`).then(r=>r.json());
+  $('bar').style.width=st.progress+'%';
+  $('bar').textContent=st.progress+'%';
+  if(st.status !== 'NOT_SOLVING'){
+    setTimeout(()=>tick(id, month),1000);
+  } else {
+    $('bar').classList.add('bg-success');
+    // After calculation, default to showing the first day of the month
+    const [year, monthNum] = month.split('-').map(Number);
+    const firstDayOfMonth = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+    loadResult(firstDayOfMonth);
+  }
+}
+
+async function loadResult(dateString){
+  const data=await fetch(`/shift/api/calc/assignments/daily/${dateString}`).then(r=>r.json());
+  const shiftGrid = $('shiftGrid');
+  shiftGrid.innerHTML = ''; // Clear previous content
+  shiftGrid.style.display = '';
+
+  // Determine unique registers
+  const registers = [...new Set(data.map(a => a.registerNo))].sort((a, b) => a - b);
+
+  // Create time headers (15-minute intervals)
+  const timeHeaderRow = document.createElement('div');
+  timeHeaderRow.className = 'grid-row';
+  timeHeaderRow.style.gridColumn = '1 / -1'; // Span all columns
+  timeHeaderRow.style.display = 'contents'; // Allow children to be grid items
+
+  const emptyHeader = document.createElement('div');
+  emptyHeader.className = 'grid-header';
+  timeHeaderRow.appendChild(emptyHeader); // Empty cell for register column
+
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const timeHeader = document.createElement('div');
+      timeHeader.className = 'grid-header time-slot';
+      timeHeader.textContent = time;
+      timeHeaderRow.appendChild(timeHeader);
+    }
+  }
+  shiftGrid.appendChild(timeHeaderRow);
+
+  // Create grid rows for each register
+  registers.forEach(registerNo => {
+    const registerRowHeader = document.createElement('div');
+    registerRowHeader.className = 'grid-row-header';
+    registerRowHeader.textContent = `レジ ${registerNo}`;
+    shiftGrid.appendChild(registerRowHeader);
+
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 15) {
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.dataset.register = registerNo;
+        cell.dataset.time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        shiftGrid.appendChild(cell);
+      }
+    }
+  });
+
+  // Populate grid with assignments
+  data.forEach(assignment => {
+    const start = new Date(assignment.startAt);
+    const end = new Date(assignment.endAt);
+    const employeeAbbr = assignment.employeeName.substring(0, 2); // First two characters
+    const colorClass = getEmployeeColorClass(assignment.employeeName);
+
+    // Iterate through 15-minute intervals for the assignment
+    let currentTime = new Date(start);
+    while (currentTime < end) {
+      const hour = currentTime.getHours();
+      const minute = currentTime.getMinutes();
+      const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+      const cell = shiftGrid.querySelector(`.grid-cell[data-register="${assignment.registerNo}"][data-time="${targetTime}"]`);
+      if (cell) {
+        cell.classList.add('assigned', colorClass);
+        cell.textContent = employeeAbbr;
+      }
+      currentTime.setMinutes(currentTime.getMinutes() + 15);
+    }
+  });
+}
+</script>
+</body>
+</html>

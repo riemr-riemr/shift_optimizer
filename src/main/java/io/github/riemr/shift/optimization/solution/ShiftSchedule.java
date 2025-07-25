@@ -1,6 +1,12 @@
 package io.github.riemr.shift.optimization.solution;
 
+import io.github.riemr.shift.domain.ConstraintMaster;
+import io.github.riemr.shift.domain.ConstraintSetting;
 import io.github.riemr.shift.domain.Employee;
+import io.github.riemr.shift.domain.EmployeeRequest;
+import io.github.riemr.shift.domain.Register;
+import io.github.riemr.shift.domain.RegisterDemandQuarter;
+import io.github.riemr.shift.domain.ShiftAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import lombok.Getter;
 import lombok.Setter;
@@ -9,35 +15,88 @@ import lombok.ToString;
 import org.optaplanner.core.api.domain.solution.PlanningEntityCollectionProperty;
 import org.optaplanner.core.api.domain.solution.PlanningScore;
 import org.optaplanner.core.api.domain.solution.PlanningSolution;
+import org.optaplanner.core.api.domain.solution.ProblemFactCollectionProperty;
 import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 
+import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Planner 用ソリューションオブジェクト。
+ * 複数店舗・月次のシフトを 1 つの問題として解く想定。
+ */
 @PlanningSolution
 @Getter
 @Setter
 @ToString
 public class ShiftSchedule {
 
-    /** 値域プロバイダ：社員の候補リスト */
+    /** 問題識別用 (yyyyMM) */
+    private Long problemId;
+
+    /** 月次 (例: 2025‑07‑01) */
+    private LocalDate month;
+
+    /* === Value range / Problem facts === */
+
+    /** 従業員（PlanningVariable の候補） */
     @ValueRangeProvider(id = "employeeRange")
     private List<Employee> employeeList;
 
-    /** PlanningEntity リスト */
+    /** レジスター定義 (参照のみ) */
+    @ProblemFactCollectionProperty
+    private List<Register> registerList;
+
+    /** 15 分需要 (参照のみ) */
+    @ProblemFactCollectionProperty
+    private List<RegisterDemandQuarter> demandList;
+
+    /** 希望休日 */
+    @ProblemFactCollectionProperty
+    private List<EmployeeRequest> employeeRequestList;
+
+    /** 制約設定 (重み・閾値など) */
+    @ProblemFactCollectionProperty
+    private List<ConstraintMaster> constraintMasterList;
+
+    /** 前回結果 – ウォームスタート用 (参照のみ) */
+    @ProblemFactCollectionProperty
+    private List<ShiftAssignment> previousAssignmentList;
+
+    /* === Planning entities === */
+
+    /** 15分×レジ × 日付 × シフトを割り当てる単位 */
     @PlanningEntityCollectionProperty
     private List<ShiftAssignmentPlanningEntity> assignmentList;
 
-    /** スコア */
+    /* === Score === */
+
     @PlanningScore
     private HardSoftScore score;
 
-    // 空コンストラクタ & フル引数コンストラクタ
+    /* === Constructors === */
+
     public ShiftSchedule() {
     }
 
-    public ShiftSchedule(List<Employee> employeeList, List<ShiftAssignmentPlanningEntity> assignmentList) {
+    public ShiftSchedule(Long problemId,
+                         LocalDate month,
+                         List<Employee> employeeList,
+                         List<Register> registerList,
+                         List<RegisterDemandQuarter> demandList,
+                         List<EmployeeRequest> employeeRequestList,
+                         List<ConstraintMaster> constraintMasterList,
+                         List<ShiftAssignment> previousAssignmentList,
+                         List<ShiftAssignmentPlanningEntity> assignmentList) {
+        this.problemId = problemId;
+        this.month = month;
         this.employeeList = employeeList;
+        this.registerList = registerList;
+        this.demandList = demandList;
+        this.employeeRequestList = employeeRequestList;
+        this.constraintMasterList = constraintMasterList;
+        this.previousAssignmentList = previousAssignmentList;
         this.assignmentList = assignmentList;
     }
 }

@@ -1,84 +1,234 @@
 package io.github.riemr.shift.optimization.service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 
 import org.optaplanner.core.api.solver.SolverJob;
 import org.optaplanner.core.api.solver.SolverManager;
+import org.optaplanner.core.api.solver.SolverStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import io.github.riemr.shift.domain.Employee;
+import io.github.riemr.shift.application.dto.ShiftAssignmentView;
+import io.github.riemr.shift.application.dto.SolveStatusDto;
+import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.domain.ShiftAssignment;
-import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.repository.ShiftScheduleRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+/**
+ * OptaPlanner による月次シフト計算を制御するサービス。
+ * <ul>
+ *   <li>月 (yyyy‑MM) をキーに非同期ジョブを起動</li>
+ *   <li>進捗状況をポーリング API 経由で公開</li>
+ *   <li>計算終了後、最善解を DTO に変換して返却</li>
+ * </ul>
+ */
 @Service
 @RequiredArgsConstructor
-@Transactional
+@Transactional(readOnly = true)
+@Slf4j
 public class ShiftScheduleService {
 
-    private final ShiftAssignmentMapper assignmentMapper;
-    private final EmployeeMapper employeeMapper;
+    /* === Collaborators === */
     private final SolverManager<ShiftSchedule, Long> solverManager;
+    private final ShiftScheduleRepository repository;
+    private final ShiftAssignmentMapper shiftAssignmentMapper;
+
+    /* === Settings === */
+    @Value("${shift.solver.spent-limit:PT2M}") // ISO‑8601 Duration (default 2 minutes)
+    private Duration spentLimit;
+
+    /* === Runtime State === */
+    private final Map<Long, Instant> startMap = new ConcurrentHashMap<>();
+    private final Map<Long, SolverJob<ShiftSchedule, Long>> jobMap = new ConcurrentHashMap<>();
+
+    /* ===================================================================== */
+    /* Public API                                                            */
+    /* ===================================================================== */
 
     /**
-     * 指定月のシフトを最適化して非同期に返す。
-     *
-     * @param month e.g. 2025-07-01
+     * 月次シフト計算を非同期で開始。
+     * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
      */
-    public CompletableFuture<ShiftSchedule> solveMonth(LocalDate month) {
+    @Transactional
+    public SolveTicket startSolveMonth(LocalDate month) {
+        long problemId = toProblemId(month);
 
-        // 月初と翌月初を計算
+        // -- ジョブが既に存在する場合はチケットのみ再発行 --
+        if (jobMap.containsKey(problemId)) {
+            Instant started = startMap.get(problemId);
+            return new SolveTicket(problemId,
+                    started.toEpochMilli(),
+                    started.plus(spentLimit).toEpochMilli());
+        }
+
+        // -- Solver 起動 (listen 方式) --
+        SolverJob<ShiftSchedule, Long> job = solverManager.solveAndListen(
+                problemId,
+                this::loadProblem,
+                this::persistResult,
+                this::onError);
+        jobMap.put(problemId, job);
+
+        // -- 進捗トラッキング用メタ情報 --
+        Instant start = Instant.now();
+        startMap.put(problemId, start);
+
+        return new SolveTicket(problemId,
+                start.toEpochMilli(),
+                start.plus(spentLimit).toEpochMilli());
+    }
+
+    /** 進捗バー用ステータス */
+    public SolveStatusDto getStatus(Long problemId) {
+        SolverStatus status = solverManager.getSolverStatus(problemId);
+        Instant began = startMap.get(problemId);
+        if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0);
+
+        long now = Instant.now().toEpochMilli();
+        long finish = began.plus(spentLimit).toEpochMilli();
+        int pct = (int) Math.min(100, ((now - began.toEpochMilli()) * 100) / (finish - began.toEpochMilli()));
+        if (status == SolverStatus.NOT_SOLVING) pct = 100;
+
+        return new SolveStatusDto(status.name(), pct, finish);
+    }
+
+    /** 計算終了後の最終解をフロント用 DTO に変換して返す */
+    public List<ShiftAssignmentView> fetchResult(Long problemId) {
+        SolverJob<ShiftSchedule, Long> job = jobMap.get(problemId);
+        if (job == null) return List.of();
+
+        try {
+            ShiftSchedule solved = job.getFinalBestSolution();
+            return solved.getAssignmentList().stream()
+                    .map(a -> new ShiftAssignmentView(
+                            a.getOrigin().getStartAt().toString(),
+                            a.getOrigin().getEndAt().toString(),
+                            a.getOrigin().getRegisterNo(),
+                            Optional.ofNullable(a.getAssignedEmployee())
+                                    .map(emp -> emp.getEmployeeName())
+                                    .orElse("-")))
+                    .toList();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return List.of();
+        } catch (ExecutionException e) {
+            throw new IllegalStateException("Failed to retrieve solution", e);
+        }
+    }
+
+    public List<ShiftAssignmentView> fetchAssignmentsByMonth(LocalDate month) {
         LocalDate from = month.withDayOfMonth(1);
-        LocalDate to = from.plusMonths(1);
+        LocalDate to = month.plusMonths(1).withDayOfMonth(1);
+        List<ShiftAssignment> assignments = shiftAssignmentMapper.selectByMonth(from, to);
+        return assignments.stream()
+                .map(a -> new ShiftAssignmentView(
+                        Optional.ofNullable(a.getStartAt())
+                                .map(date -> date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                .orElse(""),
+                        Optional.ofNullable(a.getEndAt())
+                                .map(date -> date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                .orElse(""),
+                        a.getRegisterNo(),
+                        Optional.ofNullable(a.getEmployeeCode()).orElse("")
+                ))
+                .toList();
+    }
 
-        // 1. DB から一括ロード – 遅延ロードを避ける
-        List<ShiftAssignment> rawAssignments = assignmentMapper.selectByMonth(from, to);
-        List<Employee> employees = employeeMapper.selectAll();
+    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date) {
+        List<ShiftAssignment> assignments = shiftAssignmentMapper.selectByDate(date);
+        return assignments.stream()
+                .map(a -> new ShiftAssignmentView(
+                        Optional.ofNullable(a.getStartAt())
+                                .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                .orElse(""),
+                        Optional.ofNullable(a.getEndAt())
+                                .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                .orElse(""),
+                        a.getRegisterNo(),
+                        Optional.ofNullable(a.getEmployeeCode()).orElse("")
+                ))
+                .toList();
+    }
 
-        // 2. ラッパーへ変換
-        List<ShiftAssignmentPlanningEntity> planningEntities = rawAssignments.stream()
-                .map(ShiftAssignmentPlanningEntity::new)
-                .collect(Collectors.toList());
+    /* ===================================================================== */
+    /* Callback for solveAndListen                                            */
+    /* ===================================================================== */
 
-        ShiftSchedule problem = new ShiftSchedule(employees, planningEntities);
-
-        // 3. 一意 ID で solve（yyyyMM を long で持たせる例）
-        long problemId = month.getYear() * 100L + month.getMonthValue();
-
-        SolverJob<ShiftSchedule, Long> job = solverManager.solve(problemId, problem);
-
-        // 4. 非同期で最終結果を取得し、例外を CompletableFuture に包む
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return job.getFinalBestSolution();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Solver interrupted", e);
-            } catch (ExecutionException e) {
-                throw new IllegalStateException("Solver failed", e);
-            }
-        });
+    /**
+     * Solver が最初に呼び出す問題生成関数。
+     * problemId は yyyyMM の long 値で渡される。
+     */
+    private ShiftSchedule loadProblem(Long problemId) {
+        LocalDate month = toMonth(problemId);
+        ShiftSchedule unsolved = repository.fetchShiftSchedule(month);
+        // Repository 側で必要なフィールドをセット済みだが、問題 ID だけはここで上書きしておく
+        unsolved.setProblemId(problemId);
+        if (unsolved.getAssignmentList() == null) {
+            unsolved.setAssignmentList(new ArrayList<>());
+        }
+        log.info("Loaded unsolved problem for {} ({} assignments)", month, unsolved.getAssignmentList().size());
+        return unsolved;
     }
 
     /**
-     * Solver 結果を書き戻す – ここではシンプルにバルク更新のイメージだけ示す
+     * 新しいベスト解が到着する度に呼び出され、DB に永続化する。
+     * <p>
+     * ここでは極力単純な実装として全件 Upsert を行うが、
+     * 実運用では差分更新に切り替える方が性能的に好ましい。
      */
-    public void persistSolution(ShiftSchedule solved) {
-        // Map<shiftId, employeeId>
-        Map<Long, String> idMap = solved.getAssignmentList().stream()
-                .collect(Collectors.toMap(
-                        e -> e.getOrigin().getShiftId(),
-                        e -> e.getAssignedEmployee().getEmployeeCode()));
+    private void persistResult(ShiftSchedule best) {
+        shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+        // -- 中間エンティティから確定したアサイン結果を抽出し、DB モデルに反映 --
+        List<ShiftAssignment> entities = best.getAssignmentList().stream()
+                .map(planningEntity -> {
+                    ShiftAssignment origin = planningEntity.getOrigin();
+                    Optional.ofNullable(planningEntity.getAssignedEmployee())
+                            .ifPresent(employee -> {
+                                origin.setEmployeeCode(employee.getEmployeeCode());
+                                origin.setShiftId(null); // 常に INSERT
+                            });
+                    return origin;
+                })
+                .toList();
 
-        assignmentMapper.bulkUpdateEmployee(idMap);
+        // -- DB に Upsert --
+        entities.forEach(shiftAssignmentMapper::insert);
+        log.info("Persisted best solution – {} assignments saved (score = {})", entities.size(), best.getScore());
+    }
+
+    /**
+     * Solver 実行中に例外が発生した場合のハンドラ。
+     */
+    private void onError(Long problemId, Throwable throwable) {
+        log.error("Solver failed for problem {}", problemId, throwable);
+    }
+
+    /* ===================================================================== */
+    /* Helper                                                                */
+    /* ===================================================================== */
+
+    private static long toProblemId(LocalDate month) {
+        return month.getYear() * 100L + month.getMonthValue(); // yyyyMM
+    }
+
+    private static LocalDate toMonth(long problemId) {
+        int year = (int) (problemId / 100);
+        int month = (int) (problemId % 100);
+        return LocalDate.of(year, month, 1);
     }
 }

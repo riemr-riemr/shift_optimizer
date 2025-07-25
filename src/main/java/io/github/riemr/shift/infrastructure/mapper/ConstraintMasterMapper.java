@@ -93,4 +93,6 @@ public interface ConstraintMasterMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(ConstraintMaster row);
+
+    List<ConstraintMaster> selectAll();
 }

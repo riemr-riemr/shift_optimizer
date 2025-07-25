@@ -301,7 +301,7 @@
     where employee_code = #{employeeCode,jdbcType=VARCHAR}
   </update>
 
-  <select id="selectAll" resultType="io.github.riemr.shift.domain.Employee">
+  <select id="selectAll" resultMap="BaseResultMap">
     SELECT *
       FROM employee
     ORDER BY employee_code

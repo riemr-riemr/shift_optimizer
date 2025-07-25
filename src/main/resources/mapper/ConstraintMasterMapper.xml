@@ -268,4 +268,9 @@
       default_weight = #{defaultWeight,jdbcType=INTEGER}
     where constraint_code = #{constraintCode,jdbcType=VARCHAR}
   </update>
+  <select id="selectAll" resultMap="BaseResultMap">
+    select description, default_kind, default_weight, constraint_code
+    from public.constraint_master
+    order by constraint_code
+  </select>
 </mapper>

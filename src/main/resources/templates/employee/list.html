@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section>
+  <h1 class="text-xl font-bold mb-4">従業員一覧</h1>
+  <a class="btn btn-primary mb-2" th:href="@{/employees/new}">+ 新規登録</a>
+  <table class="table-auto w-full border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th>従業員コード</th><th>氏名</th><th>店舗</th><th>日上限(分)</th><th>月上限(日)</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr th:each="e : ${employees}">
+        <td th:text="${e.employeeCode}"></td>
+        <td th:text="${e.employeeName}"></td>
+        <td th:text="${e.storeCode}"></td>
+        <td th:text="${e.maxWorkMinutesDay}"></td>
+        <td th:text="${e.maxWorkDaysMonth}"></td>
+        <td>
+          <a th:href="@{|/employees/${e.employeeCode}|}" class="text-blue-600">編集</a>
+          <form th:action="@{|/employees/${e.employeeCode}/delete|}" method="post" class="inline">
+            <button type="submit" class="text-red-600 ml-2" onclick="return confirm('削除しますか?');">削除</button>
+          </form>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+</html>

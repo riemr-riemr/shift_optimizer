@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section>
+  <h1 class="text-xl font-bold mb-4" th:text="${edit} ? '従業員編集' : '従業員新規登録'"></h1>
+  <form th:action="@{/employees}" th:object="${employeeForm}" method="post" class="space-y-4">
+    <input type="hidden" name="edit" th:value="${edit}"/>
+    <div>
+      <label>従業員コード</label>
+      <input th:field="*{employeeCode}" th:disabled="${edit}" class="input"/>
+      <div class="text-red-500" th:errors="*{employeeCode}"></div>
+    </div>
+    <div>
+      <label>店舗コード</label>
+      <input th:field="*{storeCode}" class="input"/>
+      <div class="text-red-500" th:errors="*{storeCode}"></div>
+    </div>
+    <div>
+      <label>氏名</label>
+      <input th:field="*{employeeName}" class="input"/>
+      <div class="text-red-500" th:errors="*{employeeName}"></div>
+    </div>
+    <div>
+      <label>ショートフォロー区分</label>
+      <select th:field="*{shortFollow}" class="select">
+        <option value="0"></option>
+        <option value="1">x</option>
+        <option value="2">△</option>
+        <option value="3">○</option>
+        <option value="4">◎</option>
+      </select>
+      <div class="text-red-500" th:errors="*{shortFollow}"></div>
+    </div>
+    <div>
+      <label>1日上限 (分)</label>
+      <input type="number" th:field="*{maxWorkMinutesDay}" class="input"/>
+      <div class="text-red-500" th:errors="*{maxWorkMinutesDay}"></div>
+    </div>
+    <div>
+      <label>1か月上限 (日)</label>
+      <input type="number" th:field="*{maxWorkDaysMonth}" class="input"/>
+      <div class="text-red-500" th:errors="*{maxWorkDaysMonth}"></div>
+    </div>
+    <div class="flex gap-4">
+      <button type="submit" class="btn btn-primary">保存</button>
+      <a th:href="@{/employees}" class="btn btn-secondary">キャンセル</a>
+    </div>
+  </form>
+</section>
+</html>

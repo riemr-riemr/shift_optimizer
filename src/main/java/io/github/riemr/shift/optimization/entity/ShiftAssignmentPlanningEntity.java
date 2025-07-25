@@ -51,7 +51,7 @@ public class ShiftAssignmentPlanningEntity {
                 origin.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
     }
 
-    public int getRegisterNo() {
+    public Integer getRegisterNo() {
         return origin.getRegisterNo();
     }
 }

@@ -2,6 +2,8 @@ package io.github.riemr.shift.infrastructure.mapper;
 
 import io.github.riemr.shift.domain.RegisterDemandQuarter;
 import io.github.riemr.shift.domain.RegisterDemandQuarterExample;
+
+import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
@@ -93,4 +95,12 @@ public interface RegisterDemandQuarterMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(RegisterDemandQuarter row);
+
+    List<RegisterDemandQuarter> selectByStoreAndDate(@Param("storeCode") String storeCde, @Param("targetDate") LocalDate targetDate);
+
+    void deleteByStoreAndDate(@Param("storeCode") String storeCode, @Param("targetDate") LocalDate targetDate);
+
+    void batchInsert(@Param("list") List<RegisterDemandQuarter> quarters);
+
+    List<RegisterDemandQuarter> selectByMonth(@Param("targetMonth") LocalDate targetMonth);
 }
