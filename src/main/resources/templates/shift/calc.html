@@ -2,70 +2,141 @@
 <html xmlns:th="http://www.thymeleaf.org"
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout}">
+<head>
+  <title>シフト最適化</title>
+</head>
 <body>
 <section layout:fragment="content">
-<h1>月次シフト計算</h1>
-
-<div class="d-flex gap-2 align-items-end">
-  <div>
-    <label class="form-label">対象月</label>
-    <input type="month" id="month" class="form-control">
+<div class="row g-4">
+  <!-- Control Panel -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-gear-fill me-2"></i>シフト最適化コントロール
+      </div>
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-calendar-month me-1"></i>対象月
+            </label>
+            <input type="month" id="month" class="form-control form-control-lg">
+          </div>
+          <div class="col-md-2">
+            <button id="btnCalc" class="btn btn-primary btn-lg">
+              <i class="bi bi-play-fill me-2"></i>最適化開始
+            </button>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-calendar-day me-1"></i>表示日
+            </label>
+            <input type="date" id="date" class="form-control form-control-lg">
+          </div>
+          <div class="col-md-4">
+            <div class="btn-group" role="group">
+              <button id="btnPrevDay" class="btn btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> 前日
+              </button>
+              <button id="btnSearch" class="btn btn-success">
+                <i class="bi bi-search"></i> 検索
+              </button>
+              <button id="btnNextDay" class="btn btn-outline-secondary">
+                翌日 <i class="bi bi-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <button id="btnCalc" class="btn btn-primary">計算開始</button>
-  <div>
-    <label class="form-label">対象日</label>
-    <input type="date" id="date" class="form-control">
-  </div>
-  <button id="btnSearch" class="btn btn-secondary">検索</button>
 </div>
 
-<div id="progressArea" class="progress my-3" style="height:24px; display:none; background-color: #e9ecef;">
-  <div id="bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:0%; transition: width 0.3s ease;">0%</div>
+<!-- Progress Section -->
+<div class="row g-4 mt-2">
+  <div class="col-12">
+    <div class="card" id="progressCard" style="display:none;">
+      <div class="card-header">
+        <i class="bi bi-hourglass-split me-2"></i>最適化進捗
+      </div>
+      <div class="card-body">
+        <div id="progressArea" class="progress" style="height:28px;">
+          <div id="bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+               style="width:0%; transition: width 0.3s ease; font-weight: 600;">0%</div>
+        </div>
+        <div class="mt-2 text-muted" id="progressMessage">
+          <small><i class="bi bi-info-circle me-1"></i>最適化アルゴリズムが実行中です...</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Results Section -->
+<div class="row g-4 mt-2">
+  <div class="col-12">
+    <div class="card" id="resultsCard" style="display:none;">
+      <div class="card-header">
+        <i class="bi bi-table me-2"></i>シフト割り当て結果
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto;">
+          <div id="shiftGrid" class="shift-grid-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
   .shift-grid-container {
     display: grid;
-    grid-template-columns: auto repeat(96, 1fr); /* Register column + 96 (24 hours * 4) 15-min slots */
+    grid-template-columns: 120px repeat(96, 50px);
     gap: 1px;
-    border: 1px solid #ccc;
-    margin-top: 20px;
-    overflow-x: auto;
+    border: 1px solid #dee2e6;
+    min-width: 4920px; /* 120px + (96 * 50px) + gaps */
+    width: max-content;
   }
+  
   .grid-header, .grid-cell {
-    padding: 5px;
+    padding: 8px 4px;
     text-align: center;
-    background-color: #f8f8f8;
-    border: 1px solid #eee;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
     white-space: nowrap;
+    font-size: 0.75rem;
   }
+  
   .grid-header.time-slot {
-    font-size: 0.8em;
-    background-color: #e0e0e0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
     position: sticky;
     top: 0;
     z-index: 1;
   }
+  
   .grid-row-header {
-    font-weight: bold;
-    background-color: #f0f0f0;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
     position: sticky;
     left: 0;
     z-index: 1;
   }
+  
   .grid-cell.assigned {
-    background-color: #d4edda; /* Example color */
-    color: #155724;
-    font-weight: bold;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
-  .grid-cell.assigned.color-0 { background-color: #d4edda; }
-  .grid-cell.assigned.color-1 { background-color: #cce5ff; }
-  .grid-cell.assigned.color-2 { background-color: #fff3cd; }
-  .grid-cell.assigned.color-3 { background-color: #f8d7da; }
-  .grid-cell.assigned.color-4 { background-color: #e2e3e5; }
+  
+  .grid-cell.assigned.color-0 { background: linear-gradient(135deg, #28a745, #20c997); }
+  .grid-cell.assigned.color-1 { background: linear-gradient(135deg, #007bff, #6610f2); }
+  .grid-cell.assigned.color-2 { background: linear-gradient(135deg, #ffc107, #fd7e14); }
+  .grid-cell.assigned.color-3 { background: linear-gradient(135deg, #dc3545, #e83e8c); }
+  .grid-cell.assigned.color-4 { background: linear-gradient(135deg, #6c757d, #495057); }
 </style>
-
-<div id="shiftGrid" class="shift-grid-container" style="display:none;"></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -84,8 +155,9 @@ $('btnCalc').onclick=async()=>{
   if(!m){alert('月を選択してください');return;}
   
   try {
-    // プログレスバーを初期化して表示
-    $('progressArea').style.display='block';
+    // プログレスカードを表示して初期化
+    $('progressCard').style.display='block';
+    $('resultsCard').style.display='none';
     $('bar').style.width='0%';
     $('bar').textContent='0%';
     $('bar').className='progress-bar progress-bar-striped progress-bar-animated bg-primary'; // クラスをリセット
@@ -111,6 +183,32 @@ $('btnSearch').onclick=async()=>{
   loadResult(d);
 };
 
+$('btnPrevDay').onclick=()=>{
+  const currentDate = $('date').value;
+  if(!currentDate){
+    alert('日付を選択してください');
+    return;
+  }
+  const date = new Date(currentDate);
+  date.setDate(date.getDate() - 1);
+  const newDate = date.toISOString().split('T')[0];
+  $('date').value = newDate;
+  loadResult(newDate);
+};
+
+$('btnNextDay').onclick=()=>{
+  const currentDate = $('date').value;
+  if(!currentDate){
+    alert('日付を選択してください');
+    return;
+  }
+  const date = new Date(currentDate);
+  date.setDate(date.getDate() + 1);
+  const newDate = date.toISOString().split('T')[0];
+  $('date').value = newDate;
+  loadResult(newDate);
+};
+
 async function tick(id, month){
   try {
     const st = await fetch(`/shift/api/calc/status/${id}`).then(r => r.json());
@@ -130,6 +228,14 @@ async function tick(id, month){
         $('bar').classList.add('bg-success');
         $('bar').textContent = '完了 (100%)';
         $('bar').style.width = '100%';
+        
+        // プログレスメッセージを更新
+        $('progressMessage').innerHTML = '<small><i class="bi bi-check-circle-fill me-1 text-success"></i>最適化完了しました！</small>';
+        
+        // プログレスカードを隠す
+        setTimeout(() => {
+          $('progressCard').style.display = 'none';
+        }, 3000);
         
         // 計算完了後、当月の最初の日を表示
         const [year, monthNum] = month.split('-').map(Number);
@@ -152,8 +258,16 @@ async function tick(id, month){
 async function loadResult(dateString){
   const data=await fetch(`/shift/api/calc/assignments/daily/${dateString}`).then(r=>r.json());
   const shiftGrid = $('shiftGrid');
+  const resultsCard = $('resultsCard');
+  
   shiftGrid.innerHTML = ''; // Clear previous content
-  shiftGrid.style.display = '';
+  
+  if (data && data.length > 0) {
+    resultsCard.style.display = 'block';
+  } else {
+    resultsCard.style.display = 'none';
+    return;
+  }
 
   // Determine unique registers
   const registers = [...new Set(data.map(a => a.registerNo))].sort((a, b) => a - b);
