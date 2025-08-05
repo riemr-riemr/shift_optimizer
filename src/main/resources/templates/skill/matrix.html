@@ -1,6 +1,9 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
-<section>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<body>
+<section layout:fragment="content">
   <h1 class="text-xl font-bold mb-4">従業員×レジ 習熟度入力</h1>
   <form th:action="@{/skills}" th:object="${skillForm}" method="post">
     <table class="table-fixed border">
@@ -54,4 +57,5 @@
     }
   </script>
 </section>
+</body>
 </html>

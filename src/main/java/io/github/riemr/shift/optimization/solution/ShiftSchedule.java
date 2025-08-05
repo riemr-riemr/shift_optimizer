@@ -1,12 +1,12 @@
 package io.github.riemr.shift.optimization.solution;
 
 import io.github.riemr.shift.domain.ConstraintMaster;
-import io.github.riemr.shift.domain.ConstraintSetting;
 import io.github.riemr.shift.domain.Employee;
+import io.github.riemr.shift.domain.EmployeeRegisterSkill;
 import io.github.riemr.shift.domain.EmployeeRequest;
 import io.github.riemr.shift.domain.Register;
 import io.github.riemr.shift.domain.RegisterDemandQuarter;
-import io.github.riemr.shift.domain.ShiftAssignment;
+import io.github.riemr.shift.domain.RegisterAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import lombok.Getter;
 import lombok.Setter;
@@ -62,7 +62,11 @@ public class ShiftSchedule {
 
     /** 前回結果 – ウォームスタート用 (参照のみ) */
     @ProblemFactCollectionProperty
-    private List<ShiftAssignment> previousAssignmentList;
+    private List<RegisterAssignment> previousAssignmentList;
+
+    /** 従業員スキル */
+    @ProblemFactCollectionProperty
+    private List<EmployeeRegisterSkill> employeeRegisterSkillList = new java.util.ArrayList<>();
 
     /* === Planning entities === */
 
@@ -87,7 +91,8 @@ public class ShiftSchedule {
                          List<RegisterDemandQuarter> demandList,
                          List<EmployeeRequest> employeeRequestList,
                          List<ConstraintMaster> constraintMasterList,
-                         List<ShiftAssignment> previousAssignmentList,
+                         List<RegisterAssignment> previousAssignmentList,
+                         List<EmployeeRegisterSkill> employeeRegisterSkillList,
                          List<ShiftAssignmentPlanningEntity> assignmentList) {
         this.problemId = problemId;
         this.month = month;
@@ -97,6 +102,7 @@ public class ShiftSchedule {
         this.employeeRequestList = employeeRequestList;
         this.constraintMasterList = constraintMasterList;
         this.previousAssignmentList = previousAssignmentList;
+        this.employeeRegisterSkillList = employeeRegisterSkillList;
         this.assignmentList = assignmentList;
     }
 }

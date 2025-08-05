@@ -44,7 +44,9 @@ CREATE TABLE employee (
     employee_name        VARCHAR(50) NOT NULL,
     short_follow         SMALLINT, -- 0~4
     max_work_minutes_day INT,
-    max_work_days_month  INT
+    max_work_days_month  INT,
+    base_start_time      TIME,
+    base_end_time        TIME
 );
 
 -- ------------------------------------------------
@@ -81,8 +83,24 @@ CREATE UNIQUE INDEX uq_demand ON register_demand_quarter(store_code, demand_date
 CREATE TABLE shift_assignment (
     shift_id      BIGSERIAL PRIMARY KEY,
     store_code    VARCHAR(10) NOT NULL,
-    employee_code VARCHAR(10),
-    register_no   INT,
+    employee_code VARCHAR(10) NOT NULL,
+    start_at      TIMESTAMP   NOT NULL,
+    end_at        TIMESTAMP   NOT NULL,
+    created_by    VARCHAR(20) NOT NULL DEFAULT 'auto',
+
+    FOREIGN KEY (employee_code)
+        REFERENCES employee(employee_code),
+    UNIQUE (store_code, employee_code, start_at)
+);
+
+-- ------------------------------------------------
+-- 7a. register_assignment : 生成済みレジ割り当て
+-- ------------------------------------------------
+CREATE TABLE register_assignment (
+    assignment_id      BIGSERIAL PRIMARY KEY,
+    store_code    VARCHAR(10) NOT NULL,
+    employee_code VARCHAR(10) NOT NULL,
+    register_no   INT NOT NULL,
     start_at      TIMESTAMP   NOT NULL,
     end_at        TIMESTAMP   NOT NULL,
     created_by    VARCHAR(20) NOT NULL DEFAULT 'auto',

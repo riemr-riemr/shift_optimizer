@@ -1,11 +1,9 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>月次シフト計算</title>
-  <link rel="stylesheet" href="/webjars/bootstrap/5.3.3/css/bootstrap.min.css"/>
-</head>
-<body class="p-4">
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<body>
+<section layout:fragment="content">
 <h1>月次シフト計算</h1>
 
 <div class="d-flex gap-2 align-items-end">
@@ -21,8 +19,8 @@
   <button id="btnSearch" class="btn btn-secondary">検索</button>
 </div>
 
-<div id="progressArea" class="progress my-3" style="height:24px; display:none;">
-  <div id="bar" class="progress-bar progress-bar-striped" style="width:0%">0%</div>
+<div id="progressArea" class="progress my-3" style="height:24px; display:none; background-color: #e9ecef;">
+  <div id="bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:0%; transition: width 0.3s ease;">0%</div>
 </div>
 
 <style>
@@ -84,9 +82,27 @@ function getEmployeeColorClass(employeeName) {
 $('btnCalc').onclick=async()=>{
   const m=$('month').value;
   if(!m){alert('月を選択してください');return;}
-  const ticket=await fetch('/shift/api/calc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:m})}).then(r=>r.json());
-  $('progressArea').style.display='';
-  tick(ticket.problemId, m);
+  
+  try {
+    // プログレスバーを初期化して表示
+    $('progressArea').style.display='block';
+    $('bar').style.width='0%';
+    $('bar').textContent='0%';
+    $('bar').className='progress-bar progress-bar-striped progress-bar-animated bg-primary'; // クラスをリセット
+    
+    const ticket=await fetch('/shift/api/calc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:m})}).then(r=>r.json());
+    console.log('Calculation started:', ticket); // デバッグログ
+    
+    if (ticket.problemId) {
+      tick(ticket.problemId, m);
+    } else {
+      throw new Error('Problem ID not received');
+    }
+  } catch (error) {
+    console.error('Calculation start error:', error);
+    $('bar').classList.add('bg-danger');
+    $('bar').textContent = '開始エラー';
+  }
 };
 
 $('btnSearch').onclick=async()=>{
@@ -96,17 +112,40 @@ $('btnSearch').onclick=async()=>{
 };
 
 async function tick(id, month){
-  const st=await fetch(`/shift/api/calc/status/${id}`).then(r=>r.json());
-  $('bar').style.width=st.progress+'%';
-  $('bar').textContent=st.progress+'%';
-  if(st.status !== 'NOT_SOLVING'){
-    setTimeout(()=>tick(id, month),1000);
-  } else {
-    $('bar').classList.add('bg-success');
-    // After calculation, default to showing the first day of the month
-    const [year, monthNum] = month.split('-').map(Number);
-    const firstDayOfMonth = `${year}-${String(monthNum).padStart(2, '0')}-01`;
-    loadResult(firstDayOfMonth);
+  try {
+    const st = await fetch(`/shift/api/calc/status/${id}`).then(r => r.json());
+    console.log('Status response:', st); // デバッグログ
+    
+    // プログレス値の正規化（0-100の範囲に制限）
+    const progress = Math.max(0, Math.min(100, st.progress || 0));
+    $('bar').style.width = progress + '%';
+    $('bar').textContent = progress + '%';
+    
+    // 計算中の場合は継続、完了・エラー・未実行の場合は終了
+    if (st.status === 'SOLVING' || st.status === 'SOLVING_ACTIVE') {
+      setTimeout(() => tick(id, month), 1000);
+    } else {
+      // 完了時の処理
+      if (st.status === 'NOT_SOLVING') {
+        $('bar').classList.add('bg-success');
+        $('bar').textContent = '完了 (100%)';
+        $('bar').style.width = '100%';
+        
+        // 計算完了後、当月の最初の日を表示
+        const [year, monthNum] = month.split('-').map(Number);
+        const firstDayOfMonth = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+        loadResult(firstDayOfMonth);
+      } else {
+        // エラー状態の処理
+        $('bar').classList.add('bg-danger');
+        $('bar').textContent = 'エラー';
+        console.error('Solver error status:', st.status);
+      }
+    }
+  } catch (error) {
+    console.error('Progress polling error:', error);
+    $('bar').classList.add('bg-danger');
+    $('bar').textContent = '通信エラー';
   }
 }
 
@@ -182,5 +221,6 @@ async function loadResult(dateString){
   });
 }
 </script>
+</section>
 </body>
 </html>

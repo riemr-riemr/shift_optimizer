@@ -1,22 +1,117 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
 <head>
-  <meta charset="UTF-8">
-  <title>Shift App</title>
-  <link rel="stylesheet" th:href="@{/css/app.css}">
+    <meta charset="UTF-8">
+    <title>Shift App</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        /* Basic styles for layout */
+        .page-wrapper {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar styles */
+        #sidebar {
+            width: 220px;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            transition: margin-left 0.3s;
+            border-right: 1px solid #dee2e6;
+            flex-shrink: 0; /* Prevent sidebar from shrinking */
+        }
+
+        #sidebar.collapsed {
+            margin-left: -220px;
+        }
+
+        #sidebar .sidebar-header {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+        }
+
+        #sidebar .nav-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        #sidebar .nav-list .nav-item a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: #343a40;
+            text-decoration: none;
+            border-radius: 0.25rem;
+        }
+
+        #sidebar .nav-list .nav-item a:hover {
+            background-color: #e9ecef;
+        }
+
+        /* Main content styles */
+        .content-wrapper {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto; /* Allow content to scroll */
+        }
+
+        /* Toggle button styles */
+        #menu-toggle {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1000;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+        }
+    </style>
 </head>
-<body class="p-4">
-  <!-- 共通ヘッダ -->
-  <header class="mb-6 border-b pb-2">
-    <h1 class="text-2xl font-bold">Shift Management</h1>
-  </header>
+<body>
+    <div class="page-wrapper">
+        <!-- Sidebar -->
+        <nav id="sidebar">
+            <div class="sidebar-header">Menu</div>
+            <ul class="nav-list">
+                <li class="nav-item"><a th:href="@{/shift}">月次シフト</a></li>
+                <li class="nav-item"><a th:href="@{/shift/calc}">シフト計算</a></li>
+                <li class="nav-item"><a th:href="@{/employee/list}">従業員管理</a></li>
+                <li class="nav-item"><a th:href="@{/skill/matrix}">スキル管理</a></li>
+                <li class="nav-item"><a th:href="@{/register-demand/form}">必要人数登録</a></li>
+            </ul>
+        </nav>
 
-  <!-- ここに各画面の内容が入る -->
-  <main th:fragment="layout(content)">
-    <div th:replace="${content}"></div>
-  </main>
+        <!-- Main Content -->
+        <div class="content-wrapper">
+            <button id="menu-toggle">&#9776;</button>
+            
+            <header class="mb-6 border-b pb-2" style="margin-top: 2.5rem;">
+                <h1 class="text-2xl font-bold">Shift Management</h1>
+            </header>
 
-  <!-- 共通フッタ -->
-  <footer class="mt-8 text-sm text-gray-500">© 2025</footer>
+            <!-- Content from child templates goes here -->
+            <main layout:fragment="content">
+                <p>This content will be replaced by each page's specific content.</p>
+            </main>
+
+            <footer class="mt-8 text-sm text-gray-500">
+                © 2025
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const menuToggle = document.getElementById('menu-toggle');
+            const sidebar = document.getElementById('sidebar');
+
+            menuToggle.addEventListener('click', function () {
+                sidebar.classList.toggle('collapsed');
+            });
+        });
+    </script>
 </body>
 </html>

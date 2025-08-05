@@ -123,16 +123,55 @@ public class MasterCsvImportJobConfig {
 
     @Bean
     public FlatFileItemReader<Employee> employeeReader(@Value("${csv.dir}") Path csvDir) {
-        return csvReader(csvDir.resolve("employee.csv"),
-                new String[] { "employeeCode", "storeCode", "employeeName",
-                        "shortFollow", "maxWorkMinutesDay", "maxWorkDaysMonth" },
-                Employee.class);
+        
+        // 時刻パーサ（HHmm形式 -> Date）
+        SimpleDateFormat TIME_FMT = new SimpleDateFormat("HHmm");
+        TIME_FMT.setLenient(false);
+        
+        // カスタムFieldSetMapper
+        FieldSetMapper<Employee> mapper = fs -> {
+            try {
+                Employee e = new Employee();
+                e.setEmployeeCode(fs.readString("employeeCode"));
+                e.setStoreCode(fs.readString("storeCode"));
+                e.setEmployeeName(fs.readString("employeeName"));
+                e.setShortFollow(fs.readShort("shortFollow"));
+                e.setMaxWorkMinutesDay(fs.readInt("maxWorkMinutesDay"));
+                e.setMaxWorkDaysMonth(fs.readInt("maxWorkDaysMonth"));
+                
+                // 時刻フィールドの処理（空の場合はnull）
+                String startTimeStr = fs.readString("baseStartTime");
+                if (startTimeStr != null && !startTimeStr.trim().isEmpty()) {
+                    e.setBaseStartTime(TIME_FMT.parse(startTimeStr));
+                }
+                
+                String endTimeStr = fs.readString("baseEndTime");
+                if (endTimeStr != null && !endTimeStr.trim().isEmpty()) {
+                    e.setBaseEndTime(TIME_FMT.parse(endTimeStr));
+                }
+                
+                return e;
+            } catch (ParseException ex) {
+                throw new FlatFileParseException("時刻のパースに失敗しました", "");
+            }
+        };
+        
+        // FlatFileItemReaderを構築
+        return new FlatFileItemReaderBuilder<Employee>()
+                .name("employeeReader")
+                .resource(new FileSystemResource(csvDir.resolve("employee.csv")))
+                .linesToSkip(1)
+                .delimited()
+                .names("employeeCode", "storeCode", "employeeName", "shortFollow", 
+                       "maxWorkMinutesDay", "maxWorkDaysMonth", "baseStartTime", "baseEndTime")
+                .fieldSetMapper(mapper)
+                .build();
     }
 
     /* === Step : employee_register_skill.csv ========================================== */
     @Bean
     public Step employeeRegisterSkillStep(FlatFileItemReader<EmployeeRegisterSkill> employeeRegisterSkillReader) {
-        return new StepBuilder("employeeStep", jobRepository)
+        return new StepBuilder("employeeRegisterSkillStep", jobRepository)
                 .<EmployeeRegisterSkill, EmployeeRegisterSkill>chunk(1000, txManager)
                 .reader(employeeRegisterSkillReader)
                 .writer(myBatisWriter(
@@ -220,6 +259,7 @@ public class MasterCsvImportJobConfig {
         MyBatisBatchItemWriter<T> w = new MyBatisBatchItemWriter<>();
         w.setSqlSessionFactory(sqlSessionFactory);
         w.setStatementId(statementId);
+        w.setAssertUpdates(false); // バッチ結果チェックを無効化
         return w;
     }
 }

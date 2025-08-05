@@ -32,7 +32,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final ConstraintMasterMapper      constraintMasterMapper;
     private final ConstraintSettingMapper     constraintSettingMapper;
     private final StoreMapper                 storeMapper;
-    private final ShiftAssignmentMapper       assignmentMapper; // 前回結果 (warm‑start) 用
+    private final RegisterAssignmentMapper    assignmentMapper; // 前回結果 (warm‑start) 用
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -53,7 +53,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         log.info("demands.size() = {}", demands.size());
         List<EmployeeRequest>        requests  = requestMapper.selectByMonth(month);
         List<ConstraintMaster>       settings  = constraintMasterMapper.selectAll();
-        List<ShiftAssignment>        previous  = assignmentMapper.selectByMonth(
+        List<RegisterAssignment>        previous  = assignmentMapper.selectByMonth(
                 month.minusMonths(1).withDayOfMonth(1),
                 month.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth()));
 
@@ -114,9 +114,9 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 // レジを必要台数分だけ順番に取得（足りない場合は null）
                 Integer registerNo = i < candidates.size() ? candidates.get(i).getRegisterNo() : null;
 
-                // ---- ShiftAssignment 組み立て ----
-                ShiftAssignment sa = new ShiftAssignment();
-                sa.setShiftId(TEMP_ID_SEQ.getAndDecrement());
+                // ---- RegisterAssignment 組み立て ----
+                RegisterAssignment sa = new RegisterAssignment();
+                sa.setAssignmentId(TEMP_ID_SEQ.getAndDecrement());
                 sa.setStoreCode(d.getStoreCode());
                 sa.setEmployeeCode(null);           // 未割当
                 sa.setRegisterNo(registerNo);       // 今回の修正ポイント
@@ -125,7 +125,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 sa.setCreatedBy("system");
 
                 ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
-                ent.setShiftId(sa.getShiftId());
+                ent.setShiftId(sa.getAssignmentId());
                 result.add(ent);
             }
         }

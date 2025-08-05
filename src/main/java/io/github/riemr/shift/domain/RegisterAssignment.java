@@ -3,22 +3,23 @@ package io.github.riemr.shift.domain;
 import java.io.Serializable;
 import java.util.Date;
 
-public class ShiftAssignment implements Serializable {
-    private Long shiftId;
+public class RegisterAssignment implements Serializable {
+    private Long assignmentId;
     private String storeCode;
     private String employeeCode;
+    private Integer registerNo;
     private Date startAt;
     private Date endAt;
     private String createdBy;
 
     private static final long serialVersionUID = 1L;
 
-    public Long getShiftId() {
-        return shiftId;
+    public Long getAssignmentId() {
+        return assignmentId;
     }
 
-    public void setShiftId(Long shiftId) {
-        this.shiftId = shiftId;
+    public void setAssignmentId(Long assignmentId) {
+        this.assignmentId = assignmentId;
     }
 
     public String getStoreCode() {
@@ -26,7 +27,7 @@ public class ShiftAssignment implements Serializable {
     }
 
     public void setStoreCode(String storeCode) {
-        this.storeCode = storeCode == null ? null : storeCode.trim();
+        this.storeCode = storeCode;
     }
 
     public String getEmployeeCode() {
@@ -34,7 +35,15 @@ public class ShiftAssignment implements Serializable {
     }
 
     public void setEmployeeCode(String employeeCode) {
-        this.employeeCode = employeeCode == null ? null : employeeCode.trim();
+        this.employeeCode = employeeCode;
+    }
+
+    public Integer getRegisterNo() {
+        return registerNo;
+    }
+
+    public void setRegisterNo(Integer registerNo) {
+        this.registerNo = registerNo;
     }
 
     public Date getStartAt() {
@@ -58,6 +67,6 @@ public class ShiftAssignment implements Serializable {
     }
 
     public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy == null ? null : createdBy.trim();
+        this.createdBy = createdBy;
     }
 }

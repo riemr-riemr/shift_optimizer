@@ -1,251 +1,296 @@
 package io.github.riemr.shift.optimization.constraint;
 
+import io.github.riemr.shift.domain.EmployeeRegisterSkill;
+import io.github.riemr.shift.domain.EmployeeRequest;
+import io.github.riemr.shift.domain.RegisterDemandQuarter;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
+import org.optaplanner.core.api.score.stream.ConstraintCollectors;
 import org.optaplanner.core.api.score.stream.ConstraintFactory;
 import org.optaplanner.core.api.score.stream.ConstraintProvider;
 import org.optaplanner.core.api.score.stream.Joiners;
-import org.optaplanner.core.api.score.stream.ConstraintCollectors;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.Set;
 
-/**
- * 基本的な制約セット – 最小限の可行解を生成する。
- * <p>
- * Hard:
- * <ul>
- * <li>各レジスターのシフトは必ず 1 人割り当て</li>
- * <li>同じレジスター・同時刻に重複割当しない</li>
- * <li>同一従業員が同日に複数レジスターに入らない</li>
- * <li>従業員の1日の労働時間がmax_work_minutes_dayを超えない</li>
- * </ul>
- * Soft:
- * <ul>
- * <li>従業員ごとのシフト数を均等化</li>
- * <li>従業員のmax_work_minutes_day分まとめてアサイン</li>
- * <li>6時間以上の労働の場合には、1時間の休憩をなるべく中間で挟む</li>
- * <li>1カ月の労働日数がemployeeのmax_work_days_monthを超える場合はペナルティ</li>
- * </ul>
- */
 public class ShiftScheduleConstraintProvider implements ConstraintProvider {
 
     @Override
     public Constraint[] defineConstraints(ConstraintFactory factory) {
         return new Constraint[] {
-                shiftMustBeAssigned(factory),
-                registerNotDoubleBooked(factory),
-                employeeNotOverlapping(factory), // 従業員シフト重複制約
-                employeeMaxOneShiftPerDay(factory),
-                employeeDailyWorkMinutesLimit(factory), // New Hard Constraint
-                balanceWorkload(factory),
-                assignContiguously(factory),
-                breakForLongShifts(factory),
-                monthlyWorkDayLimit(factory),
-                minimizeRegisterSwitches(factory)
+            // Hard constraints
+            satisfyRegisterDemand(factory),
+            forbidZeroSkill(factory),
+            employeeNotDoubleBooked(factory),
+            maxWorkMinutesPerDay(factory),
+            maxWorkDaysPerMonth(factory),
+            maxConsecutiveDays(factory),
+            forbidRequestedDayOff(factory),
+            enforceLunchBreak(factory),
+            forbidNullBaseTimeEmployees(factory),
+
+            // Soft constraints
+            preferBaseWorkTimes(factory),
+            minimizeDailyWorkers(factory),
+            balanceWorkload(factory),
+            assignContiguously(factory)
         };
     }
 
-    /** Hard 1: 未割当シフトへのペナルティ */
-    private Constraint shiftMustBeAssigned(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() == null)
-                .penalize("Unassigned shift", HardSoftScore.ONE_HARD);
+    private Constraint satisfyRegisterDemand(ConstraintFactory f) {
+        return f.forEach(RegisterDemandQuarter.class)
+                .join(ShiftAssignmentPlanningEntity.class,
+                        Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null))
+                .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
+                .penalize(HardSoftScore.ONE_HARD,
+                          (demand, assigned) -> Math.max(0, demand.getRequiredUnits() - assigned))
+                .asConstraint("Unmet register demand");
     }
 
-    /** Hard 2: 同じレジスタ・日時に 2 人以上割り当てない */
-    private Constraint registerNotDoubleBooked(ConstraintFactory factory) {
-        return factory.fromUniquePair(ShiftAssignmentPlanningEntity.class,
-                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
-                Joiners.equal(ShiftAssignmentPlanningEntity::getRegisterNo),
-                Joiners.overlapping(a -> a.getOrigin().getStartAt(), a -> a.getOrigin().getEndAt()))
-                .penalize("Register double‐booked", HardSoftScore.ONE_HARD);
+    private Constraint forbidZeroSkill(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeRegisterSkill.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRegisterSkill::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getRegisterNo, EmployeeRegisterSkill::getRegisterNo))
+                .filter((sa, skill) -> skill.getSkillLevel() == 0)
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Skill level zero");
     }
 
-    /** Hard 3: 従業員が同日に複数レジに入らない */
-    private Constraint employeeMaxOneShiftPerDay(ConstraintFactory factory) {
-        return factory.fromUniquePair(ShiftAssignmentPlanningEntity.class,
-                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
-                Joiners.filtering((a, b) -> a.getAssignedEmployee() != null && b.getAssignedEmployee() != null &&
-                        a.getAssignedEmployee().getEmployeeCode().equals(b.getAssignedEmployee().getEmployeeCode())))
-                .penalize("Employee double shift same day", HardSoftScore.ONE_HARD);
-    }
-
-    /** Hard 4: 従業員のシフトが時間的に重複しない */
-    private Constraint employeeNotOverlapping(ConstraintFactory factory) {
-        return factory.fromUniquePair(ShiftAssignmentPlanningEntity.class,
+    private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
+        return f.forEachUniquePair(ShiftAssignmentPlanningEntity.class,
                 Joiners.equal(ShiftAssignmentPlanningEntity::getAssignedEmployee),
-                Joiners.overlapping(a -> a.getOrigin().getStartAt(), a -> a.getOrigin().getEndAt()))
-                .penalize("Employee overlapping shifts", HardSoftScore.ONE_HARD);
+                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
+                Joiners.equal(ShiftAssignmentPlanningEntity::getStartAt))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Employee double booked");
     }
 
-    /** Hard 5: 従業員の1日の労働時間がmax_work_minutes_dayを超えない */
-    private Constraint employeeDailyWorkMinutesLimit(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getAssignedEmployee(),
-                        a -> a.getShiftDate(),
-                        ConstraintCollectors.sumDuration((shiftAssignmentPlanningEntity) -> Duration.between(
-                                shiftAssignmentPlanningEntity.getOrigin().getStartAt().toInstant()
-                                        .atZone(ZoneId.systemDefault()).toLocalDateTime(),
-                                shiftAssignmentPlanningEntity.getOrigin().getEndAt().toInstant()
-                                        .atZone(ZoneId.systemDefault()).toLocalDateTime())))
-                .filter((employee, shiftDate, totalDuration) -> employee.getMaxWorkMinutesDay() != null
-                        && totalDuration.toMinutes() > employee.getMaxWorkMinutesDay())
-                .penalize("Employee daily work minutes limit", HardSoftScore.ONE_HARD,
-                        (employee, shiftDate,
-                                totalDuration) -> (int) (totalDuration.toMinutes() - employee.getMaxWorkMinutesDay()));
-    }
-
-    /** Soft 1: シフト数を各従業員で均等化（分散を抑える） */
-    private Constraint balanceWorkload(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getAssignedEmployee().getEmployeeCode(), ConstraintCollectors.count())
-                .penalize("Balance workload", HardSoftScore.ONE_SOFT, (employeeCode, count) -> count * count);
-    }
-
-    /** Soft 2: 従業員のmax_work_minutes_day分まとめてアサイン */
-    private Constraint assignContiguously(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getAssignedEmployee(),
-                         a -> a.getShiftDate(),
+    private Constraint maxWorkMinutesPerDay(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
-                .penalize("Fragmented blocks", HardSoftScore.ONE_SOFT, (emp, date, list) -> {
-                    list.sort(Comparator.comparing(sa -> sa.getOrigin().getStartAt()));
-    
-                    int blocks = 1;
-                    for (int i = 1; i < list.size(); i++) {
-                        // 直前の endAt と次の startAt が 15 分超 ⇒ 新ブロック
-                        long gap = Duration.between(
-                                list.get(i - 1).getOrigin().getEndAt().toInstant(),
-                                list.get(i).getOrigin().getStartAt().toInstant()
-                        ).toMinutes();
-                        if (gap > 15) blocks++;
-                    }
-                    return blocks - 1;        // ブロック数−1 をペナルティ
-                });
-    }    
-
-    /** Soft 3: 6時間以上の労働の場合には、1時間の休憩をなるべく中間で挟む */
-    private Constraint breakForLongShifts(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getAssignedEmployee().getEmployeeCode(),
-                        a -> a.getShiftDate(),
-                        ConstraintCollectors.toList()) // Collect all assignments for the day
-                .penalize("Break for long shifts", HardSoftScore.ONE_SOFT, (employeeCode, shiftDate, assignments) -> {
-                    // Sort assignments by start time
-                    assignments.sort((a1, a2) -> a1.getOrigin().getStartAt().compareTo(a2.getOrigin().getStartAt()));
-
-                    long totalWorkMinutes = 0;
-                    LocalDateTime firstShiftStart = null;
-                    LocalDateTime lastShiftEnd = null;
-
-                    for (ShiftAssignmentPlanningEntity assignment : assignments) {
-                        LocalDateTime currentStart = assignment.getOrigin().getStartAt().toInstant()
-                                .atZone(ZoneId.systemDefault()).toLocalDateTime();
-                        LocalDateTime currentEnd = assignment.getOrigin().getEndAt().toInstant()
-                                .atZone(ZoneId.systemDefault()).toLocalDateTime();
-
-                        totalWorkMinutes += Duration.between(currentStart, currentEnd).toMinutes();
-
-                        if (firstShiftStart == null || currentStart.isBefore(firstShiftStart)) {
-                            firstShiftStart = currentStart;
-                        }
-                        if (lastShiftEnd == null || currentEnd.isAfter(lastShiftEnd)) {
-                            lastShiftEnd = currentEnd;
-                        }
-                    }
-
-                    if (totalWorkMinutes < 6 * 60) { // Only apply for shifts 6 hours (360 minutes) or longer
-                        return 0;
-                    }
-
-                    // Calculate the total span of the shifts for the day
-                    long totalSpanMinutes = Duration.between(firstShiftStart, lastShiftEnd).toMinutes();
-
-                    // Ideal break start: roughly in the middle of the total span
-                    LocalDateTime idealBreakStart = firstShiftStart.plusMinutes(totalSpanMinutes / 2 - 30); // 30 min
-                                                                                                            // before
-                                                                                                            // middle
-                                                                                                            // for 1
-                                                                                                            // hour
-                                                                                                            // break
-                    LocalDateTime idealBreakEnd = idealBreakStart.plusMinutes(60); // 1 hour break
-
-                    boolean hasBreakInIdealWindow = false;
-                    // Check for a 1-hour break (60 minutes) within the ideal window
-                    // This checks if there's any unassigned time within the ideal break window
-                    // by checking if any assignment overlaps with the ideal break window.
-                    boolean overlapsWithIdealBreak = false;
-                    for (ShiftAssignmentPlanningEntity assignment : assignments) {
-                        LocalDateTime assignmentStart = assignment.getOrigin().getStartAt().toInstant()
-                                .atZone(ZoneId.systemDefault()).toLocalDateTime();
-                        LocalDateTime assignmentEnd = assignment.getOrigin().getEndAt().toInstant()
-                                .atZone(ZoneId.systemDefault()).toLocalDateTime();
-
-                        // Check for overlap: (start1 < end2) && (end1 > start2)
-                        if (assignmentStart.isBefore(idealBreakEnd) && assignmentEnd.isAfter(idealBreakStart)) {
-                            overlapsWithIdealBreak = true;
-                            break;
-                        }
-                    }
-
-                    // If there's no overlap with the ideal break window, it means there's a break
-                    // there.
-                    hasBreakInIdealWindow = !overlapsWithIdealBreak;
-
-                    // Penalize if total work is >= 6 hours and no 1-hour break was found in the
-                    // ideal window
-                    return hasBreakInIdealWindow ? 0 : 200; // Increased penalty for missing break
-                });
+                .filter((emp, date, list) -> {
+                    int workMinutesExcludingBreaks = calculateWorkMinutesExcludingBreaks(list);
+                    int maxWorkMinutes = emp.getMaxWorkMinutesDay() != null ? emp.getMaxWorkMinutesDay() : 480; // デフォルト8時間
+                    return workMinutesExcludingBreaks > maxWorkMinutes;
+                })
+                .penalize(HardSoftScore.ONE_HARD, (emp, date, list) -> {
+                    int workMinutesExcludingBreaks = calculateWorkMinutesExcludingBreaks(list);
+                    int maxWorkMinutes = emp.getMaxWorkMinutesDay() != null ? emp.getMaxWorkMinutesDay() : 480;
+                    return workMinutesExcludingBreaks - maxWorkMinutes;
+                })
+                .asConstraint("Exceed daily minutes excluding breaks");
     }
 
-    /** Soft 4: 1カ月の労働日数がemployeeのmax_work_days_monthを超える場合はペナルティ */
-    private Constraint monthlyWorkDayLimit(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getAssignedEmployee(),
-                        ConstraintCollectors.countDistinct(ShiftAssignmentPlanningEntity::getShiftDate))
-                .penalize("Monthly work day limit", HardSoftScore.ONE_SOFT, (employee, distinctDays) -> {
-                    if (employee.getMaxWorkDaysMonth() != null && distinctDays > employee.getMaxWorkDaysMonth()) {
-                        return (distinctDays - employee.getMaxWorkDaysMonth()) * 100; // Penalize per extra day
-                    }
-                    return 0;
-                });
+    private Constraint maxWorkDaysPerMonth(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, sa -> sa.getShiftDate().withDayOfMonth(1),
+                         ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getShiftDate))
+                .filter((emp, month, daySet) -> emp.getMaxWorkDaysMonth() != null && daySet.size() > emp.getMaxWorkDaysMonth())
+                .penalize(HardSoftScore.ONE_HARD,
+                          (emp, month, daySet) -> daySet.size() - emp.getMaxWorkDaysMonth())
+                .asConstraint("Exceed monthly workdays");
     }
 
-    /** Soft 5: 同じレジでの従業員スイッチを抑制 */
-    private Constraint minimizeRegisterSwitches(ConstraintFactory factory) {
-        return factory.from(ShiftAssignmentPlanningEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                .groupBy(a -> a.getShiftDate(),
-                        a -> a.getRegisterNo(),
-                        ConstraintCollectors.toList())
-                .penalize("Switch employee on register",
-                        HardSoftScore.ONE_SOFT,
-                        (date, regNo, list) -> {
-                            // 時間順に並べ替え
-                            list.sort(Comparator.comparing(sa -> sa.getOrigin().getStartAt()));
-                            int switches = 0;
-                            for (int i = 0; i < list.size() - 1; i++) {
-                                if (!Objects.equals(
-                                        list.get(i).getAssignedEmployee(),
-                                        list.get(i + 1).getAssignedEmployee())) {
-                                    switches++;
-                                }
-                            }
-                            return switches; // スイッチ 1 回＝ +1 ペナルティ
-                        });
+    private Constraint maxConsecutiveDays(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         ConstraintCollectors.toSortedSet(ShiftAssignmentPlanningEntity::getShiftDate))
+                .filter((emp, dates) -> hasRunLength(dates, 5))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("More than 4 consecutive days");
+    }
+
+    private static boolean hasRunLength(Set<LocalDate> dates, int limit) {
+        LocalDate prev = null; int run = 0;
+        for (LocalDate d : dates) {
+            if (prev != null && prev.plusDays(1).equals(d)) {
+                run++; if (run >= limit) return true;
+            } else run = 1;
+        }
+        return false;
+    }
+
+    private Constraint forbidRequestedDayOff(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeRequest.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRequest::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate, EmployeeRequest::getRequestDate))
+                .filter((sa, req) -> "off".equalsIgnoreCase(req.getRequestKind()))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Assigned on requested day off");
+    }
+
+    private Constraint enforceLunchBreak(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .filter((emp, date, list) -> exceedsSixHoursWithoutBreak(list))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("No 1h break");
+    }
+
+    private static boolean exceedsSixHoursWithoutBreak(List<ShiftAssignmentPlanningEntity> list) {
+        list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        int continuous = 1;
+        for (int i = 1; i < list.size(); i++) {
+            if (list.get(i).getStartAt().equals(list.get(i - 1).getEndAt())) {
+                continuous++;
+                if (continuous >= 24) return true; // 24*15min = 6h
+            } else {
+                if (Duration.between(list.get(i-1).getEndAt().toInstant(), list.get(i).getStartAt().toInstant()).toHours() >= 1) {
+                    continuous = 0;
+                } else {
+                    continuous = 1;
+                }
+            }
+        }
+        return false;
+    }
+
+    private Constraint minimizeDailyWorkers(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getAssignedEmployee))
+                .penalize(HardSoftScore.ofSoft(10),
+                          (date, empSet) -> empSet.size())
+                .asConstraint("Minimize daily workers");
+    }
+
+    private Constraint balanceWorkload(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ConstraintCollectors.count())
+                .penalize(HardSoftScore.ofSoft(5), (emp, cnt) -> cnt.intValue() * cnt.intValue())
+                .asConstraint("Balance workload");
+    }
+
+    private static int variancePenalty(List<Long> counts) {
+        double avg = counts.stream().mapToLong(Long::longValue).average().orElse(0);
+        double var = counts.stream().mapToDouble(c -> (c - avg) * (c - avg)).sum();
+        return (int) Math.round(var);
+    }
+
+    private Constraint assignContiguously(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .penalize(HardSoftScore.ofSoft(1),
+                          (emp, date, list) -> countGaps(list))
+                .asConstraint("Fragmented blocks");
+    }
+
+    private static int countGaps(List<ShiftAssignmentPlanningEntity> list) {
+        list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        int gaps = 0;
+        for (int i = 1; i < list.size(); i++) {
+            if (!list.get(i).getStartAt().equals(list.get(i - 1).getEndAt())) gaps++;
+        }
+        return gaps;
+    }
+
+    /**
+     * 休憩時間を除いた実労働時間を計算する
+     * 連続6時間労働の場合は1時間の休憩を差し引く
+     */
+    private static int calculateWorkMinutesExcludingBreaks(List<ShiftAssignmentPlanningEntity> list) {
+        if (list.isEmpty()) return 0;
+        
+        list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        
+        int totalWorkMinutes = list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
+        int breakMinutes = 0;
+        int continuousMinutes = 0;
+        
+        for (int i = 0; i < list.size(); i++) {
+            ShiftAssignmentPlanningEntity current = list.get(i);
+            continuousMinutes += current.getWorkMinutes();
+            
+            // 次のシフトとの間に1時間以上の休憩があるかチェック
+            if (i < list.size() - 1) {
+                ShiftAssignmentPlanningEntity next = list.get(i + 1);
+                Duration breakDuration = Duration.between(current.getEndAt().toInstant(), next.getStartAt().toInstant());
+                
+                if (breakDuration.toMinutes() >= 60) {
+                    // 6時間以上連続勤務していた場合、1時間の休憩時間を加算
+                    if (continuousMinutes >= 360) { // 6時間 = 360分
+                        breakMinutes += 60;
+                    }
+                    continuousMinutes = 0; // 連続勤務時間をリセット
+                }
+            }
+        }
+        
+        // 最後のブロックも6時間以上の場合、休憩時間を加算
+        if (continuousMinutes >= 360) {
+            breakMinutes += 60;
+        }
+        
+        return Math.max(0, totalWorkMinutes - breakMinutes);
+    }
+
+    /**
+     * TODO: 将来的にはより柔軟な基本勤務時間制約に変更予定
+     * 現在は暫定実装として、base_start_time/base_end_timeがnullの従業員はアサインしない
+     */
+    private Constraint forbidNullBaseTimeEmployees(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .filter(sa -> sa.getAssignedEmployee().getBaseStartTime() == null || 
+                             sa.getAssignedEmployee().getBaseEndTime() == null)
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Employee with null base times assigned");
+    }
+
+    /**
+     * 従業員の基本勤務時間からの乖離を最小化する
+     * base_start_time/base_end_timeに近い時間帯での勤務を優先
+     */
+    private Constraint preferBaseWorkTimes(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .filter(sa -> sa.getAssignedEmployee().getBaseStartTime() != null && 
+                             sa.getAssignedEmployee().getBaseEndTime() != null)
+                .penalize(HardSoftScore.ofSoft(100), sa -> {
+                    // java.util.Date（TIME型）からLocalTimeに変換
+                    LocalTime baseStart = sa.getAssignedEmployee().getBaseStartTime().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalTime baseEnd = sa.getAssignedEmployee().getBaseEndTime().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalTime shiftStart = sa.getStartAt().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalTime shiftEnd = sa.getEndAt().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalTime();
+                    
+                    // 基本勤務時間との乖離を計算（分単位）
+                    int startDeviation = Math.abs((int) Duration.between(baseStart, shiftStart).toMinutes());
+                    int endDeviation = Math.abs((int) Duration.between(baseEnd, shiftEnd).toMinutes());
+                    
+                    // 12時間を超える乖離は12時間として扱う（24時間制での計算ミス対応）
+                    startDeviation = Math.min(startDeviation, 720); // 12時間 = 720分
+                    endDeviation = Math.min(endDeviation, 720);
+                    
+                    return startDeviation + endDeviation;
+                })
+                .asConstraint("Deviation from base work times");
     }
 }
+
+
+

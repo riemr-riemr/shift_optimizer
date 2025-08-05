@@ -1,6 +1,9 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
-<section>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<body>
+<section layout:fragment="content">
   <h1 class="text-xl font-bold mb-4" th:text="${edit} ? '従業員編集' : '従業員新規登録'"></h1>
   <form th:action="@{/employees}" th:object="${employeeForm}" method="post" class="space-y-4">
     <input type="hidden" name="edit" th:value="${edit}"/>
@@ -46,4 +49,5 @@
     </div>
   </form>
 </section>
+</body>
 </html>

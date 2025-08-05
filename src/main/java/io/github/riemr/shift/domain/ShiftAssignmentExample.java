@@ -395,65 +395,7 @@ public class ShiftAssignmentExample {
             return (Criteria) this;
         }
 
-        public Criteria andRegisterNoIsNull() {
-            addCriterion("register_no is null");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoIsNotNull() {
-            addCriterion("register_no is not null");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoEqualTo(Integer value) {
-            addCriterion("register_no =", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoNotEqualTo(Integer value) {
-            addCriterion("register_no <>", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoGreaterThan(Integer value) {
-            addCriterion("register_no >", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoGreaterThanOrEqualTo(Integer value) {
-            addCriterion("register_no >=", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoLessThan(Integer value) {
-            addCriterion("register_no <", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoLessThanOrEqualTo(Integer value) {
-            addCriterion("register_no <=", value, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoIn(List<Integer> values) {
-            addCriterion("register_no in", values, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoNotIn(List<Integer> values) {
-            addCriterion("register_no not in", values, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoBetween(Integer value1, Integer value2) {
-            addCriterion("register_no between", value1, value2, "registerNo");
-            return (Criteria) this;
-        }
-
-        public Criteria andRegisterNoNotBetween(Integer value1, Integer value2) {
-            addCriterion("register_no not between", value1, value2, "registerNo");
-            return (Criteria) this;
-        }
+        
 
         public Criteria andStartAtIsNull() {
             addCriterion("start_at is null");
