@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+
+<head>
+    <title>人員配置 過不足確認</title>
+    <style>
+        .balance-positive {
+            background-color: #d4edda !important;
+            color: #155724 !important;
+        }
+        .balance-negative {
+            background-color: #f8d7da !important;
+            color: #721c24 !important;
+        }
+        .balance-zero {
+            background-color: #d1ecf1 !important;
+            color: #0c5460 !important;
+        }
+        .time-slot-header {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            width: 30px;
+            font-size: 0.8rem;
+            padding: 5px 2px;
+        }
+        .balance-table {
+            font-size: 0.9rem;
+        }
+        .balance-table th, .balance-table td {
+            text-align: center;
+            vertical-align: middle;
+            padding: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .shortage-highlight {
+            font-weight: bold;
+            animation: blink 2s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+        .summary-card {
+            margin-bottom: 1rem;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+        .stat-item {
+            flex: 1;
+            padding: 0.5rem;
+        }
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+    </style>
+</head>
+
+<body>
+    <div layout:fragment="content">
+        <div class="content-header">
+            <h1><i class="bi bi-people-fill"></i> 人員配置 過不足確認</h1>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">検索条件</h5>
+            </div>
+            <div class="card-body">
+                <form id="searchForm">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="storeCode" class="form-label">店舗コード</label>
+                            <select id="storeCode" name="storeCode" class="form-select" required>
+                                <option value="569">569 - テスト店舗</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="targetDate" class="form-label">対象日</label>
+                            <input type="date" id="targetDate" name="targetDate" class="form-control" required th:value="${selectedDate}">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="bi bi-search"></i> 検索
+                            </button>
+                            <button type="button" id="exportBtn" class="btn btn-outline-secondary" disabled>
+                                <i class="bi bi-download"></i> CSV出力
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 統計サマリーカード -->
+        <div class="card summary-card" id="summaryCard" style="display: none;">
+            <div class="card-body">
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <div class="stat-number text-danger" id="shortageCount">0</div>
+                        <div class="stat-label">不足時間帯</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-success" id="overstaffCount">0</div>
+                        <div class="stat-label">過多時間帯</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-info" id="balancedCount">0</div>
+                        <div class="stat-label">適正時間帯</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-warning" id="totalShortage">0</div>
+                        <div class="stat-label">総不足人数</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 結果表示カード -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">人員配置 過不足状況</h5>
+                <div class="loading-spinner">
+                    <div class="spinner-border spinner-border-sm text-light" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="noDataMessage" class="text-muted text-center py-4">
+                    検索条件を入力して「検索」ボタンをクリックしてください。
+                </div>
+                <div id="resultTable" style="display: none;">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover balance-table">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th rowspan="2">時間</th>
+                                    <th colspan="3" class="text-center">人員配置状況</th>
+                                </tr>
+                                <tr>
+                                    <th>必要</th>
+                                    <th>配置済</th>
+                                    <th>過不足</th>
+                                </tr>
+                            </thead>
+                            <tbody id="balanceTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>表示説明:</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <span class="badge balance-negative">赤背景</span> 人員不足
+                            </div>
+                            <div class="col-md-4">
+                                <span class="badge balance-positive">緑背景</span> 人員過多
+                            </div>
+                            <div class="col-md-4">
+                                <span class="badge balance-zero">青背景</span> 適正配置
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const searchForm = document.getElementById('searchForm');
+                const loadingSpinner = document.querySelector('.loading-spinner');
+                const noDataMessage = document.getElementById('noDataMessage');
+                const resultTable = document.getElementById('resultTable');
+                const balanceTableBody = document.getElementById('balanceTableBody');
+                const summaryCard = document.getElementById('summaryCard');
+                const exportBtn = document.getElementById('exportBtn');
+                
+                let currentData = [];
+
+                searchForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    console.log('Form submitted');
+                    
+                    const storeCode = document.getElementById('storeCode').value;
+                    const targetDate = document.getElementById('targetDate').value;
+                    console.log('Store code:', storeCode, 'Target date:', targetDate);
+                    
+                    if (!storeCode || !targetDate) {
+                        alert('店舗コードと対象日を入力してください。');
+                        return;
+                    }
+                    
+                    loadStaffingBalance(storeCode, targetDate);
+                });
+
+                exportBtn.addEventListener('click', function() {
+                    exportToCSV();
+                });
+
+                function loadStaffingBalance(storeCode, targetDate) {
+                    console.log(`Loading staffing balance for store: ${storeCode}, date: ${targetDate}`);
+                    showLoading();
+                    
+                    const url = `/staffing-balance/api/balance/${storeCode}/${targetDate}`;
+                    console.log(`Fetching URL: ${url}`);
+                    
+                    fetch(url)
+                        .then(response => {
+                            console.log(`Response status: ${response.status}`);
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            console.log('Received data:', data);
+                            currentData = data;
+                            displayStaffingBalance(data);
+                            updateSummary(data);
+                            showResults();
+                            exportBtn.disabled = false;
+                        })
+                        .catch(error => {
+                            console.error('Error loading staffing balance:', error);
+                            alert(`データの読み込みに失敗しました。エラー: ${error.message}`);
+                            showNoData();
+                            exportBtn.disabled = true;
+                        })
+                        .finally(() => {
+                            hideLoading();
+                        });
+                }
+
+                function displayStaffingBalance(data) {
+                    balanceTableBody.innerHTML = '';
+                    
+                    data.forEach(item => {
+                        const row = document.createElement('tr');
+                        const balance = item.assignedStaff - item.requiredStaff;
+                        
+                        let balanceClass = 'balance-zero';
+                        let balanceText = balance.toString();
+                        
+                        if (balance < 0) {
+                            balanceClass = 'balance-negative shortage-highlight';
+                            balanceText = balance.toString();
+                        } else if (balance > 0) {
+                            balanceClass = 'balance-positive';
+                            balanceText = '+' + balance;
+                        }
+                        
+                        row.innerHTML = `
+                            <td class="fw-bold">${item.slotTime}</td>
+                            <td>${item.requiredStaff}</td>
+                            <td>${item.assignedStaff}</td>
+                            <td class="${balanceClass}">${balanceText}</td>
+                        `;
+                        
+                        balanceTableBody.appendChild(row);
+                    });
+                }
+
+                function updateSummary(data) {
+                    let shortageCount = 0;
+                    let overstaffCount = 0;
+                    let balancedCount = 0;
+                    let totalShortage = 0;
+                    
+                    data.forEach(item => {
+                        const balance = item.assignedStaff - item.requiredStaff;
+                        if (balance < 0) {
+                            shortageCount++;
+                            totalShortage += Math.abs(balance);
+                        } else if (balance > 0) {
+                            overstaffCount++;
+                        } else {
+                            balancedCount++;
+                        }
+                    });
+                    
+                    document.getElementById('shortageCount').textContent = shortageCount;
+                    document.getElementById('overstaffCount').textContent = overstaffCount;
+                    document.getElementById('balancedCount').textContent = balancedCount;
+                    document.getElementById('totalShortage').textContent = totalShortage;
+                    
+                    summaryCard.style.display = 'block';
+                }
+
+                function exportToCSV() {
+                    if (currentData.length === 0) {
+                        alert('出力するデータがありません。');
+                        return;
+                    }
+                    
+                    const headers = ['時間', '必要人員', '配置済人員', '過不足'];
+                    const csvContent = [headers.join(',')];
+                    
+                    currentData.forEach(item => {
+                        const balance = item.assignedStaff - item.requiredStaff;
+                        const row = [
+                            item.slotTime,
+                            item.requiredStaff,
+                            item.assignedStaff,
+                            balance
+                        ];
+                        csvContent.push(row.join(','));
+                    });
+                    
+                    const blob = new Blob([csvContent.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    const targetDate = document.getElementById('targetDate').value;
+                    const storeCode = document.getElementById('storeCode').value;
+                    
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `staffing_balance_${storeCode}_${targetDate}.csv`;
+                    link.click();
+                }
+
+                function showLoading() {
+                    loadingSpinner.style.display = 'block';
+                }
+
+                function hideLoading() {
+                    loadingSpinner.style.display = 'none';
+                }
+
+                function showResults() {
+                    noDataMessage.style.display = 'none';
+                    resultTable.style.display = 'block';
+                }
+
+                function showNoData() {
+                    noDataMessage.style.display = 'block';
+                    resultTable.style.display = 'none';
+                    summaryCard.style.display = 'none';
+                }
+
+                // 初期日付設定（サーバーから渡された値がある場合はそれを使用）
+                const targetDateInput = document.getElementById('targetDate');
+                if (!targetDateInput.value) {
+                    targetDateInput.value = new Date().toISOString().split('T')[0];
+                }
+            });
+        </script>
+    </div>
+    </div>
+</body>
+</html>
