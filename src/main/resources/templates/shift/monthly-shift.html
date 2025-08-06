@@ -3,71 +3,302 @@
 <head>
     <title>月間シフト</title>
     <style>
+        
+        .search-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
         .calendar-table {
             width: 100%;
             border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        .calendar-table th,
+        
+        .calendar-table th {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 15px 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1rem;
+            border: none;
+        }
+        
         .calendar-table td {
-            border: 1px solid #ccc;
-            padding: 8px;
+            border: 1px solid #e9ecef;
+            padding: 12px;
             text-align: left;
             vertical-align: top;
-            width: calc(100% / 7); /* 7日間で均等に幅を割り当てる */
-            min-height: 100px; /* 各セルの最小高さを設定 */
+            width: calc(100% / 7);
+            min-height: 140px;
+            background: #fafafa;
+            position: relative;
         }
-        .calendar-table th {
-            background-color: #f2f2f2;
+        
+        .calendar-table td:hover {
+            background: #f8f9fa;
+            transition: background-color 0.2s ease;
         }
+        
+        .day-cell {
+            height: 100%;
+            min-height: 120px;
+        }
+        
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
         .day-number {
             font-weight: bold;
-            margin-bottom: 5px;
+            font-size: 1.1rem;
+            color: #495057;
         }
+        
+        .other-month .day-number {
+            color: #adb5bd;
+        }
+        
+        .staffing-summary {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-weight: 500;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .balance-positive {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .balance-negative {
+            background-color: #f8d7da;
+            color: #721c24;
+            animation: pulse 2s infinite;
+        }
+        
+        .balance-zero {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
         .employee-list {
             list-style: none;
             padding: 0;
             margin: 0;
+            max-height: 80px;
+            overflow-y: visible;
         }
+        
         .employee-list li {
-            margin-bottom: 2px;
+            background: white;
+            margin-bottom: 3px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            border-left: 3px solid #007bff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .employee-list li:hover {
+            background: #e3f2fd;
+            transform: translateX(2px);
+            transition: all 0.2s ease;
+        }
+        
+        .search-form {
+            padding: 1.5rem;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            padding: 0.75rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .weekend {
+            background-color: #fff5f5 !important;
+        }
+        
+        .today {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
+        }
+        
+        .today .day-number {
+            color: #d63384;
+            font-weight: 800;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
         }
     </style>
 </head>
 <body>
 <div layout:fragment="content">
-    <h1><span th:text="${year}"></span>年<span th:text="${month}"></span>月シフト</h1>
+    <div class="content-header">
+        <h1><i class="bi bi-calendar3"></i> 月次シフト表示</h1>
+        <p class="mb-0">従業員の配置状況と人員過不足を一覧で確認できます</p>
+    </div>
 
-    <form th:action="@{/shift}" method="get">
-        <input type="number" name="year" th:value="${year}" />
-        <input type="number" name="month" th:value="${month}" />
-        <button type="submit">検索</button>
-    </form>
-
-    <table class="calendar-table">
-        <thead>
-        <tr>
-            <th>日</th>
-            <th>月</th>
-            <th>火</th>
-            <th>水</th>
-            <th>木</th>
-            <th>金</th>
-            <th>土</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr th:each="week : ${weeks}">
-            <td th:each="date : ${week}">
-                <div th:if="${date.getMonthValue() == month}">
-                    <div class="day-number" th:text="${date.getDayOfMonth()}"></div>
-                    <ul class="employee-list">
-                        <li th:each="employeeName : ${dailyShifts.get(date.getDayOfMonth())}" th:text="${employeeName}"></li>
-                    </ul>
+    <div class="card search-card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-search"></i> 検索条件</h5>
+        </div>
+        <div class="card-body search-form">
+            <form th:action="@{/shift}" method="get">
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="storeCode" class="form-label">店舗コード</label>
+                        <select id="storeCode" name="storeCode" class="form-select" th:value="${storeCode}">
+                            <option value="569" th:selected="${storeCode == '569'}">569 - テスト店舗</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="year" class="form-label">年</label>
+                        <input type="number" id="year" name="year" class="form-control" th:value="${year}" min="2020" max="2030" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="month" class="form-label">月</label>
+                        <input type="number" id="month" name="month" class="form-control" th:value="${month}" min="1" max="12" required />
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-search"></i> 表示更新
+                        </button>
+                    </div>
                 </div>
-            </td>
-        </tr>
-        </tbody>
-    </table>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar3"></i> 
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 シフトカレンダー
+            </h5>
+            <div class="text-muted small">
+                <i class="bi bi-shop"></i> 店舗: <span th:text="${storeCode}">569</span>
+            </div>
+        </div>
+        <table class="calendar-table">
+            <thead>
+            <tr>
+                <th>日</th>
+                <th>月</th>
+                <th>火</th>
+                <th>水</th>
+                <th>木</th>
+                <th>金</th>
+                <th>土</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="week : ${weeks}">
+                <td th:each="date : ${week}" 
+                    th:class="${date.getMonthValue() != month ? 'other-month' : ''} + 
+                             ${date.getDayOfWeek().getValue() == 6 or date.getDayOfWeek().getValue() == 7 ? ' weekend' : ''} +
+                             ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
+                    <div class="day-cell">
+                        <div class="day-header">
+                            <span class="day-number" th:text="${date.getDayOfMonth()}"></span>
+                            <span th:if="${date.getMonthValue() == month and staffingSummaries.containsKey(date)}" 
+                                  th:with="summary=${staffingSummaries.get(date)}"
+                                  class="staffing-summary"
+                                  th:classappend="${summary.getBalance() < 0 ? 'balance-negative' : (summary.getBalance() > 0 ? 'balance-positive' : 'balance-zero')}"
+                                  th:title="'必要: ' + ${summary.getTotalRequired()} + ', 配置: ' + ${summary.getTotalAssigned()} + ', 不足: ' + ${summary.getTotalShortage()}"
+                                  th:text="${summary.getBalance() >= 0 ? '+' + summary.getBalance() : summary.getBalance()}"></span>
+                        </div>
+                        <ul th:if="${date.getMonthValue() == month}" class="employee-list">
+                            <li th:each="employeeName : ${dailyShifts.get(date.getDayOfMonth())}" th:text="${employeeName}"></li>
+                        </ul>
+                        <div th:if="${date.getMonthValue() == month and (dailyShifts.get(date.getDayOfMonth()) == null or dailyShifts.get(date.getDayOfMonth()).isEmpty())}" 
+                             class="text-muted text-center" style="font-size: 0.8rem; padding-top: 20px;">
+                            休業日
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color balance-negative"></div>
+            <span>人員不足</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color balance-zero"></div>
+            <span>適正配置</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color balance-positive"></div>
+            <span>人員過多</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color today"></div>
+            <span>今日</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color weekend"></div>
+            <span>休日</span>
+        </div>
+    </div>
 </div>
 </body>
 </html>

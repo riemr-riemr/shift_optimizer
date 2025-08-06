@@ -6,13 +6,18 @@
   <title>シフト最適化</title>
 </head>
 <body>
-<section layout:fragment="content">
+<div layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-calculator"></i> シフト最適化</h1>
+    <p class="mb-0">OptaPlannerを使用してシフトの自動最適化を実行できます</p>
+  </div>
+
 <div class="row g-4">
   <!-- Control Panel -->
   <div class="col-12">
     <div class="card">
       <div class="card-header">
-        <i class="bi bi-gear-fill me-2"></i>シフト最適化コントロール
+        <h5 class="mb-0"><i class="bi bi-gear-fill"></i> 最適化コントロール</h5>
       </div>
       <div class="card-body">
         <div class="row g-3 align-items-end">
@@ -335,6 +340,6 @@ async function loadResult(dateString){
   });
 }
 </script>
-</section>
+</div>
 </body>
 </html>

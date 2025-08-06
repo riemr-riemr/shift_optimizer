@@ -5,6 +5,7 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveRequest;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
+import io.github.riemr.shift.application.service.StaffingBalanceService;
 import io.github.riemr.shift.optimization.service.ShiftScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 public class ShiftCalcController {
 
     private final ShiftScheduleService service;
+    private final StaffingBalanceService staffingBalanceService;
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
@@ -68,7 +70,10 @@ public class ShiftCalcController {
     }
 
     @GetMapping
-    public String monthlyShift(@RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month, Model model) {
+    public String monthlyShift(@RequestParam(required = false) Integer year, 
+                              @RequestParam(required = false) Integer month, 
+                              @RequestParam(defaultValue = "569") String storeCode, 
+                              Model model) {
         if (year == null || month == null) {
             LocalDate today = LocalDate.now();
             year = today.getYear();
@@ -84,6 +89,9 @@ public class ShiftCalcController {
                     v -> v.date().getDayOfMonth(),
                     Collectors.mapping(ShiftAssignmentMonthlyView::employeeName,
                                     Collectors.collectingAndThen(Collectors.toSet(), ArrayList::new))));
+
+        Map<LocalDate, StaffingBalanceService.DailyStaffingSummary> staffingSummaries = 
+            staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, yearMonth.atDay(1));
 
         List<List<LocalDate>> weeks = new ArrayList<>();
         LocalDate firstDayOfMonth = yearMonth.atDay(1);
@@ -104,8 +112,10 @@ public class ShiftCalcController {
 
         model.addAttribute("year", year);
         model.addAttribute("month", month);
+        model.addAttribute("storeCode", storeCode);
         model.addAttribute("weeks", weeks);
         model.addAttribute("dailyShifts", dailyShifts);
+        model.addAttribute("staffingSummaries", staffingSummaries);
         return "shift/monthly-shift";
     }
 }

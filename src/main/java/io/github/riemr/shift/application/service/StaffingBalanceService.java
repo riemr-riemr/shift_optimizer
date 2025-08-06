@@ -100,4 +100,116 @@ public class StaffingBalanceService {
         
         return monthlyBalance;
     }
+
+    public Map<LocalDate, DailyStaffingSummary> getDailyStaffingSummaryForMonth(String storeCode, LocalDate startOfMonth) {
+        Map<LocalDate, DailyStaffingSummary> summaryMap = new LinkedHashMap<>();
+        
+        LocalDate endOfMonth = startOfMonth.withDayOfMonth(startOfMonth.lengthOfMonth());
+        LocalDate current = startOfMonth;
+        
+        while (!current.isAfter(endOfMonth)) {
+            List<StaffingBalanceDto> dailyBalance = getStaffingBalance(storeCode, current);
+            
+            int totalRequired = dailyBalance.stream().mapToInt(StaffingBalanceDto::getRequiredStaff).sum();
+            int totalAssigned = dailyBalance.stream().mapToInt(StaffingBalanceDto::getAssignedStaff).sum();
+            int shortageSlots = (int) dailyBalance.stream()
+                    .mapToInt(b -> b.getAssignedStaff() - b.getRequiredStaff())
+                    .filter(balance -> balance < 0).count();
+            int overstaffSlots = (int) dailyBalance.stream()
+                    .mapToInt(b -> b.getAssignedStaff() - b.getRequiredStaff())
+                    .filter(balance -> balance > 0).count();
+            int totalShortage = dailyBalance.stream()
+                    .mapToInt(b -> Math.max(0, b.getRequiredStaff() - b.getAssignedStaff()))
+                    .sum();
+            
+            DailyStaffingSummary summary = DailyStaffingSummary.builder()
+                    .date(current)
+                    .totalRequired(totalRequired)
+                    .totalAssigned(totalAssigned)
+                    .shortageSlots(shortageSlots)
+                    .overstaffSlots(overstaffSlots)
+                    .totalShortage(totalShortage)
+                    .build();
+            
+            summaryMap.put(current, summary);
+            current = current.plusDays(1);
+        }
+        
+        return summaryMap;
+    }
+
+    public static class DailyStaffingSummary {
+        private final LocalDate date;
+        private final int totalRequired;
+        private final int totalAssigned;
+        private final int shortageSlots;
+        private final int overstaffSlots;
+        private final int totalShortage;
+
+        public DailyStaffingSummary(LocalDate date, int totalRequired, int totalAssigned, 
+                                  int shortageSlots, int overstaffSlots, int totalShortage) {
+            this.date = date;
+            this.totalRequired = totalRequired;
+            this.totalAssigned = totalAssigned;
+            this.shortageSlots = shortageSlots;
+            this.overstaffSlots = overstaffSlots;
+            this.totalShortage = totalShortage;
+        }
+
+        public static DailyStaffingSummaryBuilder builder() {
+            return new DailyStaffingSummaryBuilder();
+        }
+
+        public LocalDate getDate() { return date; }
+        public int getTotalRequired() { return totalRequired; }
+        public int getTotalAssigned() { return totalAssigned; }
+        public int getShortageSlots() { return shortageSlots; }
+        public int getOverstaffSlots() { return overstaffSlots; }
+        public int getTotalShortage() { return totalShortage; }
+        public int getBalance() { return totalAssigned - totalRequired; }
+
+        public static class DailyStaffingSummaryBuilder {
+            private LocalDate date;
+            private int totalRequired;
+            private int totalAssigned;
+            private int shortageSlots;
+            private int overstaffSlots;
+            private int totalShortage;
+
+            public DailyStaffingSummaryBuilder date(LocalDate date) {
+                this.date = date;
+                return this;
+            }
+
+            public DailyStaffingSummaryBuilder totalRequired(int totalRequired) {
+                this.totalRequired = totalRequired;
+                return this;
+            }
+
+            public DailyStaffingSummaryBuilder totalAssigned(int totalAssigned) {
+                this.totalAssigned = totalAssigned;
+                return this;
+            }
+
+            public DailyStaffingSummaryBuilder shortageSlots(int shortageSlots) {
+                this.shortageSlots = shortageSlots;
+                return this;
+            }
+
+            public DailyStaffingSummaryBuilder overstaffSlots(int overstaffSlots) {
+                this.overstaffSlots = overstaffSlots;
+                return this;
+            }
+
+            public DailyStaffingSummaryBuilder totalShortage(int totalShortage) {
+                this.totalShortage = totalShortage;
+                return this;
+            }
+
+            public DailyStaffingSummary build() {
+                return new DailyStaffingSummary(date, totalRequired, totalAssigned, 
+                                              shortageSlots, overstaffSlots, totalShortage);
+            }
+        }
+    }
 }

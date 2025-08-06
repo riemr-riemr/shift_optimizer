@@ -2,46 +2,222 @@
 <html xmlns:th="http://www.thymeleaf.org"
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout}">
+<head>
+  <title>スキルマトリクス</title>
+  <style>
+    .skill-matrix-table {
+      font-size: 0.9rem;
+    }
+    .skill-matrix-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .skill-matrix-table .employee-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      position: sticky;
+      left: 0;
+      z-index: 11;
+    }
+    .skill-matrix-table td {
+      text-align: center;
+      vertical-align: middle;
+      padding: 8px;
+    }
+    .skill-select {
+      width: 100%;
+      max-width: 80px;
+      font-size: 0.85rem;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+    .skill-select:focus {
+      border-color: #86b7fe;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .skill-legend {
+      display: inline-flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .skill-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0.5rem;
+      background: #f8f9fa;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .register-column {
+      min-width: 100px;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+    }
+    .table-container {
+      max-height: 70vh;
+      overflow: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+    }
+  </style>
+</head>
 <body>
-<section layout:fragment="content">
-  <h1 class="text-xl font-bold mb-4">従業員×レジ 習熟度入力</h1>
-  <form th:action="@{/skills}" th:object="${skillForm}" method="post">
-    <table class="table-fixed border">
-      <thead>
-        <tr>
-          <th class="w-32">従業員＼レジ</th>
-          <th th:each="reg : ${matrixDto.registers}" th:text="${reg.registerNo}" class="w-20"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr th:each="emp : ${matrixDto.employees}">
-          <th th:text="${emp.employeeCode}"></th>
-          <td th:each="reg : ${matrixDto.registers}" class="text-center">
-            <!--
-              0 → ×   1 → △   2 → ○   3 → ◎   4 → ◎（最上位を重複表示。必要に応じて変更して下さい）
-            -->
-            <select class="select"
-                    th:onchange="updateCell('${emp.employeeCode}','${reg.registerNo}', this.value)">
-              <option th:value="0" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 0">×</option>
-              <option th:value="1" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 1">△</option>
-              <option th:value="2" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 2">○</option>
-              <option th:value="3" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 3">◎</option>
-              <option th:value="4" th:selected="${matrixDto.levelMap[emp.employeeCode][reg.registerNo]} == 4">◎</option>
-            </select>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+<div layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-grid-3x3-gap"></i> スキルマトリクス管理</h1>
+    <p class="mb-0">従業員のレジスター習熟度を設定・管理できます</p>
+  </div>
 
-    <!-- hidden inputs -->
-    <div id="hiddenArea"></div>
-    <button type="submit" class="btn btn-primary mt-4">保存</button>
-  </form>
+  <div class="card mb-3">
+    <div class="card-header">
+      <h5 class="mb-2"><i class="bi bi-info-circle"></i> 習熟度レベル</h5>
+      <div class="skill-legend">
+        <div class="skill-legend-item">
+          <span class="fw-bold text-danger">×</span>
+          <span>対応不可</span>
+        </div>
+        <div class="skill-legend-item">
+          <span class="fw-bold text-warning">△</span>
+          <span>基本レベル</span>
+        </div>
+        <div class="skill-legend-item">
+          <span class="fw-bold text-success">○</span>
+          <span>習熟レベル</span>
+        </div>
+        <div class="skill-legend-item">
+          <span class="fw-bold text-primary">◎</span>
+          <span>エキスパート</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><i class="bi bi-table"></i> スキルマトリクス</h5>
+      <div class="text-muted small">
+        <i class="bi bi-people"></i> 従業員数: <span th:text="${#lists.size(matrixDto.employees)}">0</span>名
+        <span class="ms-2"><i class="bi bi-calculator"></i> レジスター数: <span th:text="${#lists.size(matrixDto.registers)}">0</span>台</span>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <form th:action="@{/skills}" th:object="${skillForm}" method="post">
+        <div class="table-container">
+          <table class="table skill-matrix-table mb-0">
+            <thead>
+              <tr>
+                <th class="employee-header" scope="col" style="min-width: 150px;">
+                  <i class="bi bi-person"></i> 従業員 ＼ レジスター
+                </th>
+                <th th:each="reg : ${matrixDto.registers}" 
+                    th:text="|${reg.registerNo}番|"
+                    class="register-column"
+                    scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="emp : ${matrixDto.employees}">
+                <th class="employee-header text-start" scope="row">
+                  <i class="bi bi-person-badge"></i>
+                  <span th:text="${emp.employeeCode}"></span>
+                  <br>
+                  <small class="fw-normal text-white-50" th:text="${emp.employeeName}"></small>
+                </th>
+                <td th:each="reg : ${matrixDto.registers}" class="skill-cell">
+                  <select class="skill-select form-select form-select-sm"
+                          th:onchange="updateCell('${emp.employeeCode}','${reg.registerNo}', this.value)">
+                    <option th:value="0" 
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 0}">×</option>
+                    <option th:value="1" 
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 1}">△</option>
+                    <option th:value="2" 
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 2}">○</option>
+                    <option th:value="3" 
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 3}">◎</option>
+                    <option th:value="4" 
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 4}">◎+</option>
+                  </select>
+                </td>
+              </tr>
+              <tr th:if="${#lists.isEmpty(matrixDto.employees)}">
+                <td th:colspan="${#lists.size(matrixDto.registers) + 1}" class="text-center text-muted py-4">
+                  <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                  従業員が登録されていません
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Hidden inputs for form submission -->
+        <div id="hiddenArea" style="display: none;"></div>
+        
+        <div class="p-3 border-top bg-light d-flex justify-content-between align-items-center">
+          <div class="text-muted small">
+            <i class="bi bi-info-circle"></i>
+            各セルのドロップダウンから習熟度を選択してください
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> スキル設定を保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-lightbulb"></i> 使い方ガイド</h6>
+        </div>
+        <div class="card-body">
+          <ol class="small">
+            <li>各従業員のレジスター習熟度を選択します</li>
+            <li>「×」は対応不可、「◎+」は最高レベルです</li>
+            <li>すべて設定後、「保存」ボタンをクリックします</li>
+            <li>設定内容はシフト最適化時に活用されます</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-bar-chart"></i> 統計情報</h6>
+        </div>
+        <div class="card-body">
+          <div class="small text-muted">
+            <div class="mb-1">
+              <i class="bi bi-people"></i> 
+              総従業員数: <span class="fw-bold" th:text="${#lists.size(matrixDto.employees)}">0</span>名
+            </div>
+            <div class="mb-1">
+              <i class="bi bi-calculator"></i> 
+              総レジスター数: <span class="fw-bold" th:text="${#lists.size(matrixDto.registers)}">0</span>台
+            </div>
+            <div>
+              <i class="bi bi-grid"></i> 
+              総スキル設定項目数: <span class="fw-bold" th:text="${#lists.size(matrixDto.employees) * #lists.size(matrixDto.registers)}">0</span>項目
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     /**
-     * セル変更時に hidden input を生成／更新し、
-     *   emp|reg|val 形式で値を保持する
+     * セル変更時にhidden inputを生成/更新し、
+     * emp|reg|val形式で値を保持する
      */
     function updateCell(emp, reg, val) {
       const id = `${emp}|${reg}`;
@@ -54,8 +230,28 @@
         document.getElementById('hiddenArea').appendChild(hidden);
       }
       hidden.value = `${emp}|${reg}|${val}`;
+      
+      // 視覚的フィードバック
+      const cell = event.target.closest('td');
+      if (cell) {
+        cell.style.backgroundColor = '#e3f2fd';
+        setTimeout(() => {
+          cell.style.backgroundColor = '';
+        }, 500);
+      }
     }
+
+    // ページ読み込み時に既存の値でhidden inputを初期化
+    document.addEventListener('DOMContentLoaded', function() {
+      const selects = document.querySelectorAll('.skill-select');
+      selects.forEach(function(select) {
+        if (select.value && select.value !== '0') {
+          // onchangeイベントを手動で発火させて初期値を設定
+          select.onchange();
+        }
+      });
+    });
   </script>
-</section>
+</div>
 </body>
 </html>
