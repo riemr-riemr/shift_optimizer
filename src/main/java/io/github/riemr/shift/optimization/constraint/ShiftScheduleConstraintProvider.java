@@ -14,6 +14,7 @@ import org.optaplanner.core.api.score.stream.Joiners;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
@@ -34,12 +35,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             forbidRequestedDayOff(factory),
             enforceLunchBreak(factory),
             forbidNullBaseTimeEmployees(factory),
+            ensureWeeklyRestDays(factory),
 
             // Soft constraints
             preferBaseWorkTimes(factory),
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
-            assignContiguously(factory)
+            assignContiguously(factory),
+            minimizeStaffingVariance(factory)
         };
     }
 
@@ -289,6 +292,85 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     return startDeviation + endDeviation;
                 })
                 .asConstraint("Deviation from base work times");
+    }
+
+    /**
+     * 週に2日以上の休日を保証するハード制約
+     * 各従業員について、1週間（月曜日から日曜日）のうち最低2日は休日でなければならない
+     */
+    private Constraint ensureWeeklyRestDays(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         sa -> getWeekStart(sa.getShiftDate()), // 週の開始日（月曜日）でグループ化
+                         ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getShiftDate))
+                .filter((emp, weekStart, workDays) -> workDays.size() > 5) // 週6日以上勤務の場合
+                .penalize(HardSoftScore.ONE_HARD, 
+                          (emp, weekStart, workDays) -> workDays.size() - 5) // 5日を超えた分をペナルティ
+                .asConstraint("Ensure at least 2 rest days per week");
+    }
+
+    /**
+     * 指定された日付の週の開始日（月曜日）を取得
+     * ISO 8601標準に従い、週は月曜日から始まる
+     */
+    private static LocalDate getWeekStart(LocalDate date) {
+        // DayOfWeek.MONDAY = 1, SUNDAY = 7
+        int dayOfWeek = date.getDayOfWeek().getValue();
+        // 月曜日からの日数を計算して、その週の月曜日を求める
+        return date.minusDays(dayOfWeek - 1);
+    }
+
+    /**
+     * 計算月全体の人員過不足の分散を最小化する制約
+     * 各日の需要と実際の配置人員の差の分散を抑えることで、
+     * 月全体での人員配置の均等化を図る
+     */
+    private Constraint minimizeStaffingVariance(ConstraintFactory f) {
+        return f.forEach(RegisterDemandQuarter.class)
+                .join(ShiftAssignmentPlanningEntity.class,
+                        Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(RegisterDemandQuarter::getSlotTime, sa -> sa.getStartAt().toInstant()
+                                .atZone(ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null))
+                .groupBy((demand, sa) -> demand.getDemandDate(), 
+                         (demand, sa) -> demand.getSlotTime(),
+                         (demand, sa) -> demand.getRequiredUnits(),
+                         ConstraintCollectors.countBi())
+                .groupBy((date, slot, required, assigned) -> 
+                         YearMonth.from(date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()), // 月でグループ化
+                         ConstraintCollectors.toList((date, slot, required, assigned) -> 
+                                 Math.abs(assigned - required))) // 過不足の絶対値をリスト化
+                .penalize(HardSoftScore.ofSoft(50), 
+                          (month, staffingDifferences) -> calculateVariancePenalty(staffingDifferences))
+                .asConstraint("Minimize monthly staffing variance");
+    }
+
+    /**
+     * 人員過不足リストの分散を計算してペナルティ値を返す
+     * 分散が大きいほど高いペナルティを課す
+     */
+    private static int calculateVariancePenalty(List<Integer> staffingDifferences) {
+        if (staffingDifferences.isEmpty()) return 0;
+        
+        // 平均値を計算
+        double average = staffingDifferences.stream()
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(0.0);
+        
+        // 分散を計算
+        double variance = staffingDifferences.stream()
+                .mapToDouble(diff -> {
+                    double deviation = diff - average;
+                    return deviation * deviation;
+                })
+                .average()
+                .orElse(0.0);
+        
+        // 分散値にスケーリングファクターを適用してペナルティ値として返す
+        // 分散が大きいほど高いペナルティ
+        return (int) Math.round(variance * 10); // スケーリングファクター: 10
     }
 }
 
