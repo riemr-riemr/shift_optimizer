@@ -31,8 +31,7 @@ public class EmployeeShiftController {
     @GetMapping
     public String employeeShift(
             @RequestParam(required = false) String employeeCode,
-            @RequestParam(required = false) Integer year,
-            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) String targetMonth,
             Model model) {
 
         // 従業員リストを取得
@@ -40,11 +39,15 @@ public class EmployeeShiftController {
         model.addAttribute("employees", employees);
 
         // デフォルト値の設定
-        if (year == null || month == null) {
-            LocalDate today = LocalDate.now();
-            year = today.getYear();
-            month = today.getMonthValue();
+        YearMonth yearMonth;
+        if (targetMonth == null) {
+            yearMonth = YearMonth.now();
+        } else {
+            yearMonth = YearMonth.parse(targetMonth);
         }
+
+        int year = yearMonth.getYear();
+        int month = yearMonth.getMonthValue();
 
         model.addAttribute("selectedYear", year);
         model.addAttribute("selectedMonth", month);
@@ -53,9 +56,8 @@ public class EmployeeShiftController {
         // 従業員が選択されている場合のみシフトデータを取得
         if (employeeCode != null && !employeeCode.isEmpty()) {
             try {
-                YearMonth targetMonth = YearMonth.of(year, month);
                 EmployeeMonthlyShiftDto monthlyShift = 
-                    employeeShiftService.getEmployeeMonthlyShift(employeeCode, targetMonth);
+                    employeeShiftService.getEmployeeMonthlyShift(employeeCode, yearMonth);
                 model.addAttribute("monthlyShift", monthlyShift);
                 model.addAttribute("hasShiftData", true);
                 
@@ -83,14 +85,13 @@ public class EmployeeShiftController {
     @GetMapping("/export")
     public String exportEmployeeShift(
             @RequestParam String employeeCode,
-            @RequestParam Integer year,
-            @RequestParam Integer month,
+            @RequestParam String targetMonth,
             Model model) {
 
         try {
-            YearMonth targetMonth = YearMonth.of(year, month);
+            YearMonth yearMonth = YearMonth.parse(targetMonth);
             EmployeeMonthlyShiftDto monthlyShift = 
-                employeeShiftService.getEmployeeMonthlyShift(employeeCode, targetMonth);
+                employeeShiftService.getEmployeeMonthlyShift(employeeCode, yearMonth);
             
             model.addAttribute("monthlyShift", monthlyShift);
             return "employee-shift/export-csv";
@@ -98,7 +99,7 @@ public class EmployeeShiftController {
         } catch (Exception e) {
             model.addAttribute("errorMessage", "CSVエクスポートに失敗しました: " + e.getMessage());
             return "redirect:/employee-shift?employeeCode=" + employeeCode 
-                    + "&year=" + year + "&month=" + month;
+                    + "&targetMonth=" + targetMonth;
         }
     }
 }

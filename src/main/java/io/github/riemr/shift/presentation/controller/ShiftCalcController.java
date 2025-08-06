@@ -70,17 +70,17 @@ public class ShiftCalcController {
     }
 
     @GetMapping
-    public String monthlyShift(@RequestParam(required = false) Integer year, 
-                              @RequestParam(required = false) Integer month, 
+    public String monthlyShift(@RequestParam(required = false) String targetMonth, 
                               @RequestParam(defaultValue = "569") String storeCode, 
                               Model model) {
-        if (year == null || month == null) {
-            LocalDate today = LocalDate.now();
-            year = today.getYear();
-            month = today.getMonthValue();
+        YearMonth yearMonth;
+        if (targetMonth == null) {
+            yearMonth = YearMonth.now();
+        } else {
+            yearMonth = YearMonth.parse(targetMonth);
         }
-
-        YearMonth yearMonth = YearMonth.of(year, month);
+        int year = yearMonth.getYear();
+        int month = yearMonth.getMonthValue();
         List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(yearMonth.atDay(1));
         Map<Integer, List<String>> dailyShifts =
             monthlyAssignments.stream()

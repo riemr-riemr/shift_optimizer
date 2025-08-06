@@ -53,6 +53,22 @@
             margin: 0;
         }
 
+        #sidebar .nav-category {
+            color: rgba(255,255,255,0.7);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 1rem 1.25rem 0.5rem 1.25rem;
+            margin-top: 1rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #sidebar .nav-category:first-child {
+            margin-top: 0;
+            border-top: none;
+        }
+
         #sidebar .nav-list .nav-item a {
             display: flex;
             align-items: center;
@@ -158,6 +174,11 @@
                 Shift Manager
             </div>
             <ul class="nav-list">
+                <!-- シフト管理 -->
+                <li class="nav-category">
+                    <i class="bi bi-calendar2-week me-1"></i>
+                    シフト管理
+                </li>
                 <li class="nav-item">
                     <a th:href="@{/shift}">
                         <i class="bi bi-calendar3"></i>
@@ -171,15 +192,21 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a th:href="@{/employees}">
-                        <i class="bi bi-people"></i>
-                        従業員管理
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a th:href="@{/employee-shift}">
                         <i class="bi bi-person-lines-fill"></i>
                         従業員個人シフト
+                    </a>
+                </li>
+
+                <!-- 人員管理 -->
+                <li class="nav-category">
+                    <i class="bi bi-people me-1"></i>
+                    人員管理
+                </li>
+                <li class="nav-item">
+                    <a th:href="@{/employees}">
+                        <i class="bi bi-person-badge"></i>
+                        従業員管理
                     </a>
                 </li>
                 <li class="nav-item">
@@ -187,6 +214,12 @@
                         <i class="bi bi-grid-3x3-gap"></i>
                         スキルマトリクス
                     </a>
+                </li>
+
+                <!-- 需要・配置分析 -->
+                <li class="nav-category">
+                    <i class="bi bi-graph-up me-1"></i>
+                    需要・配置分析
                 </li>
                 <li class="nav-item">
                     <a th:href="@{/register-demand}">

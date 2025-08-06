@@ -136,19 +136,12 @@
                       th:text="${emp.employeeCode + ' - ' + emp.employeeName}"></option>
             </select>
           </div>
-          <div class="col-md-3">
-            <label for="year" class="form-label">
-              <i class="bi bi-calendar-year"></i> 年
+          <div class="col-md-4">
+            <label for="targetMonth" class="form-label">
+              <i class="bi bi-calendar-month"></i> 対象月
             </label>
-            <input type="number" id="year" name="year" class="form-control" 
-                   th:value="${selectedYear}" min="2020" max="2030" required />
-          </div>
-          <div class="col-md-3">
-            <label for="month" class="form-label">
-              <i class="bi bi-calendar-month"></i> 月
-            </label>
-            <input type="number" id="month" name="month" class="form-control" 
-                   th:value="${selectedMonth}" min="1" max="12" required />
+            <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                   th:value="${selectedYear + '-' + (selectedMonth < 10 ? '0' + selectedMonth : selectedMonth)}" required />
           </div>
           <div class="col-md-2">
             <button type="submit" class="btn btn-primary w-100">
@@ -193,7 +186,7 @@
             <span th:text="${monthlyShift.targetMonth.monthValue}">1</span>月
           </h4>
           <div class="mt-2">
-            <a th:href="@{/employee-shift/export(employeeCode=${selectedEmployeeCode}, year=${selectedYear}, month=${selectedMonth})}" 
+            <a th:href="@{/employee-shift/export(employeeCode=${selectedEmployeeCode}, targetMonth=${selectedYear + '-' + (selectedMonth < 10 ? '0' + selectedMonth : selectedMonth)})}" 
                class="btn btn-light btn-sm">
               <i class="bi bi-download"></i> CSV出力
             </a>

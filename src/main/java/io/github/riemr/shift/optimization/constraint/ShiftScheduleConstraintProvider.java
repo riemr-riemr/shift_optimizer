@@ -26,7 +26,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     public Constraint[] defineConstraints(ConstraintFactory factory) {
         return new Constraint[] {
             // Hard constraints
-            satisfyRegisterDemand(factory),
             forbidZeroSkill(factory),
             employeeNotDoubleBooked(factory),
             maxWorkMinutesPerDay(factory),
@@ -38,6 +37,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             ensureWeeklyRestDays(factory),
 
             // Soft constraints
+            satisfyRegisterDemand(factory),
             preferBaseWorkTimes(factory),
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
@@ -52,9 +52,19 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null))
                 .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
-                .penalize(HardSoftScore.ONE_HARD,
-                          (demand, assigned) -> Math.max(0, demand.getRequiredUnits() - assigned))
-                .asConstraint("Unmet register demand");
+                .penalize(HardSoftScore.ofSoft(1000), // 高い重みでソフト制約に変更
+                          (demand, assigned) -> {
+                              int shortage = demand.getRequiredUnits() - assigned;
+                              if (shortage > 0) {
+                                  // 人員不足の場合は高いペナルティ
+                                  return shortage * 100;
+                              } else {
+                                  // 人員過多の場合は軽いペナルティ（人数不足よりはまし）
+                                  int overstaffing = assigned - demand.getRequiredUnits();
+                                  return overstaffing * 50;
+                              }
+                          })
+                .asConstraint("Register demand balance");
     }
 
     private Constraint forbidZeroSkill(ConstraintFactory f) {

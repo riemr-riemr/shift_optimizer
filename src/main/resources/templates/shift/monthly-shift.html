@@ -106,7 +106,8 @@
             padding: 0;
             margin: 0;
             max-height: 80px;
-            overflow-y: visible;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
         
         .employee-list li {
@@ -201,21 +202,18 @@
         <div class="card-body search-form">
             <form th:action="@{/shift}" method="get">
                 <div class="row align-items-end">
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="storeCode" class="form-label">店舗コード</label>
                         <select id="storeCode" name="storeCode" class="form-select" th:value="${storeCode}">
                             <option value="569" th:selected="${storeCode == '569'}">569 - テスト店舗</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label for="year" class="form-label">年</label>
-                        <input type="number" id="year" name="year" class="form-control" th:value="${year}" min="2020" max="2030" required />
+                    <div class="col-md-4">
+                        <label for="targetMonth" class="form-label">対象月</label>
+                        <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                               th:value="${year + '-' + (month < 10 ? '0' + month : month)}" required />
                     </div>
-                    <div class="col-md-3">
-                        <label for="month" class="form-label">月</label>
-                        <input type="number" id="month" name="month" class="form-control" th:value="${month}" min="1" max="12" required />
-                    </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="bi bi-search"></i> 表示更新
                         </button>
