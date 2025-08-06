@@ -1,6 +1,6 @@
 package io.github.riemr.shift.presentation.form;
 
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import lombok.Data;
 
 import java.util.ArrayList;

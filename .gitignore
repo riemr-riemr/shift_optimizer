@@ -36,4 +36,4 @@ build/
 CLAUDE.md
 
 ### Log ###
-app.log
+#app.log

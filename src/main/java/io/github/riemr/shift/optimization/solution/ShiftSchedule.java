@@ -1,12 +1,12 @@
 package io.github.riemr.shift.optimization.solution;
 
-import io.github.riemr.shift.domain.ConstraintMaster;
-import io.github.riemr.shift.domain.Employee;
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
-import io.github.riemr.shift.domain.EmployeeRequest;
-import io.github.riemr.shift.domain.Register;
-import io.github.riemr.shift.domain.RegisterDemandQuarter;
-import io.github.riemr.shift.domain.RegisterAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.ConstraintMaster;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
+import io.github.riemr.shift.infrastructure.persistence.entity.Register;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import lombok.Getter;
 import lombok.Setter;

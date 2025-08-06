@@ -1,4 +1,4 @@
-package io.github.riemr.shift.repository;
+package io.github.riemr.shift.application.repository;
 
 import java.time.LocalDate;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;

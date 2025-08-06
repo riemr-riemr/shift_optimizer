@@ -1,6 +1,6 @@
 package io.github.riemr.shift.batch;
 
-import io.github.riemr.shift.domain.*;
+import io.github.riemr.shift.infrastructure.persistence.entity.*;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.Path;

@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.Store;
-import io.github.riemr.shift.domain.StoreExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.Store;
+import io.github.riemr.shift.infrastructure.persistence.entity.StoreExample;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 

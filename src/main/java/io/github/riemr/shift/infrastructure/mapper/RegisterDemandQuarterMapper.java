@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.RegisterDemandQuarter;
-import io.github.riemr.shift.domain.RegisterDemandQuarterExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarterExample;
 
 import java.time.LocalDate;
 import java.util.List;

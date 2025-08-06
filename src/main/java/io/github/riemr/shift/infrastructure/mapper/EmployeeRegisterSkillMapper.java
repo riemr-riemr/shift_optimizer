@@ -1,8 +1,8 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
-import io.github.riemr.shift.domain.EmployeeRegisterSkillExample;
-import io.github.riemr.shift.domain.EmployeeRegisterSkillKey;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkillExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkillKey;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 

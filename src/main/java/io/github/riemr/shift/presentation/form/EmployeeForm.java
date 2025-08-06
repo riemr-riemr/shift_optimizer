@@ -1,6 +1,6 @@
 package io.github.riemr.shift.presentation.form;
 
-import io.github.riemr.shift.domain.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 

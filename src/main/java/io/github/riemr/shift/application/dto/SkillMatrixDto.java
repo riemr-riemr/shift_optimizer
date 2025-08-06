@@ -1,7 +1,7 @@
 package io.github.riemr.shift.application.dto;
 
-import io.github.riemr.shift.domain.Employee;
-import io.github.riemr.shift.domain.Register;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 

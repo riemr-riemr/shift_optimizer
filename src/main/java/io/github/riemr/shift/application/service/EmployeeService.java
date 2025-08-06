@@ -1,6 +1,6 @@
 package io.github.riemr.shift.application.service;
 
-import io.github.riemr.shift.domain.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

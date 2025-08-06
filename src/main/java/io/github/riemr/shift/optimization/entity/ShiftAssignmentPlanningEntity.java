@@ -1,7 +1,7 @@
 package io.github.riemr.shift.optimization.entity;
 
-import io.github.riemr.shift.domain.Employee;
-import io.github.riemr.shift.domain.RegisterAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;

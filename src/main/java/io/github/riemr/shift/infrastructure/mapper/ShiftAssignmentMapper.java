@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.ShiftAssignment;
-import io.github.riemr.shift.domain.ShiftAssignmentExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignmentExample;
 
 import java.time.LocalDate;
 import java.util.List;

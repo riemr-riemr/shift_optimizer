@@ -1,8 +1,8 @@
 package io.github.riemr.shift.application.service;
 
 import io.github.riemr.shift.application.dto.SkillMatrixDto;
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
-import io.github.riemr.shift.domain.EmployeeRegisterSkillExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkillExample;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
 import io.github.riemr.shift.infrastructure.mapper.RegisterMapper;

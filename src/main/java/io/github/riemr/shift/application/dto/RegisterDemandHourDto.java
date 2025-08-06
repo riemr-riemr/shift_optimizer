@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import io.github.riemr.shift.domain.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import lombok.NoArgsConstructor;
 
 /**

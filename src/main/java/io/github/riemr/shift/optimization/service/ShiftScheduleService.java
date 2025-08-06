@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
 import org.optaplanner.core.api.solver.SolverJob;
@@ -29,13 +29,13 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentMonthlyView;
 import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
-import io.github.riemr.shift.domain.RegisterAssignment;
-import io.github.riemr.shift.domain.ShiftAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
-import io.github.riemr.shift.repository.ShiftScheduleRepository;
+import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.Register;
-import io.github.riemr.shift.domain.RegisterKey;
+import io.github.riemr.shift.infrastructure.persistence.entity.Register;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterKey;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 

@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.ConstraintMaster;
-import io.github.riemr.shift.domain.ConstraintMasterExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.ConstraintMaster;
+import io.github.riemr.shift.infrastructure.persistence.entity.ConstraintMasterExample;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 

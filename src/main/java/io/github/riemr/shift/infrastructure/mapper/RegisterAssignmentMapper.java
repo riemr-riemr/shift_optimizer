@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.RegisterAssignment;
-import io.github.riemr.shift.domain.RegisterAssignmentExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmentExample;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;

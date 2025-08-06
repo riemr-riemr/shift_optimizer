@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.Employee;
-import io.github.riemr.shift.domain.EmployeeExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 

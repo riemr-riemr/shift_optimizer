@@ -1,8 +1,8 @@
 package io.github.riemr.shift.optimization.constraint;
 
-import io.github.riemr.shift.domain.EmployeeRegisterSkill;
-import io.github.riemr.shift.domain.EmployeeRequest;
-import io.github.riemr.shift.domain.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;

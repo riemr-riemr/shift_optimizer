@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="io.github.riemr.shift.infrastructure.mapper.RegisterMapper">
-  <resultMap id="BaseResultMap" type="io.github.riemr.shift.domain.Register">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     <id column="store_code" jdbcType="VARCHAR" property="storeCode" />
     <id column="register_no" jdbcType="INTEGER" property="registerNo" />
     <result column="register_name" jdbcType="VARCHAR" property="registerName" />
@@ -15,19 +15,19 @@
     store_code, register_no, register_name, short_name, open_priority, register_type, 
     is_auto_open_target, max_allowance
   </sql>
-  <select id="selectByPrimaryKey" parameterType="io.github.riemr.shift.domain.RegisterKey" resultMap="BaseResultMap">
+  <select id="selectByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterKey" resultMap="BaseResultMap">
     select 
     <include refid="Base_Column_List" />
     from public.register
     where store_code = #{storeCode,jdbcType=VARCHAR}
       and register_no = #{registerNo,jdbcType=INTEGER}
   </select>
-  <delete id="deleteByPrimaryKey" parameterType="io.github.riemr.shift.domain.RegisterKey">
+  <delete id="deleteByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterKey">
     delete from public.register
     where store_code = #{storeCode,jdbcType=VARCHAR}
       and register_no = #{registerNo,jdbcType=INTEGER}
   </delete>
-  <insert id="insert" parameterType="io.github.riemr.shift.domain.Register">
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     insert into public.register (store_code, register_no, register_name, 
       short_name, open_priority, register_type, 
       is_auto_open_target, max_allowance)
@@ -35,7 +35,7 @@
       #{shortName,jdbcType=VARCHAR}, #{openPriority,jdbcType=INTEGER}, #{registerType,jdbcType=VARCHAR}, 
       #{isAutoOpenTarget,jdbcType=BOOLEAN}, #{maxAllowance,jdbcType=INTEGER})
   </insert>
-  <insert id="insertSelective" parameterType="io.github.riemr.shift.domain.Register">
+  <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     insert into public.register
     <trim prefix="(" suffix=")" suffixOverrides=",">
       <if test="storeCode != null">
@@ -90,7 +90,7 @@
       </if>
     </trim>
   </insert>
-  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.domain.Register">
+  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     update public.register
     <set>
       <if test="registerName != null">
@@ -115,7 +115,7 @@
     where store_code = #{storeCode,jdbcType=VARCHAR}
       and register_no = #{registerNo,jdbcType=INTEGER}
   </update>
-  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.domain.Register">
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     update public.register
     set register_name = #{registerName,jdbcType=VARCHAR},
       short_name = #{shortName,jdbcType=VARCHAR},

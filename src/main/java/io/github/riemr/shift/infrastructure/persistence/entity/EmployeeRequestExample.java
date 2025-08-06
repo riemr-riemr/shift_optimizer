@@ -1,4 +1,4 @@
-package io.github.riemr.shift.domain;
+package io.github.riemr.shift.infrastructure.persistence.entity;
 
 import java.util.ArrayList;
 import java.util.Date;

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper">
-  <resultMap id="BaseResultMap" type="io.github.riemr.shift.domain.RegisterAssignment">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment">
     <id column="assignment_id" jdbcType="BIGINT" property="assignmentId" />
     <result column="store_code" jdbcType="VARCHAR" property="storeCode" />
     <result column="employee_code" jdbcType="VARCHAR" property="employeeCode" />
@@ -71,7 +71,7 @@
   <sql id="Base_Column_List">
     assignment_id, store_code, employee_code, register_no, start_at, end_at, created_by
   </sql>
-  <select id="selectByExample" parameterType="io.github.riemr.shift.domain.RegisterAssignmentExample" resultMap="BaseResultMap">
+  <select id="selectByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmentExample" resultMap="BaseResultMap">
     select
     <if test="distinct">
       distinct
@@ -95,13 +95,13 @@
     delete from public.register_assignment
     where assignment_id = #{assignmentId,jdbcType=BIGINT}
   </delete>
-  <delete id="deleteByExample" parameterType="io.github.riemr.shift.domain.RegisterAssignmentExample">
+  <delete id="deleteByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmentExample">
     delete from public.register_assignment
     <if test="_parameter != null">
       <include refid="Example_Where_Clause" />
     </if>
   </delete>
-  <insert id="insert" parameterType="io.github.riemr.shift.domain.RegisterAssignment">
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment">
     insert into public.register_assignment (store_code, employee_code, register_no, 
       start_at, end_at, created_by
       )
@@ -109,7 +109,7 @@
       #{startAt,jdbcType=TIMESTAMP}, #{endAt,jdbcType=TIMESTAMP}, #{createdBy,jdbcType=VARCHAR}
       )
   </insert>
-  <insert id="insertSelective" parameterType="io.github.riemr.shift.domain.RegisterAssignment">
+  <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment">
     insert into public.register_assignment
     <trim prefix="(" suffix=")" suffixOverrides=",">
       <if test="storeCode != null">
@@ -152,7 +152,7 @@
       </if>
     </trim>
   </insert>
-  <select id="countByExample" parameterType="io.github.riemr.shift.domain.RegisterAssignmentExample" resultType="java.lang.Long">
+  <select id="countByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmentExample" resultType="java.lang.Long">
     select count(*) from public.register_assignment
     <if test="_parameter != null">
       <include refid="Example_Where_Clause" />
@@ -196,7 +196,7 @@
       <include refid="Update_By_Example_Where_Clause" />
     </if>
   </update>
-  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.domain.RegisterAssignment">
+  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment">
     update public.register_assignment
     <set>
       <if test="storeCode != null">
@@ -220,7 +220,7 @@
     </set>
     where assignment_id = #{assignmentId,jdbcType=BIGINT}
   </update>
-  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.domain.RegisterAssignment">
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment">
     update public.register_assignment
     set store_code = #{storeCode,jdbcType=VARCHAR},
       employee_code = #{employeeCode,jdbcType=VARCHAR},

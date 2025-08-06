@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeMapper">
-  <resultMap id="BaseResultMap" type="io.github.riemr.shift.domain.Employee">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     <id column="employee_code" jdbcType="VARCHAR" property="employeeCode" />
     <result column="store_code" jdbcType="VARCHAR" property="storeCode" />
     <result column="employee_name" jdbcType="VARCHAR" property="employeeName" />
@@ -73,7 +73,7 @@
     employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month,
     base_start_time, base_end_time
   </sql>
-  <select id="selectByExample" parameterType="io.github.riemr.shift.domain.EmployeeExample" resultMap="BaseResultMap">
+  <select id="selectByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample" resultMap="BaseResultMap">
     select
     <if test="distinct">
       distinct
@@ -97,13 +97,13 @@
     delete from public.employee
     where employee_code = #{employeeCode,jdbcType=VARCHAR}
   </delete>
-  <delete id="deleteByExample" parameterType="io.github.riemr.shift.domain.EmployeeExample">
+  <delete id="deleteByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample">
     delete from public.employee
     <if test="_parameter != null">
       <include refid="Example_Where_Clause" />
     </if>
   </delete>
-  <insert id="insert" parameterType="io.github.riemr.shift.domain.Employee">
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     insert into public.employee (employee_code, store_code, employee_name, 
       short_follow, max_work_minutes_day, max_work_days_month,
       base_start_time, base_end_time
@@ -113,7 +113,7 @@
       #{baseStartTime,jdbcType=TIME}, #{baseEndTime,jdbcType=TIME}
       )
   </insert>
-  <insert id="insertSelective" parameterType="io.github.riemr.shift.domain.Employee">
+  <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     insert into public.employee
     <trim prefix="(" suffix=")" suffixOverrides=",">
       <if test="employeeCode != null">
@@ -168,7 +168,7 @@
       </if>
     </trim>
   </insert>
-  <select id="countByExample" parameterType="io.github.riemr.shift.domain.EmployeeExample" resultType="java.lang.Long">
+  <select id="countByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample" resultType="java.lang.Long">
     select count(*) from public.employee
     <if test="_parameter != null">
       <include refid="Example_Where_Clause" />
@@ -220,7 +220,7 @@
       <include refid="Update_By_Example_Where_Clause" />
     </if>
   </update>
-  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.domain.Employee">
+  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     update public.employee
     <set>
       <if test="storeCode != null">
@@ -247,7 +247,7 @@
     </set>
     where employee_code = #{employeeCode,jdbcType=VARCHAR}
   </update>
-  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.domain.Employee">
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     update public.employee
     set store_code = #{storeCode,jdbcType=VARCHAR},
       employee_name = #{employeeName,jdbcType=VARCHAR},

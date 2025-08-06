@@ -1,7 +1,7 @@
 package io.github.riemr.shift.infrastructure.mapper;
 
-import io.github.riemr.shift.domain.EmployeeRequest;
-import io.github.riemr.shift.domain.EmployeeRequestExample;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequestExample;
 
 import java.time.LocalDate;
 import java.util.List;
