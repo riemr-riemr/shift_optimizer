@@ -68,6 +68,7 @@ public class ShiftScheduleService {
     /* === Runtime State === */
     private final Map<Long, Instant> startMap = new ConcurrentHashMap<>();
     private final Map<Long, SolverJob<ShiftSchedule, Long>> jobMap = new ConcurrentHashMap<>();
+    private final Map<Long, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
 
     /* ===================================================================== */
     /* Public API                                                            */
@@ -90,10 +91,14 @@ public class ShiftScheduleService {
         }
 
         // -- Solver 起動 (listen 方式) --
-        SolverJob<ShiftSchedule, Long> job = solverManager.solve(
+        SolverJob<ShiftSchedule, Long> job = solverManager.solveAndListen(
                 problemId,
                 this::loadProblem,
-                this::persistResult,
+                bestSolution -> {
+                    // フェーズ情報のみ更新
+                    updatePhase(problemId, bestSolution);
+                    persistResult(bestSolution);
+                },
                 this::onError);
         jobMap.put(problemId, job);
 
@@ -110,14 +115,23 @@ public class ShiftScheduleService {
     public SolveStatusDto getStatus(Long problemId) {
         SolverStatus status = solverManager.getSolverStatus(problemId);
         Instant began = startMap.get(problemId);
-        if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0);
+        if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
 
         long now = Instant.now().toEpochMilli();
         long finish = began.plus(spentLimit).toEpochMilli();
+        
+        // 時間ベースの進捗計算
         int pct = (int) Math.min(100, ((now - began.toEpochMilli()) * 100) / (finish - began.toEpochMilli()));
-        if (status == SolverStatus.NOT_SOLVING) pct = 100;
+        
+        // フェーズ情報を取得
+        String currentPhase = currentPhaseMap.getOrDefault(problemId, "初期化中");
+        
+        if (status == SolverStatus.NOT_SOLVING) {
+            pct = 100;
+            currentPhase = "完了";
+        }
 
-        return new SolveStatusDto(status.name(), pct, finish);
+        return new SolveStatusDto(status.name(), pct, finish, currentPhase);
     }
 
     /** 計算終了後の最終解をフロント用 DTO に変換して返す */
@@ -314,10 +328,34 @@ public class ShiftScheduleService {
     }
 
     /**
+     * BestSolutionChangedEvent時に呼ばれるフェーズ更新メソッド
+     */
+    private void updatePhase(Long problemId, ShiftSchedule bestSolution) {
+        if (bestSolution == null) return;
+        
+        var score = bestSolution.getScore();
+        if (score != null) {
+            String phase;
+            
+            if (score.initScore() < 0) {
+                // Construction Heuristic フェーズ（初期化中）
+                phase = "初期解生成中";
+            } else {
+                // Local Search フェーズ
+                phase = "最適化中";
+            }
+            
+            currentPhaseMap.put(problemId, phase);
+            log.debug("Phase update for {}: {} - Score: {}", problemId, phase, score);
+        }
+    }
+
+    /**
      * Solver 実行中に例外が発生した場合のハンドラ。
      */
     private void onError(Long problemId, Throwable throwable) {
         log.error("Solver failed for problem {}", problemId, throwable);
+        currentPhaseMap.remove(problemId);
     }
 
     /* ===================================================================== */

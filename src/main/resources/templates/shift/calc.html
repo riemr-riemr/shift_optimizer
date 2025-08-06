@@ -224,6 +224,10 @@ async function tick(id, month){
     $('bar').style.width = progress + '%';
     $('bar').textContent = progress + '%';
     
+    // フェーズ情報を表示
+    const phaseMessage = st.phase || '最適化アルゴリズムが実行中です...';
+    $('progressMessage').innerHTML = `<small><i class="bi bi-info-circle me-1"></i>${phaseMessage}</small>`;
+    
     // 計算中の場合は継続、完了・エラー・未実行の場合は終了
     if (st.status === 'SOLVING' || st.status === 'SOLVING_ACTIVE') {
       setTimeout(() => tick(id, month), 1000);
@@ -237,19 +241,13 @@ async function tick(id, month){
         // プログレスメッセージを更新
         $('progressMessage').innerHTML = '<small><i class="bi bi-check-circle-fill me-1 text-success"></i>最適化完了しました！</small>';
         
-        // プログレスカードを隠す
-        setTimeout(() => {
-          $('progressCard').style.display = 'none';
-        }, 3000);
-        
-        // 計算完了後、当月の最初の日を表示
-        const [year, monthNum] = month.split('-').map(Number);
-        const firstDayOfMonth = `${year}-${String(monthNum).padStart(2, '0')}-01`;
-        loadResult(firstDayOfMonth);
+        // プログレスカードは表示したままにする（隠さない）
+        // 計算結果の自動表示も行わない
       } else {
         // エラー状態の処理
         $('bar').classList.add('bg-danger');
         $('bar').textContent = 'エラー';
+        $('progressMessage').innerHTML = `<small><i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>エラーが発生しました: ${st.status}</small>`;
         console.error('Solver error status:', st.status);
       }
     }
@@ -257,6 +255,7 @@ async function tick(id, month){
     console.error('Progress polling error:', error);
     $('bar').classList.add('bg-danger');
     $('bar').textContent = '通信エラー';
+    $('progressMessage').innerHTML = '<small><i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>通信エラーが発生しました</small>';
   }
 }
 

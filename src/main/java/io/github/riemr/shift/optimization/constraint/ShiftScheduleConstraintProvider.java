@@ -170,7 +170,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter(sa -> sa.getAssignedEmployee() != null)
                 .groupBy(ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getAssignedEmployee))
-                .penalize(HardSoftScore.ofSoft(10),
+                .penalize(HardSoftScore.ofSoft(500),
                           (date, empSet) -> empSet.size())
                 .asConstraint("Minimize daily workers");
     }
