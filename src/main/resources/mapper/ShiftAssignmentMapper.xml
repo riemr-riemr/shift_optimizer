@@ -254,4 +254,11 @@
       end_at = excluded.end_at,
       created_by = excluded.created_by
   </insert>
+
+  <select id="selectAll" resultMap="BaseResultMap">
+    SELECT
+    <include refid="Base_Column_List" />
+    FROM public.shift_assignment
+    ORDER BY start_at
+  </select>
 </mapper>

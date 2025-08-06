@@ -106,6 +106,9 @@ public interface ShiftAssignmentMapper {
 
     List<ShiftAssignment> selectByDate(@Param("date") LocalDate date);
 
+    /** 全シフト割り当てを取得 */
+    List<ShiftAssignment> selectAll();
+
     /**
      * Solver 結果をまとめて書き戻す
      * key: shiftId, value: employeeCode
