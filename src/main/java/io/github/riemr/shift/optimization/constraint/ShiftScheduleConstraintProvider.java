@@ -42,7 +42,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
             assignContiguously(factory),
-            minimizeStaffingVariance(factory)
+            minimizeStaffingVariance(factory),
+            minimizeRegisterSwitching(factory),
+            preferConsistentRegisterAssignment(factory)
         };
     }
 
@@ -381,6 +383,105 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         // 分散値にスケーリングファクターを適用してペナルティ値として返す
         // 分散が大きいほど高いペナルティ
         return (int) Math.round(variance * 10); // スケーリングファクター: 10
+    }
+
+    /**
+     * レジ種別間の切り替わり頻度を最小化する制約
+     * 同一従業員が一日の中で異なるレジ番号に頻繁に切り替わることを避ける
+     */
+    private Constraint minimizeRegisterSwitching(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, 
+                         ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .penalize(HardSoftScore.ofSoft(800),
+                          (emp, date, assignments) -> countRegisterSwitches(assignments))
+                .asConstraint("Minimize register switching");
+    }
+
+    /**
+     * 同一レジ種別での連続勤務を優先する制約
+     * 従業員が同じレジで連続して勤務することを推奨
+     */
+    private Constraint preferConsistentRegisterAssignment(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .reward(HardSoftScore.ofSoft(300),
+                        (emp, date, assignments) -> countConsistentRegisterBlocks(assignments))
+                .asConstraint("Prefer consistent register assignment");
+    }
+
+    /**
+     * 一日の中でのレジ種別切り替え回数をカウント
+     * 時間順にソートして、隣接するタイムスロット間でレジ番号が変わる回数を数える
+     */
+    private static int countRegisterSwitches(List<ShiftAssignmentPlanningEntity> assignments) {
+        if (assignments.size() <= 1) return 0;
+        
+        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        int switches = 0;
+        
+        for (int i = 1; i < assignments.size(); i++) {
+            ShiftAssignmentPlanningEntity current = assignments.get(i);
+            ShiftAssignmentPlanningEntity previous = assignments.get(i - 1);
+            
+            // 連続するタイムスロットでレジ番号が異なる場合、切り替わりとしてカウント
+            if (current.getStartAt().equals(previous.getEndAt()) && 
+                !current.getRegisterNo().equals(previous.getRegisterNo())) {
+                switches++;
+            }
+        }
+        
+        return switches;
+    }
+
+    /**
+     * 同一レジでの連続勤務ブロック数をカウント
+     * より多くの連続ブロックを持つことで一貫性を評価
+     */
+    private static int countConsistentRegisterBlocks(List<ShiftAssignmentPlanningEntity> assignments) {
+        if (assignments.isEmpty()) return 0;
+        
+        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        int blocks = 0;
+        Integer currentRegister = null;
+        boolean inBlock = false;
+        
+        for (int i = 0; i < assignments.size(); i++) {
+            ShiftAssignmentPlanningEntity current = assignments.get(i);
+            
+            if (i == 0) {
+                currentRegister = current.getRegisterNo();
+                inBlock = true;
+            } else {
+                ShiftAssignmentPlanningEntity previous = assignments.get(i - 1);
+                
+                // 連続するタイムスロットかつ同じレジの場合
+                if (current.getStartAt().equals(previous.getEndAt()) && 
+                    current.getRegisterNo().equals(currentRegister)) {
+                    // 現在のブロックを継続
+                    inBlock = true;
+                } else {
+                    // ブロック終了
+                    if (inBlock) {
+                        blocks++;
+                    }
+                    currentRegister = current.getRegisterNo();
+                    inBlock = true;
+                }
+            }
+        }
+        
+        // 最後のブロックをカウント
+        if (inBlock) {
+            blocks++;
+        }
+        
+        return blocks;
     }
 }
 

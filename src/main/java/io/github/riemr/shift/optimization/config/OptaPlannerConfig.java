@@ -43,8 +43,8 @@ public class OptaPlannerConfig {
     
     private TerminationConfig terminationConfig() {
         return new TerminationConfig()
-                // 最大2分で強制終了（実用的な時間に短縮）
-                .withSpentLimit(Duration.ofMinutes(2));
+                // 最大3分で強制終了
+                .withSpentLimit(Duration.ofMinutes(3));
                 // Note: withBestScoreFeasible(true) を削除 - ソフト制約の最適化を継続するため
                 // Note: UnimprovedStepCountTermination はsolverレベルでは使用不可のため削除
     }
@@ -56,9 +56,9 @@ public class OptaPlannerConfig {
     private LocalSearchPhaseConfig localSearchPhaseConfig() {
         return new LocalSearchPhaseConfig()
                 .withTerminationConfig(new TerminationConfig()
-                        // Local Searchフェーズで30秒間スコア改善がない場合にアーリーストッピング
-                        .withUnimprovedSpentLimit(Duration.ofSeconds(30))
+                        // Local Searchフェーズで45秒間スコア改善がない場合にアーリーストッピング
+                        .withUnimprovedSpentLimit(Duration.ofSeconds(45))
                         // フェーズレベルでも最大時間制限を設定（保険）
-                        .withSpentLimit(Duration.ofSeconds(90)));
+                        .withSpentLimit(Duration.ofSeconds(135)));
     }
 }
