@@ -3,7 +3,6 @@
 <head>
     <title>月間シフト</title>
     <style>
-        
         .search-card {
             background: white;
             border-radius: 10px;
@@ -11,119 +10,111 @@
             margin-bottom: 2rem;
         }
         
-        .calendar-table {
+        .shift-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            font-size: 0.85rem;
         }
         
-        .calendar-table th {
+        .shift-table th {
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: white;
-            padding: 15px 8px;
+            padding: 12px 6px;
             text-align: center;
             font-weight: 600;
-            font-size: 1rem;
-            border: none;
+            border: 1px solid #0084ff;
+            position: sticky;
+            z-index: 10;
         }
         
-        .calendar-table td {
-            border: 1px solid #e9ecef;
-            padding: 12px;
+        .shift-table thead tr:first-child th {
+            top: 0;
+            position: sticky;
+        }
+        
+        .shift-table thead tr:nth-child(2) th {
+            top: 49px;
+            position: sticky;
+        }
+        
+        .shift-table .employee-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: sticky;
+            left: 0;
+            z-index: 20;
+            min-width: 120px;
+            max-width: 120px;
             text-align: left;
-            vertical-align: top;
-            width: calc(100% / 7);
-            min-height: 140px;
-            background: #fafafa;
-            position: relative;
+            padding: 8px 10px;
+            border-right: 2px solid #5a67d8;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         }
         
-        .calendar-table td:hover {
-            background: #f8f9fa;
+        .shift-table td {
+            border: 1px solid #e9ecef;
+            padding: 4px;
+            text-align: center;
+            vertical-align: middle;
+            width: 80px;
+            max-width: 80px;
+            min-width: 80px;
+            height: 40px;
+            background: #fafafa;
+            overflow: hidden;
+        }
+        
+        .shift-table .employee-cell {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            position: sticky;
+            left: 0;
+            z-index: 15;
+            text-align: left;
+            padding: 8px 10px;
+            font-weight: 500;
+            min-width: 120px;
+            max-width: 120px;
+            border-right: 2px solid #5a67d8;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        
+        .shift-table td:hover {
+            background: #e3f2fd;
             transition: background-color 0.2s ease;
         }
         
-        .day-cell {
-            height: 100%;
-            min-height: 120px;
-        }
-        
-        .day-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .day-number {
-            font-weight: bold;
-            font-size: 1.1rem;
-            color: #495057;
-        }
-        
-        .other-month .day-number {
-            color: #adb5bd;
-        }
-        
-        .staffing-summary {
+        .shift-time {
+            display: block;
             font-size: 0.75rem;
-            padding: 2px 6px;
-            border-radius: 12px;
+            color: #495057;
             font-weight: 500;
-            min-width: 40px;
-            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
-        .balance-positive {
-            background-color: #d4edda;
-            color: #155724;
+        .weekend {
+            background-color: #fff5f5 !important;
         }
         
-        .balance-negative {
-            background-color: #f8d7da;
-            color: #721c24;
-            animation: pulse 2s infinite;
+        .today {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
         }
         
-        .balance-zero {
-            background-color: #d1ecf1;
-            color: #0c5460;
+        .day-off {
+            background-color: #f8f9fa !important;
+            color: #6c757d;
+            font-style: italic;
         }
         
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        
-        .employee-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 80px;
-            overflow-y: auto;
-            overflow-x: hidden;
-        }
-        
-        .employee-list li {
-            background: white;
-            margin-bottom: 3px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            border-left: 3px solid #007bff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .employee-list li:hover {
-            background: #e3f2fd;
-            transform: translateX(2px);
-            transition: all 0.2s ease;
+        .table-container {
+            max-height: 70vh;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            position: relative;
         }
         
         .search-form {
@@ -150,41 +141,88 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         
-        .weekend {
-            background-color: #fff5f5 !important;
+        .date-header {
+            writing-mode: horizontal-tb;
+            transform: rotate(0deg);
+            min-width: 80px;
+            padding: 8px 6px !important;
         }
         
-        .today {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
+        .date-number {
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
+            margin-bottom: 2px;
         }
         
-        .today .day-number {
-            color: #d63384;
-            font-weight: 800;
+        .date-weekday {
+            font-size: 0.75rem;
+            font-weight: 400;
+            opacity: 0.9;
+            line-height: 1;
         }
         
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-top: 1rem;
-            padding: 1rem;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .staffing-summary-row th {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 8px 6px;
+            font-size: 0.75rem;
+            line-height: 1.2;
         }
         
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.9rem;
+        .staffing-summary-cell {
+            min-width: 80px;
         }
         
-        .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
+        .required-hours {
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 1px;
+        }
+        
+        .assigned-hours {
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 1px;
+        }
+        
+        .balance-hours {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 1px 3px;
+            border-radius: 3px;
+            margin-top: 2px;
+        }
+        
+        .balance-hours.shortage {
+            background-color: rgba(220, 53, 69, 0.8);
+            color: white;
+        }
+        
+        .balance-hours.excess {
+            background-color: rgba(40, 167, 69, 0.8);
+            color: white;
+        }
+        
+        .balance-hours.balanced {
+            background-color: rgba(23, 162, 184, 0.8);
+            color: white;
+        }
+        
+        .employee-name {
+            display: block;
+            font-size: 0.8rem;
+            color: white;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        .employee-code {
+            display: block;
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.8);
+            margin-top: 2px;
         }
     </style>
 </head>
@@ -192,7 +230,7 @@
 <div layout:fragment="content">
     <div class="content-header">
         <h1><i class="bi bi-calendar3"></i> 月次シフト表示</h1>
-        <p class="mb-0">従業員の配置状況と人員過不足を一覧で確認できます</p>
+        <p class="mb-0">従業員別の勤務時間を一覧で確認できます</p>
     </div>
 
     <div class="card search-card">
@@ -223,80 +261,171 @@
         </div>
     </div>
 
+    <!-- エラー表示 -->
+    <div th:if="${error}" class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}">エラーメッセージ</span>
+    </div>
+
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-calendar3"></i> 
-                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 シフトカレンダー
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 シフト表
             </h5>
             <div class="text-muted small">
                 <i class="bi bi-shop"></i> 店舗: <span th:text="${storeCode}">569</span>
+                <span class="ms-3"><i class="bi bi-people"></i> 従業員数: <span th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名</span>
             </div>
         </div>
-        <table class="calendar-table">
-            <thead>
-            <tr>
-                <th>日</th>
-                <th>月</th>
-                <th>火</th>
-                <th>水</th>
-                <th>木</th>
-                <th>金</th>
-                <th>土</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="week : ${weeks}">
-                <td th:each="date : ${week}" 
-                    th:class="${date.getMonthValue() != month ? 'other-month' : ''} + 
-                             ${date.getDayOfWeek().getValue() == 6 or date.getDayOfWeek().getValue() == 7 ? ' weekend' : ''} +
-                             ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
-                    <div class="day-cell">
-                        <div class="day-header">
-                            <span class="day-number" th:text="${date.getDayOfMonth()}"></span>
-                            <span th:if="${date.getMonthValue() == month and staffingSummaries.containsKey(date)}" 
-                                  th:with="summary=${staffingSummaries.get(date)}"
-                                  class="staffing-summary"
-                                  th:classappend="${summary.getBalance() < 0 ? 'balance-negative' : (summary.getBalance() > 0 ? 'balance-positive' : 'balance-zero')}"
-                                  th:title="'必要: ' + ${summary.getTotalRequired()} + ', 配置: ' + ${summary.getTotalAssigned()} + ', 不足: ' + ${summary.getTotalShortage()}"
-                                  th:text="${summary.getBalance() >= 0 ? '+' + summary.getBalance() : summary.getBalance()}"></span>
+        <div class="table-container">
+            <table class="shift-table">
+                <thead>
+                    <tr>
+                        <th class="employee-header">
+                            <i class="bi bi-person"></i> 従業員
+                        </th>
+                        <th th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
+                            th:with="date=${T(java.time.LocalDate).of(year, month, day)}"
+                            class="date-header"
+                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
+                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
+                            <div class="date-number" th:text="${day}">1</div>
+                            <div class="date-weekday" th:text="${T(java.time.format.DateTimeFormatter).ofPattern('E', T(java.util.Locale).JAPANESE).format(date)}">日</div>
+                        </th>
+                    </tr>
+                    <tr class="staffing-summary-row">
+                        <th class="employee-header summary-header">
+                            <i class="bi bi-bar-chart"></i> 人時
+                        </th>
+                        <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                            th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                     summary=${dailyStaffingInfo.get(day)}"
+                            class="staffing-summary-cell"
+                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
+                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
+                            <div th:if="${summary != null}">
+                                <div class="required-hours" th:text="'必要:' + ${summary.totalRequired}">必要:8</div>
+                                <div class="assigned-hours" th:text="'配置:' + ${summary.totalAssigned}">配置:6</div>
+                                <div class="balance-hours" 
+                                     th:classappend="${summary.balance < 0 ? 'shortage' : (summary.balance > 0 ? 'excess' : 'balanced')}"
+                                     th:text="${summary.balance >= 0 ? '+' + summary.balance : summary.balance}">-2</div>
+                            </div>
+                            <div th:if="${summary == null}" class="text-muted">-</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="employee : ${employees}" th:if="${employees != null}">
+                        <td class="employee-cell">
+                            <span class="employee-name" th:text="${employee.employeeName}">従業員名</span>
+                            <span class="employee-code" th:text="${employee.employeeCode}">コード</span>
+                        </td>
+                        <td th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                            th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
+                                     shifts=${employeeShifts != null ? employeeShifts.get(employee.employeeCode + '_' + day) : null}"
+                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
+                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''} +
+                                           ${shifts == null or shifts.isEmpty() ? ' day-off' : ''}">
+                            <div th:if="${shifts != null and !shifts.isEmpty()}">
+                                <span class="shift-time" 
+                                      th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
+                                    09:00 ~ 17:00
+                                </span>
+                            </div>
+                            <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
+                                -
+                            </div>
+                        </td>
+                    </tr>
+                    <tr th:if="${employees == null or employees.isEmpty()}">
+                        <td th:colspan="${daysInMonth + 1}" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                            従業員データが見つかりません
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> 表示説明</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0">
+                        <li><strong>時間表示:</strong> hh:mm ~ hh:mm 形式で勤務時間を表示</li>
+                        <li><strong>休日:</strong> 土日は薄赤の背景色で表示</li>
+                        <li><strong>今日:</strong> オレンジのグラデーション背景で強調</li>
+                        <li><strong>休み:</strong> 「-」で表示</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart"></i> 統計情報</h6>
+                </div>
+                <div class="card-body">
+                    <div class="small text-muted">
+                        <div class="mb-1">
+                            <i class="bi bi-calendar3"></i> 
+                            表示期間: <span class="fw-bold" th:text="${year + '年' + month + '月'}">2024年1月</span>
                         </div>
-                        <ul th:if="${date.getMonthValue() == month}" class="employee-list">
-                            <li th:each="employeeName : ${dailyShifts.get(date.getDayOfMonth())}" th:text="${employeeName}"></li>
-                        </ul>
-                        <div th:if="${date.getMonthValue() == month and (dailyShifts.get(date.getDayOfMonth()) == null or dailyShifts.get(date.getDayOfMonth()).isEmpty())}" 
-                             class="text-muted text-center" style="font-size: 0.8rem; padding-top: 20px;">
-                            休業日
+                        <div class="mb-1">
+                            <i class="bi bi-people"></i> 
+                            従業員数: <span class="fw-bold" th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名
+                        </div>
+                        <div>
+                            <i class="bi bi-calendar-day"></i> 
+                            日数: <span class="fw-bold" th:text="${daysInMonth}">31</span>日
                         </div>
                     </div>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-    
-    <div class="legend">
-        <div class="legend-item">
-            <div class="legend-color balance-negative"></div>
-            <span>人員不足</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color balance-zero"></div>
-            <span>適正配置</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color balance-positive"></div>
-            <span>人員過多</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color today"></div>
-            <span>今日</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color weekend"></div>
-            <span>休日</span>
+                </div>
+            </div>
         </div>
     </div>
+
+    <script>
+        // Sticky header fallback for browsers with issues
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.querySelector('.table-container');
+            const table = document.querySelector('.shift-table');
+            
+            if (container && table) {
+                // Force sticky positioning
+                const headers = table.querySelectorAll('thead th');
+                const employeeCells = table.querySelectorAll('.employee-header, .employee-cell');
+                
+                headers.forEach(header => {
+                    header.style.position = 'sticky';
+                });
+                
+                employeeCells.forEach(cell => {
+                    cell.style.position = 'sticky';
+                    cell.style.left = '0';
+                });
+                
+                // Additional scroll handling if needed
+                container.addEventListener('scroll', function() {
+                    // Ensure headers remain visible during scroll
+                    const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
+                    const secondRowHeaders = table.querySelectorAll('thead tr:nth-child(2) th');
+                    
+                    firstRowHeaders.forEach(header => {
+                        header.style.top = '0px';
+                    });
+                    
+                    secondRowHeaders.forEach(header => {
+                        header.style.top = '49px';
+                    });
+                });
+            }
+        });
+    </script>
 </div>
 </body>
 </html>
