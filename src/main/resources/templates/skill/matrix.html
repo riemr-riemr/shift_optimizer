@@ -55,6 +55,7 @@
       background: #f8f9fa;
       border-radius: 4px;
       font-size: 0.85rem;
+      color: #212529;
     }
     .register-column {
       min-width: 100px;
@@ -129,7 +130,7 @@
                   <i class="bi bi-person-badge"></i>
                   <span th:text="${emp.employeeCode}"></span>
                   <br>
-                  <small class="fw-normal text-white-50" th:text="${emp.employeeName}"></small>
+                  <small class="fw-normal text-light" th:text="${emp.employeeName}"></small>
                 </th>
                 <td th:each="reg : ${matrixDto.registers}" class="skill-cell">
                   <select class="skill-select form-select form-select-sm"
