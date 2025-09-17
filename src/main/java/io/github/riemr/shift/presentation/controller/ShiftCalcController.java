@@ -7,6 +7,8 @@ import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.application.service.StaffingBalanceService;
 import io.github.riemr.shift.optimization.service.ShiftScheduleService;
+import io.github.riemr.shift.infrastructure.persistence.entity.Store;
+import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -29,6 +31,7 @@ public class ShiftCalcController {
 
     private final ShiftScheduleService service;
     private final StaffingBalanceService staffingBalanceService;
+    private final StoreMapper storeMapper;
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
@@ -71,7 +74,7 @@ public class ShiftCalcController {
 
     @GetMapping
     public String monthlyShift(@RequestParam(required = false) String targetMonth, 
-                              @RequestParam(defaultValue = "569") String storeCode, 
+                              @RequestParam(required = false) String storeCode, 
                               Model model) {
         try {
             YearMonth yearMonth;
@@ -84,19 +87,25 @@ public class ShiftCalcController {
             int month = yearMonth.getMonthValue();
             int daysInMonth = yearMonth.lengthOfMonth();
             
+            // 店舗リストを取得
+            List<Store> stores = storeMapper.selectByExample(null);
+            stores.sort(Comparator.comparing(Store::getStoreCode));
+            
             // 月次シフトデータ取得
             List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(yearMonth.atDay(1));
             
-            // 従業員一覧を作成
+            // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();
             Map<String, List<ShiftInfo>> employeeShifts = Map.of();
             
             if (monthlyAssignments != null && !monthlyAssignments.isEmpty()) {
+                final String finalStoreCode = storeCode; // Make effectively final for lambda
+                
                 Set<String> employeeCodes = monthlyAssignments.stream()
                     .map(ShiftAssignmentMonthlyView::employeeCode)
                     .collect(Collectors.toSet());
                 
-                employees = employeeCodes.stream()
+                List<EmployeeInfo> filteredEmployees = employeeCodes.stream()
                     .map(code -> {
                         String name = monthlyAssignments.stream()
                             .filter(a -> a.employeeCode().equals(code))
@@ -105,11 +114,33 @@ public class ShiftCalcController {
                             .orElse(code);
                         return new EmployeeInfo(code, name);
                     })
+                    .filter(emp -> {
+                        // 店舗フィルタリング：storeCodeが指定されている場合のみ
+                        if (finalStoreCode == null || finalStoreCode.isEmpty()) {
+                            return false; // 店舗未選択時は従業員を表示しない
+                        }
+                        // TODO: 実際の従業員-店舗マッピングでフィルタリング
+                        return true;
+                    })
                     .sorted(Comparator.comparing(EmployeeInfo::employeeCode))
                     .collect(Collectors.toList());
                 
+                employees = filteredEmployees; // Assign to final variable
+                
+                // Get employee codes for filtering shifts
+                final Set<String> finalEmployeeCodes = employees.stream()
+                    .map(EmployeeInfo::employeeCode)
+                    .collect(Collectors.toSet());
+                
                 // 従業員別・日別のシフトデータを作成
                 employeeShifts = monthlyAssignments.stream()
+                    .filter(assignment -> {
+                        // 店舗フィルタリング適用
+                        if (finalStoreCode == null || finalStoreCode.isEmpty()) {
+                            return false;
+                        }
+                        return finalEmployeeCodes.contains(assignment.employeeCode());
+                    })
                     .collect(Collectors.groupingBy(
                         assignment -> assignment.employeeCode() + "_" + assignment.date().getDayOfMonth(),
                         Collectors.mapping(assignment -> new ShiftInfo(
@@ -143,7 +174,8 @@ public class ShiftCalcController {
             model.addAttribute("year", year);
             model.addAttribute("month", month);
             model.addAttribute("daysInMonth", daysInMonth);
-            model.addAttribute("storeCode", storeCode);
+            model.addAttribute("stores", stores);
+            model.addAttribute("selectedStoreCode", storeCode);
             model.addAttribute("employees", employees);
             model.addAttribute("employeeShifts", employeeShifts);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
@@ -152,10 +184,14 @@ public class ShiftCalcController {
         } catch (Exception e) {
             // エラーハンドリング
             YearMonth currentMonth = YearMonth.now();
+            List<Store> stores = storeMapper.selectByExample(null);
+            stores.sort(Comparator.comparing(Store::getStoreCode));
+            
             model.addAttribute("year", currentMonth.getYear());
             model.addAttribute("month", currentMonth.getMonthValue());
             model.addAttribute("daysInMonth", currentMonth.lengthOfMonth());
-            model.addAttribute("storeCode", storeCode);
+            model.addAttribute("stores", stores);
+            model.addAttribute("selectedStoreCode", storeCode);
             model.addAttribute("employees", List.of());
             model.addAttribute("employeeShifts", Map.of());
             model.addAttribute("dailyStaffingInfo", Map.of());

@@ -12,21 +12,22 @@
         
         .shift-table {
             width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            background: white;
+            border-collapse: collapse;
             font-size: 0.85rem;
+            min-width: 800px;
         }
         
         .shift-table th {
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: white;
-            padding: 12px 6px;
+            padding: 8px 6px;
             text-align: center;
             font-weight: 600;
-            border: 1px solid #0084ff;
+            border: 1px solid #dee2e6;
             position: sticky;
+            top: 0;
             z-index: 10;
+            min-width: 60px;
         }
         
         .shift-table thead tr:first-child th {
@@ -39,45 +40,32 @@
             position: sticky;
         }
         
-        .shift-table .employee-header {
+        .shift-table th.employee-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-width: 150px;
+            text-align: left;
             position: sticky;
             left: 0;
-            z-index: 20;
-            min-width: 120px;
-            max-width: 120px;
-            text-align: left;
-            padding: 8px 10px;
-            border-right: 2px solid #5a67d8;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 11;
         }
         
         .shift-table td {
-            border: 1px solid #e9ecef;
-            padding: 4px;
+            border: 1px solid #dee2e6;
+            padding: 8px;
             text-align: center;
             vertical-align: middle;
-            width: 80px;
-            max-width: 80px;
-            min-width: 80px;
-            height: 40px;
-            background: #fafafa;
-            overflow: hidden;
+            background: white;
+            position: relative;
         }
         
-        .shift-table .employee-cell {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .shift-table td.employee-cell {
+            background: #f8f9fa;
+            font-weight: 600;
+            text-align: left;
             position: sticky;
             left: 0;
-            z-index: 15;
-            text-align: left;
-            padding: 8px 10px;
-            font-weight: 500;
-            min-width: 120px;
-            max-width: 120px;
-            border-right: 2px solid #5a67d8;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 5;
+            border-right: 2px solid #dee2e6;
         }
         
         .shift-table td:hover {
@@ -95,12 +83,23 @@
             text-overflow: ellipsis;
         }
         
-        .weekend {
-            background-color: #fff5f5 !important;
+        .employee-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
-        .today {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
+        .employee-name {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .employee-code {
+            font-size: 0.75rem;
+            color: #6c757d;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
         }
         
         .day-off {
@@ -110,11 +109,24 @@
         }
         
         .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .table-header {
+            border-radius: 10px 10px 0 0;
+            border-bottom: 1px solid #dee2e6;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        
+        .table-body {
             overflow: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            position: relative;
+            flex-grow: 1;
         }
         
         .search-form {
@@ -141,25 +153,18 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         
-        .date-header {
-            writing-mode: horizontal-tb;
-            transform: rotate(0deg);
-            min-width: 80px;
-            padding: 8px 6px !important;
+        .weekend-header {
+            background: linear-gradient(135deg, #ff8a80 0%, #ff5722 100%) !important;
         }
         
-        .date-number {
-            font-size: 1rem;
-            font-weight: 600;
-            line-height: 1.2;
-            margin-bottom: 2px;
+        .weekend-cell {
+            background: #fff5f5;
         }
         
-        .date-weekday {
-            font-size: 0.75rem;
-            font-weight: 400;
-            opacity: 0.9;
-            line-height: 1;
+        .today-cell {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #d63384;
+            font-weight: bold;
         }
         
         .staffing-summary-row th {
@@ -209,20 +214,14 @@
             color: white;
         }
         
-        .employee-name {
+        .shift-time {
             display: block;
-            font-size: 0.8rem;
-            color: white;
-            text-overflow: ellipsis;
-            overflow: hidden;
+            font-size: 0.75rem;
+            color: #495057;
+            font-weight: 500;
             white-space: nowrap;
-        }
-        
-        .employee-code {
-            display: block;
-            font-size: 0.7rem;
-            color: rgba(255,255,255,0.8);
-            margin-top: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
@@ -235,24 +234,28 @@
 
     <div class="card search-card">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-search"></i> 検索条件</h5>
+            <h5 class="mb-0"><i class="bi bi-sliders"></i> 検索条件</h5>
         </div>
-        <div class="card-body search-form">
+        <div class="card-body">
             <form th:action="@{/shift}" method="get">
                 <div class="row align-items-end">
                     <div class="col-md-4">
-                        <label for="storeCode" class="form-label">店舗コード</label>
-                        <select id="storeCode" name="storeCode" class="form-select" th:value="${storeCode}">
-                            <option value="569" th:selected="${storeCode == '569'}">569 - テスト店舗</option>
+                        <label for="targetMonth" class="form-label">対象月</label>
+                        <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                               th:value="${year + '-' + (#numbers.formatInteger(month, 2))}" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="storeCode" class="form-label">店舗</label>
+                        <select id="storeCode" name="storeCode" class="form-select">
+                            <option value="">すべての店舗</option>
+                            <option th:each="store : ${stores}" 
+                                    th:value="${store.storeCode}"
+                                    th:text="|${store.storeCode} - ${store.storeName}|"
+                                    th:selected="${store.storeCode == selectedStoreCode}">店舗名</option>
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <label for="targetMonth" class="form-label">対象月</label>
-                        <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
-                               th:value="${year + '-' + (month < 10 ? '0' + month : month)}" required />
-                    </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn btn-primary">
                             <i class="bi bi-search"></i> 表示更新
                         </button>
                     </div>
@@ -261,89 +264,108 @@
         </div>
     </div>
 
+    <!-- 操作説明 -->
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> 
+        店舗を選択してから月次シフトを表示できます。
+    </div>
+    
+    <!-- 店舗選択必須の警告 -->
+    <div th:if="${#strings.isEmpty(selectedStoreCode)}" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <strong>店舗を選択してください。</strong> 月次シフトを表示するには、まず上の検索条件で店舗を選択する必要があります。
+    </div>
+    
     <!-- エラー表示 -->
     <div th:if="${error}" class="alert alert-danger" role="alert">
         <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}">エラーメッセージ</span>
     </div>
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <!-- 月次シフト一覧表 -->
+    <div class="card table-container">
+        <div class="card-header table-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-calendar3"></i> 
-                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 シフト表
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 月次シフト
             </h5>
-            <div class="text-muted small">
-                <i class="bi bi-shop"></i> 店舗: <span th:text="${storeCode}">569</span>
-                <span class="ms-3"><i class="bi bi-people"></i> 従業員数: <span th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名</span>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-muted small" th:if="${selectedStoreCode}">
+                    <i class="bi bi-shop"></i> 
+                    店舗: <span th:text="${selectedStoreCode}">STORE001</span>
+                </div>
+                <div class="text-muted small">
+                    <i class="bi bi-people"></i> 従業員数: <span th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名
+                </div>
             </div>
         </div>
-        <div class="table-container">
+        <div th:if="${#lists.isEmpty(employees)}" class="card-body text-center text-muted">
+            <i class="bi bi-person-x"></i> 
+            <span th:if="${#strings.isEmpty(selectedStoreCode)}">
+                店舗を選択してください。
+            </span>
+            <span th:if="${!#strings.isEmpty(selectedStoreCode)}">
+                選択された店舗には従業員が登録されていません。
+            </span>
+        </div>
+        <div th:if="${!#lists.isEmpty(employees)}" class="table-body">
             <table class="shift-table">
-                <thead>
-                    <tr>
-                        <th class="employee-header">
-                            <i class="bi bi-person"></i> 従業員
-                        </th>
-                        <th th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
-                            th:with="date=${T(java.time.LocalDate).of(year, month, day)}"
-                            class="date-header"
-                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
-                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
-                            <div class="date-number" th:text="${day}">1</div>
-                            <div class="date-weekday" th:text="${T(java.time.format.DateTimeFormatter).ofPattern('E', T(java.util.Locale).JAPANESE).format(date)}">日</div>
-                        </th>
-                    </tr>
-                    <tr class="staffing-summary-row">
-                        <th class="employee-header summary-header">
-                            <i class="bi bi-bar-chart"></i> 人時
-                        </th>
-                        <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
-                            th:with="date=${T(java.time.LocalDate).of(year, month, day)},
-                                     summary=${dailyStaffingInfo.get(day)}"
-                            class="staffing-summary-cell"
-                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
-                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''}">
-                            <div th:if="${summary != null}">
-                                <div class="required-hours" th:text="'必要:' + ${summary.totalRequired}">必要:8</div>
-                                <div class="assigned-hours" th:text="'配置:' + ${summary.totalAssigned}">配置:6</div>
-                                <div class="balance-hours" 
-                                     th:classappend="${summary.balance < 0 ? 'shortage' : (summary.balance > 0 ? 'excess' : 'balanced')}"
-                                     th:text="${summary.balance >= 0 ? '+' + summary.balance : summary.balance}">-2</div>
-                            </div>
-                            <div th:if="${summary == null}" class="text-muted">-</div>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr th:each="employee : ${employees}" th:if="${employees != null}">
-                        <td class="employee-cell">
-                            <span class="employee-name" th:text="${employee.employeeName}">従業員名</span>
-                            <span class="employee-code" th:text="${employee.employeeCode}">コード</span>
-                        </td>
-                        <td th:each="day : ${#numbers.sequence(1, daysInMonth)}"
-                            th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
-                                     shifts=${employeeShifts != null ? employeeShifts.get(employee.employeeCode + '_' + day) : null}"
-                            th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend' : ''} + 
-                                           ${date.equals(T(java.time.LocalDate).now()) ? ' today' : ''} +
-                                           ${shifts == null or shifts.isEmpty() ? ' day-off' : ''}">
-                            <div th:if="${shifts != null and !shifts.isEmpty()}">
-                                <span class="shift-time" 
-                                      th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
-                                    09:00 ~ 17:00
-                                </span>
-                            </div>
-                            <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
-                                -
-                            </div>
-                        </td>
-                    </tr>
-                    <tr th:if="${employees == null or employees.isEmpty()}">
-                        <td th:colspan="${daysInMonth + 1}" class="text-center text-muted py-4">
-                            <i class="bi bi-inbox display-4 d-block mb-2"></i>
-                            従業員データが見つかりません
-                        </td>
-                    </tr>
-                </tbody>
+            <thead>
+                <tr>
+                    <th class="employee-header">
+                        <i class="bi bi-person"></i> 従業員
+                    </th>
+                    <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:class="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:text="${day}">1</div>
+                        <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
+                             th:text="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getDisplayName(T(java.time.format.TextStyle).SHORT, T(java.util.Locale).JAPANESE)}">月</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-bar-chart"></i> 人時
+                    </th>
+                    <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}">
+                            <div class="required-hours" th:text="'必要:' + ${summary.totalRequired}">必要:8</div>
+                            <div class="assigned-hours" th:text="'配置:' + ${summary.totalAssigned}">配置:6</div>
+                            <div class="balance-hours" 
+                                 th:classappend="${summary.balance < 0 ? 'shortage' : (summary.balance > 0 ? 'excess' : 'balanced')}"
+                                 th:text="${summary.balance >= 0 ? '+' + summary.balance : summary.balance}">-2</div>
+                        </div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="emp : ${employees}">
+                    <td class="employee-cell">
+                        <div class="employee-info">
+                            <div class="employee-name" th:text="${emp.employeeName}">従業員名</div>
+                            <div class="employee-code" th:text="${emp.employeeCode}">EMP001</div>
+                        </div>
+                    </td>
+                    <td th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
+                                 shifts=${employeeShifts != null ? employeeShifts.get(emp.employeeCode + '_' + day) : null}"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''} + 
+                                       ${date.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''}">
+                        <div th:if="${shifts != null and !shifts.isEmpty()}">
+                            <span class="shift-time" 
+                                  th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
+                                09:00 ~ 17:00
+                            </span>
+                        </div>
+                        <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
+                            -
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
             </table>
         </div>
     </div>
@@ -390,38 +412,12 @@
     </div>
 
     <script>
-        // Sticky header fallback for browsers with issues
+        // 店舗選択が変更されたときに自動的にフォームを送信
         document.addEventListener('DOMContentLoaded', function() {
-            const container = document.querySelector('.table-container');
-            const table = document.querySelector('.shift-table');
-            
-            if (container && table) {
-                // Force sticky positioning
-                const headers = table.querySelectorAll('thead th');
-                const employeeCells = table.querySelectorAll('.employee-header, .employee-cell');
-                
-                headers.forEach(header => {
-                    header.style.position = 'sticky';
-                });
-                
-                employeeCells.forEach(cell => {
-                    cell.style.position = 'sticky';
-                    cell.style.left = '0';
-                });
-                
-                // Additional scroll handling if needed
-                container.addEventListener('scroll', function() {
-                    // Ensure headers remain visible during scroll
-                    const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
-                    const secondRowHeaders = table.querySelectorAll('thead tr:nth-child(2) th');
-                    
-                    firstRowHeaders.forEach(header => {
-                        header.style.top = '0px';
-                    });
-                    
-                    secondRowHeaders.forEach(header => {
-                        header.style.top = '49px';
-                    });
+            const storeSelect = document.getElementById('storeCode');
+            if (storeSelect) {
+                storeSelect.addEventListener('change', function() {
+                    this.form.submit();
                 });
             }
         });
