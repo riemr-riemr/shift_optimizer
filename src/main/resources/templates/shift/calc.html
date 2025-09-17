@@ -3,13 +3,13 @@
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout}">
 <head>
-  <title>シフト最適化</title>
+  <title>日次シフト表示</title>
 </head>
 <body>
 <div layout:fragment="content">
   <div class="content-header">
-    <h1><i class="bi bi-calculator"></i> シフト最適化</h1>
-    <p class="mb-0">OptaPlannerを使用してシフトの自動最適化を実行できます</p>
+    <h1><i class="bi bi-calendar-day"></i> 日次シフト表示</h1>
+    <p class="mb-0">日別のシフト割り当て結果を確認できます</p>
   </div>
 
 <div class="row g-4">
@@ -17,33 +17,30 @@
   <div class="col-12">
     <div class="card">
       <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-gear-fill"></i> 最適化コントロール</h5>
+        <h5 class="mb-0"><i class="bi bi-sliders"></i> 表示設定</h5>
       </div>
       <div class="card-body">
         <div class="row g-3 align-items-end">
-          <div class="col-md-3">
-            <label class="form-label fw-semibold">
-              <i class="bi bi-calendar-month me-1"></i>対象月
-            </label>
-            <input type="month" id="month" class="form-control form-control-lg">
-          </div>
-          <div class="col-md-2">
-            <button id="btnCalc" class="btn btn-primary btn-lg">
-              <i class="bi bi-play-fill me-2"></i>最適化開始
-            </button>
-          </div>
           <div class="col-md-3">
             <label class="form-label fw-semibold">
               <i class="bi bi-calendar-day me-1"></i>表示日
             </label>
             <input type="date" id="date" class="form-control form-control-lg">
           </div>
-          <div class="col-md-4">
-            <div class="btn-group" role="group">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-shop me-1"></i>店舗
+            </label>
+            <select id="storeCode" class="form-select form-select-lg">
+              <option value="569">569 - テスト店舗</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <div class="btn-group w-100" role="group">
               <button id="btnPrevDay" class="btn btn-outline-secondary">
                 <i class="bi bi-chevron-left"></i> 前日
               </button>
-              <button id="btnSearch" class="btn btn-success">
+              <button id="btnSearch" class="btn btn-primary">
                 <i class="bi bi-search"></i> 検索
               </button>
               <button id="btnNextDay" class="btn btn-outline-secondary">
@@ -51,26 +48,32 @@
               </button>
             </div>
           </div>
+          <div class="col-md-3">
+            <button id="btnToday" class="btn btn-success w-100">
+              <i class="bi bi-calendar-today"></i> 今日
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Progress Section -->
+<!-- Work Model Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">
-    <div class="card" id="progressCard" style="display:none;">
-      <div class="card-header">
-        <i class="bi bi-hourglass-split me-2"></i>最適化進捗
+    <div class="card" id="workModelCard" style="display: none;">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+          <i class="bi bi-bar-chart me-2"></i>作業モデル（必要レジ台数）
+        </h5>
+        <button type="button" id="scrollSyncBtn" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-arrow-down-up"></i> スクロール同期: ON
+        </button>
       </div>
-      <div class="card-body">
-        <div id="progressArea" class="progress" style="height:28px;">
-          <div id="bar" class="progress-bar progress-bar-striped progress-bar-animated" 
-               style="width:0%; transition: width 0.3s ease; font-weight: 600;">0%</div>
-        </div>
-        <div class="mt-2 text-muted" id="progressMessage">
-          <small><i class="bi bi-info-circle me-1"></i>最適化アルゴリズムが実行中です...</small>
+      <div class="card-body p-0">
+        <div class="table-responsive" id="workModelContainer" style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
+          <div id="workModelGrid" class="shift-grid-container"></div>
         </div>
       </div>
     </div>
@@ -80,12 +83,22 @@
 <!-- Results Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">
-    <div class="card" id="resultsCard" style="display:none;">
-      <div class="card-header">
-        <i class="bi bi-table me-2"></i>シフト割り当て結果
+    <div class="card" id="resultsCard">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+          <i class="bi bi-table me-2"></i>シフト割り当て結果
+        </h5>
+        <div class="text-muted small" id="displayDate">
+          表示日を選択してください
+        </div>
       </div>
       <div class="card-body p-0">
-        <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto;">
+        <div id="noDataMessage" class="text-center py-5 text-muted">
+          <i class="bi bi-calendar-x display-4 d-block mb-3"></i>
+          <h6>シフトデータがありません</h6>
+          <p class="mb-0">日付を選択して検索ボタンを押してください</p>
+        </div>
+        <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto; display: none;" id="tableContainer">
           <div id="shiftGrid" class="shift-grid-container"></div>
         </div>
       </div>
@@ -141,6 +154,58 @@
   .grid-cell.assigned.color-2 { background: linear-gradient(135deg, #ffc107, #fd7e14); }
   .grid-cell.assigned.color-3 { background: linear-gradient(135deg, #dc3545, #e83e8c); }
   .grid-cell.assigned.color-4 { background: linear-gradient(135deg, #6c757d, #495057); }
+  
+  .employee-shift-cell {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  
+  .employee-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: white;
+    line-height: 1.2;
+  }
+  
+  .employee-code {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.8);
+    margin-top: 2px;
+  }
+  
+  .work-model-cell {
+    position: relative;
+    padding: 2px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border: 1px solid #dee2e6;
+  }
+  
+  .work-model-cell.register-needed {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    border: 1px solid #1e7e34;
+  }
+  
+  .work-model-cell-empty {
+    background: transparent;
+    border: none;
+    height: 35px;
+  }
+  
+  #scrollSyncBtn {
+    transition: all 0.3s ease;
+  }
+  
+  #scrollSyncBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
 </style>
 
 <script>
@@ -155,32 +220,55 @@ function getEmployeeColorClass(employeeName) {
   return `color-${Math.abs(hash) % 5}`; // Use 5 distinct colors
 }
 
-$('btnCalc').onclick=async()=>{
-  const m=$('month').value;
-  if(!m){alert('月を選択してください');return;}
-  
-  try {
-    // プログレスカードを表示して初期化
-    $('progressCard').style.display='block';
-    $('resultsCard').style.display='none';
-    $('bar').style.width='0%';
-    $('bar').textContent='0%';
-    $('bar').className='progress-bar progress-bar-striped progress-bar-animated bg-primary'; // クラスをリセット
-    
-    const ticket=await fetch('/shift/api/calc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:m})}).then(r=>r.json());
-    console.log('Calculation started:', ticket); // デバッグログ
-    
-    if (ticket.problemId) {
-      tick(ticket.problemId, m);
-    } else {
-      throw new Error('Problem ID not received');
-    }
-  } catch (error) {
-    console.error('Calculation start error:', error);
-    $('bar').classList.add('bg-danger');
-    $('bar').textContent = '開始エラー';
-  }
+// 今日ボタンの処理
+$('btnToday').onclick=()=>{
+  const today = new Date().toISOString().split('T')[0];
+  $('date').value = today;
+  loadResult(today);
 };
+
+// スクロール同期機能
+let scrollSyncEnabled = true;
+let isScrolling = false;
+
+function setupScrollSync() {
+  const workModelContainer = $('workModelContainer');
+  const shiftContainer = $('tableContainer');
+  const syncBtn = $('scrollSyncBtn');
+  
+  if (!workModelContainer || !shiftContainer || !syncBtn) return;
+  
+  // スクロール同期/解除ボタンのイベント
+  syncBtn.onclick = () => {
+    scrollSyncEnabled = !scrollSyncEnabled;
+    syncBtn.innerHTML = scrollSyncEnabled ? 
+      '<i class="bi bi-arrow-down-up"></i> スクロール同期: ON' : 
+      '<i class="bi bi-arrow-down-up"></i> スクロール同期: OFF';
+    syncBtn.className = scrollSyncEnabled ? 
+      'btn btn-outline-primary btn-sm' : 
+      'btn btn-outline-secondary btn-sm';
+  };
+  
+  // 作業モデルのスクロールイベント
+  workModelContainer.addEventListener('scroll', function() {
+    if (!scrollSyncEnabled || isScrolling) return;
+    isScrolling = true;
+    
+    shiftContainer.scrollLeft = this.scrollLeft;
+    
+    setTimeout(() => { isScrolling = false; }, 50);
+  });
+  
+  // シフト割り当てのスクロールイベント
+  shiftContainer.addEventListener('scroll', function() {
+    if (!scrollSyncEnabled || isScrolling) return;
+    isScrolling = true;
+    
+    workModelContainer.scrollLeft = this.scrollLeft;
+    
+    setTimeout(() => { isScrolling = false; }, 50);
+  });
+}
 
 $('btnSearch').onclick=async()=>{
   const d=$('date').value;
@@ -214,77 +302,68 @@ $('btnNextDay').onclick=()=>{
   loadResult(newDate);
 };
 
-async function tick(id, month){
+async function loadResult(dateString){
+  let data;
+  let employees;
+  
   try {
-    const st = await fetch(`/shift/api/calc/status/${id}`).then(r => r.json());
-    console.log('Status response:', st); // デバッグログ
+    // 表示日付を更新
+    const displayDate = new Date(dateString);
+    const formattedDate = displayDate.toLocaleDateString('ja-JP', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric', 
+      weekday: 'long' 
+    });
+    $('displayDate').textContent = formattedDate;
     
-    // プログレス値の正規化（0-100の範囲に制限）
-    const progress = Math.max(0, Math.min(100, st.progress || 0));
-    $('bar').style.width = progress + '%';
-    $('bar').textContent = progress + '%';
+    const storeCode = $('storeCode').value;
     
-    // フェーズ情報を表示
-    const phaseMessage = st.phase || '最適化アルゴリズムが実行中です...';
-    $('progressMessage').innerHTML = `<small><i class="bi bi-info-circle me-1"></i>${phaseMessage}</small>`;
+    // 並行してデータを取得
+    const [shiftData, employeeData] = await Promise.all([
+      fetch(`/shift/api/calc/assignments/daily/${dateString}`).then(r=>r.json()),
+      fetch(`/shift/api/calc/employees/${storeCode}`).then(r=>r.json())
+    ]);
     
-    // 計算中の場合は継続、完了・エラー・未実行の場合は終了
-    if (st.status === 'SOLVING' || st.status === 'SOLVING_ACTIVE') {
-      setTimeout(() => tick(id, month), 1000);
+    data = shiftData;
+    employees = employeeData;
+    
+    const shiftGrid = $('shiftGrid');
+    const noDataMessage = $('noDataMessage');
+    const tableContainer = $('tableContainer');
+    
+    shiftGrid.innerHTML = ''; // Clear previous content
+    
+    if (employees && employees.length > 0) {
+      noDataMessage.style.display = 'none';
+      tableContainer.style.display = 'block';
+      
+      // 作業モデルデータも同時に取得・表示
+      loadWorkModel(dateString);
     } else {
-      // 完了時の処理
-      if (st.status === 'NOT_SOLVING') {
-        $('bar').classList.add('bg-success');
-        $('bar').textContent = '完了 (100%)';
-        $('bar').style.width = '100%';
-        
-        // プログレスメッセージを更新
-        $('progressMessage').innerHTML = '<small><i class="bi bi-check-circle-fill me-1 text-success"></i>最適化完了しました！</small>';
-        
-        // プログレスカードは表示したままにする（隠さない）
-        // 計算結果の自動表示も行わない
-      } else {
-        // エラー状態の処理
-        $('bar').classList.add('bg-danger');
-        $('bar').textContent = 'エラー';
-        $('progressMessage').innerHTML = `<small><i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>エラーが発生しました: ${st.status}</small>`;
-        console.error('Solver error status:', st.status);
-      }
+      noDataMessage.style.display = 'block';
+      tableContainer.style.display = 'none';
+      $('workModelCard').style.display = 'none';
+      return;
     }
   } catch (error) {
-    console.error('Progress polling error:', error);
-    $('bar').classList.add('bg-danger');
-    $('bar').textContent = '通信エラー';
-    $('progressMessage').innerHTML = '<small><i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>通信エラーが発生しました</small>';
-  }
-}
-
-async function loadResult(dateString){
-  const data=await fetch(`/shift/api/calc/assignments/daily/${dateString}`).then(r=>r.json());
-  const shiftGrid = $('shiftGrid');
-  const resultsCard = $('resultsCard');
-  
-  shiftGrid.innerHTML = ''; // Clear previous content
-  
-  if (data && data.length > 0) {
-    resultsCard.style.display = 'block';
-  } else {
-    resultsCard.style.display = 'none';
+    console.error('データ取得エラー:', error);
+    $('noDataMessage').style.display = 'block';
+    $('tableContainer').style.display = 'none';
+    $('workModelCard').style.display = 'none';
     return;
   }
 
-  // Determine unique registers
-  const registers = [...new Set(data.map(a => a.registerNo))].sort((a, b) => a - b);
-
-  // Create time headers (15-minute intervals)
+  // 15分間隔の時間ヘッダーを作成
   const timeHeaderRow = document.createElement('div');
   timeHeaderRow.className = 'grid-row';
-  timeHeaderRow.style.gridColumn = '1 / -1'; // Span all columns
-  timeHeaderRow.style.display = 'contents'; // Allow children to be grid items
+  timeHeaderRow.style.gridColumn = '1 / -1';
+  timeHeaderRow.style.display = 'contents';
 
   const emptyHeader = document.createElement('div');
   emptyHeader.className = 'grid-header';
-  timeHeaderRow.appendChild(emptyHeader); // Empty cell for register column
+  emptyHeader.textContent = '従業員';
+  timeHeaderRow.appendChild(emptyHeader);
 
   for (let h = 0; h < 24; h++) {
     for (let m = 0; m < 60; m += 15) {
@@ -297,46 +376,145 @@ async function loadResult(dateString){
   }
   shiftGrid.appendChild(timeHeaderRow);
 
-  // Create grid rows for each register
-  registers.forEach(registerNo => {
-    const registerRowHeader = document.createElement('div');
-    registerRowHeader.className = 'grid-row-header';
-    registerRowHeader.textContent = `レジ ${registerNo}`;
-    shiftGrid.appendChild(registerRowHeader);
+  // 従業員ごとの行を作成
+  employees.forEach(employee => {
+    const employeeRowHeader = document.createElement('div');
+    employeeRowHeader.className = 'grid-row-header';
+    employeeRowHeader.innerHTML = `
+      <div class="employee-name">${employee.employeeName}</div>
+      <div class="employee-code">${employee.employeeCode}</div>
+    `;
+    shiftGrid.appendChild(employeeRowHeader);
 
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 15) {
         const cell = document.createElement('div');
-        cell.className = 'grid-cell';
-        cell.dataset.register = registerNo;
+        cell.className = 'grid-cell employee-shift-cell';
+        cell.dataset.employee = employee.employeeCode;
         cell.dataset.time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         shiftGrid.appendChild(cell);
       }
     }
   });
 
-  // Populate grid with assignments
-  data.forEach(assignment => {
-    const start = new Date(assignment.startAt);
-    const end = new Date(assignment.endAt);
-    const employeeAbbr = assignment.employeeName.substring(0, 2); // First two characters
-    const colorClass = getEmployeeColorClass(assignment.employeeName);
+  // シフト割り当てデータでセルを塗りつぶし
+  if (data && data.length > 0) {
+    data.forEach(assignment => {
+      const start = new Date(assignment.startAt);
+      const end = new Date(assignment.endAt);
+      const colorClass = getEmployeeColorClass(assignment.employeeName);
 
-    // Iterate through 15-minute intervals for the assignment
-    let currentTime = new Date(start);
-    while (currentTime < end) {
-      const hour = currentTime.getHours();
-      const minute = currentTime.getMinutes();
-      const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      // 15分間隔でセルを塗りつぶし
+      let currentTime = new Date(start);
+      while (currentTime < end) {
+        const hour = currentTime.getHours();
+        const minute = currentTime.getMinutes();
+        const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 
-      const cell = shiftGrid.querySelector(`.grid-cell[data-register="${assignment.registerNo}"][data-time="${targetTime}"]`);
-      if (cell) {
-        cell.classList.add('assigned', colorClass);
-        cell.textContent = employeeAbbr;
+        const cell = shiftGrid.querySelector(`.grid-cell[data-employee="${assignment.employeeCode}"][data-time="${targetTime}"]`);
+        if (cell) {
+          cell.classList.add('assigned', colorClass);
+          cell.textContent = `R${assignment.registerNo}`;
+        }
+        currentTime.setMinutes(currentTime.getMinutes() + 15);
       }
-      currentTime.setMinutes(currentTime.getMinutes() + 15);
+    });
+  }
+  
+  // スクロール同期をセットアップ
+  setupScrollSync();
+}
+
+async function loadWorkModel(dateString) {
+  try {
+    const workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}`).then(r => r.json());
+    const workModelGrid = $('workModelGrid');
+    const workModelCard = $('workModelCard');
+    
+    workModelGrid.innerHTML = ''; // Clear previous content
+    console.log('Work model data:', workModelData); // デバッグ用
+    
+    if (workModelData && workModelData.length > 0) {
+      workModelCard.style.display = 'block';
+      
+      // 15分間隔の時間ヘッダーを作成（シフト表示と同じ）
+      const timeHeaderRow = document.createElement('div');
+      timeHeaderRow.className = 'grid-row';
+      timeHeaderRow.style.gridColumn = '1 / -1';
+      timeHeaderRow.style.display = 'contents';
+
+      const emptyHeader = document.createElement('div');
+      emptyHeader.className = 'grid-header';
+      emptyHeader.textContent = '時間';
+      timeHeaderRow.appendChild(emptyHeader);
+
+      for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 15) {
+          const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          const timeHeader = document.createElement('div');
+          timeHeader.className = 'grid-header time-slot';
+          timeHeader.textContent = time;
+          timeHeaderRow.appendChild(timeHeader);
+        }
+      }
+      workModelGrid.appendChild(timeHeaderRow);
+
+      // 最大レジ台数を計算
+      const maxDemand = Math.max(...workModelData.map(d => d.requiredUnits || 0), 1);
+      
+      // 各時間帯での需要データを事前に処理
+      const demandByTime = new Map();
+      for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 15) {
+          const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+          const quarterData = workModelData.find(d => {
+            if (!d.slotTime) return false;
+            const timeStr = typeof d.slotTime === 'string' ? d.slotTime : 
+                           (d.slotTime.hour !== undefined ? 
+                            `${String(d.slotTime.hour).padStart(2, '0')}:${String(d.slotTime.minute).padStart(2, '0')}:00` : 
+                            d.slotTime.toString());
+            return timeStr === targetTime;
+          });
+          const demandCount = quarterData ? (quarterData.requiredUnits || 0) : 0;
+          demandByTime.set(`${h}_${m}`, demandCount);
+        }
+      }
+
+      // レジ番号の行を作成（レジ1からmaxDemandまで）
+      for (let registerNo = 1; registerNo <= maxDemand; registerNo++) {
+        const registerRowHeader = document.createElement('div');
+        registerRowHeader.className = 'grid-row-header';
+        registerRowHeader.textContent = `レジ ${registerNo}`;
+        workModelGrid.appendChild(registerRowHeader);
+
+        for (let h = 0; h < 24; h++) {
+          for (let m = 0; m < 60; m += 15) {
+            const demandCount = demandByTime.get(`${h}_${m}`) || 0;
+            
+            // この時間帯にこのレジ番号が必要な場合のみセルを作成
+            if (registerNo <= demandCount) {
+              const cell = document.createElement('div');
+              cell.className = 'grid-cell work-model-cell register-needed';
+              workModelGrid.appendChild(cell);
+            } else {
+              // 不要な場合は空のdivを作成（グリッドレイアウト維持のため）
+              const emptyCell = document.createElement('div');
+              emptyCell.className = 'grid-cell work-model-cell-empty';
+              workModelGrid.appendChild(emptyCell);
+            }
+          }
+        }
+      }
+      
+      // 作業モデル用のCSSグリッドを設定（15分間隔と同じ）
+      workModelGrid.style.gridTemplateColumns = '120px repeat(96, 50px)';
+    } else {
+      workModelCard.style.display = 'none';
     }
-  });
+  } catch (error) {
+    console.error('作業モデルデータ取得エラー:', error);
+    $('workModelCard').style.display = 'none';
+  }
 }
 </script>
 </div>

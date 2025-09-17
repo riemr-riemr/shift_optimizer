@@ -255,9 +255,15 @@
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-search"></i> 表示更新
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">
+                                <i class="bi bi-search"></i> 表示更新
+                            </button>
+                            <button type="button" id="optimizeBtn" class="btn btn-success" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}">
+                                <i class="bi bi-gear"></i> 最適化
+                            </button>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -411,16 +417,220 @@
         </div>
     </div>
 
+    <!-- 最適化進行状況モーダル -->
+    <div class="modal fade" id="optimizationModal" tabindex="-1" aria-labelledby="optimizationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="optimizationModalLabel">
+                        <i class="bi bi-gear-fill"></i> シフト最適化
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="modalCloseBtn"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="optimizationProgress">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="spinner-border text-primary me-3" role="status">
+                                <span class="visually-hidden">最適化中...</span>
+                            </div>
+                            <div>
+                                <h6 class="mb-1">最適化を実行中です</h6>
+                                <p class="mb-0 text-muted" id="optimizationStatus">計算を開始しています...</p>
+                            </div>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 0%" id="progressBar"></div>
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            <p>店舗: <span id="optimizationStore" th:text="${selectedStoreCode}"></span></p>
+                            <p>対象月: <span id="optimizationMonth"></span></p>
+                        </div>
+                    </div>
+                    
+                    <div id="optimizationResult" style="display: none;">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> 最適化が完了しました！
+                        </div>
+                        <p>シフトの最適化が正常に完了しました。表示を更新してください。</p>
+                    </div>
+                    
+                    <div id="optimizationError" style="display: none;">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> エラーが発生しました
+                        </div>
+                        <p id="errorMessage">最適化中にエラーが発生しました。</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeBtn">閉じる</button>
+                    <button type="button" class="btn btn-primary" id="refreshBtn" style="display: none;" onclick="window.location.reload();">
+                        <i class="bi bi-arrow-clockwise"></i> 表示更新
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 店舗選択が変更されたときに自動的にフォームを送信
+        let optimizationTicket = null;
+        let statusCheckInterval = null;
+        
+        // 店舗選択が変更されたときの処理（自動送信は無効化）
         document.addEventListener('DOMContentLoaded', function() {
             const storeSelect = document.getElementById('storeCode');
             if (storeSelect) {
                 storeSelect.addEventListener('change', function() {
-                    this.form.submit();
+                    // 最適化ボタンの有効/無効を更新
+                    const optimizeBtn = document.getElementById('optimizeBtn');
+                    if (optimizeBtn) {
+                        optimizeBtn.disabled = !this.value;
+                    }
                 });
             }
+            
+            // 最適化ボタンのイベント
+            const optimizeBtn = document.getElementById('optimizeBtn');
+            if (optimizeBtn) {
+                optimizeBtn.addEventListener('click', startOptimization);
+            }
         });
+        
+        function startOptimization() {
+            const storeCode = document.getElementById('storeCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+            
+            // モーダルを表示
+            document.getElementById('optimizationStore').textContent = storeCode;
+            document.getElementById('optimizationMonth').textContent = targetMonth;
+            const modal = new bootstrap.Modal(document.getElementById('optimizationModal'));
+            modal.show();
+            
+            // 進行状況リセット
+            resetModal();
+            
+            // 最適化開始リクエスト
+            fetch('/shift/api/calc/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    month: targetMonth,
+                    storeCode: storeCode
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(ticket => {
+                console.log('Optimization ticket received:', ticket);
+                optimizationTicket = ticket;
+                
+                if (!ticket || !ticket.problemId) {
+                    throw new Error('Invalid ticket received: ' + JSON.stringify(ticket));
+                }
+                
+                document.getElementById('optimizationStatus').textContent = '最適化を実行中...';
+                
+                // ステータス確認を開始
+                statusCheckInterval = setInterval(checkOptimizationStatus, 2000);
+            })
+            .catch(error => {
+                console.error('Error starting optimization:', error);
+                showError('最適化の開始に失敗しました: ' + error.message);
+            });
+        }
+        
+        function checkOptimizationStatus() {
+            if (!optimizationTicket || !optimizationTicket.problemId) {
+                console.error('Invalid optimization ticket:', optimizationTicket);
+                clearInterval(statusCheckInterval);
+                showError('最適化チケットが無効です');
+                return;
+            }
+            
+            console.log('Checking status for ticket ID:', optimizationTicket.problemId);
+            
+            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(status => {
+                console.log('Status received:', status);
+                updateProgress(status);
+                
+                // NOT_SOLVING が完了状態、SOLVING_ACTIVE が実行中
+                if (status.status === 'NOT_SOLVING') {
+                    clearInterval(statusCheckInterval);
+                    showSuccess();
+                } else if (status.status === 'FAILED' || status.status === 'ERROR') {
+                    clearInterval(statusCheckInterval);
+                    showError('最適化に失敗しました: ' + (status.errorMessage || '不明なエラー'));
+                }
+                // SOLVING_ACTIVE の場合は継続
+            })
+            .catch(error => {
+                console.error('Error checking status:', error);
+                clearInterval(statusCheckInterval);
+                showError('ステータス確認中にエラーが発生しました: ' + error.message);
+            });
+        }
+        
+        function updateProgress(status) {
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('optimizationStatus');
+            
+            // 実際のプログレス値を使用（0-100の範囲に制限）
+            const progress = Math.max(0, Math.min(100, status.progress || 0));
+            progressBar.style.width = progress + '%';
+            
+            // ステータスに応じてメッセージを更新
+            if (status.status === 'SOLVING_ACTIVE') {
+                statusText.textContent = status.phase || '制約条件を計算中...';
+            } else if (status.status === 'NOT_SOLVING') {
+                statusText.textContent = '最適化完了';
+                progressBar.style.width = '100%';
+            } else {
+                statusText.textContent = status.phase || '最適化を実行中...';
+            }
+        }
+        
+        function showSuccess() {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationResult').style.display = 'block';
+            document.getElementById('refreshBtn').style.display = 'inline-block';
+            document.getElementById('modalCloseBtn').style.display = 'none';
+        }
+        
+        function showError(message) {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+        
+        function resetModal() {
+            document.getElementById('optimizationProgress').style.display = 'block';
+            document.getElementById('optimizationResult').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('optimizationStatus').textContent = '計算を開始しています...';
+            document.getElementById('refreshBtn').style.display = 'none';
+            document.getElementById('modalCloseBtn').style.display = 'block';
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
     </script>
 </div>
 </body>

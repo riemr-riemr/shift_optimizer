@@ -4,4 +4,5 @@ public record ShiftAssignmentView(
         String startAt,
         String endAt,
         int registerNo,
+        String employeeCode,
         String employeeName) {}

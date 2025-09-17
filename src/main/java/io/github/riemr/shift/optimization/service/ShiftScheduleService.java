@@ -80,6 +80,15 @@ public class ShiftScheduleService {
      */
     @Transactional
     public SolveTicket startSolveMonth(LocalDate month) {
+        return startSolveMonth(month, null);
+    }
+
+    /**
+     * 月次シフト計算を非同期で開始（店舗指定あり）。
+     * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
+     */
+    @Transactional
+    public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
         long problemId = toProblemId(month);
 
         // -- ジョブが既に存在する場合はチケットのみ再発行 --
@@ -146,6 +155,9 @@ public class ShiftScheduleService {
                             a.getOrigin().getStartAt().toString(),
                             a.getOrigin().getEndAt().toString(),
                             a.getOrigin().getRegisterNo(),
+                            Optional.ofNullable(a.getAssignedEmployee())
+                                    .map(emp -> emp.getEmployeeCode())
+                                    .orElse("-"),
                             Optional.ofNullable(a.getAssignedEmployee())
                                     .map(emp -> emp.getEmployeeName())
                                     .orElse("-")))
@@ -215,7 +227,13 @@ public class ShiftScheduleService {
                                 .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
                                 .orElse(""),
                         a.getRegisterNo(),
-                        Optional.ofNullable(a.getEmployeeCode()).orElse("")
+                        Optional.ofNullable(a.getEmployeeCode()).orElse(""),
+                        Optional.ofNullable(a.getEmployeeCode())
+                                .map(c -> {
+                                    var emp = employeeMapper.selectByPrimaryKey(c);
+                                    return emp != null ? emp.getEmployeeName() : "";
+                                })
+                                .orElse("")
                 ))
                 .toList();
     }

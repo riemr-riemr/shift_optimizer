@@ -9,6 +9,12 @@ import io.github.riemr.shift.application.service.StaffingBalanceService;
 import io.github.riemr.shift.optimization.service.ShiftScheduleService;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
+import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
+import io.github.riemr.shift.application.service.RegisterDemandHourService;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -32,6 +38,9 @@ public class ShiftCalcController {
     private final ShiftScheduleService service;
     private final StaffingBalanceService staffingBalanceService;
     private final StoreMapper storeMapper;
+    private final RegisterDemandHourService registerDemandHourService;
+    private final RegisterDemandQuarterMapper registerDemandQuarterMapper;
+    private final EmployeeMapper employeeMapper;
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
@@ -43,7 +52,7 @@ public class ShiftCalcController {
     @ResponseBody
     public SolveTicket start(@RequestBody SolveRequest req) {
         LocalDate month = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return service.startSolveMonth(month);
+        return service.startSolveMonth(month, req.storeCode());
     }
 
     @GetMapping("/api/calc/status/{id}")
@@ -70,6 +79,34 @@ public class ShiftCalcController {
     public List<ShiftAssignmentMonthlyView> getShiftsByMonth(@PathVariable("month") String monthString) {
         LocalDate month = LocalDate.parse(monthString + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         return service.fetchShiftsByMonth(month);
+    }
+
+    @GetMapping("/api/calc/work-model/{date}")
+    @ResponseBody
+    public List<RegisterDemandHourDto> getWorkModelByDate(@PathVariable("date") String dateString) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        // TODO: 店舗コードは将来的にはパラメータから取得
+        return registerDemandHourService.findHourlyDemands("569", date);
+    }
+
+    @GetMapping("/api/calc/work-model-quarter/{date}")
+    @ResponseBody
+    public List<RegisterDemandQuarter> getWorkModelQuarterByDate(@PathVariable("date") String dateString) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        
+        // RegisterDemandQuarterExampleを使用してクエリ条件を設定
+        var example = new io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarterExample();
+        example.createCriteria()
+            .andStoreCodeEqualTo("569")
+            .andDemandDateEqualTo(java.sql.Date.valueOf(date));
+        
+        return registerDemandQuarterMapper.selectByExample(example);
+    }
+
+    @GetMapping("/api/calc/employees/{storeCode}")
+    @ResponseBody
+    public List<Employee> getEmployeesByStore(@PathVariable("storeCode") String storeCode) {
+        return employeeMapper.selectByStoreCode(storeCode);
     }
 
     @GetMapping
