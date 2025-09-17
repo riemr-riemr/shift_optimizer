@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+    <title>希望休入力</title>
+    <style>
+        .search-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .table-header {
+            border-radius: 10px 10px 0 0;
+            border-bottom: 1px solid #dee2e6;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        
+        .table-body {
+            overflow: auto;
+            flex-grow: 1;
+        }
+        
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            min-width: 800px;
+        }
+        
+        .schedule-table th {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 8px 6px;
+            text-align: center;
+            font-weight: 600;
+            border: 1px solid #dee2e6;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            min-width: 60px;
+        }
+        
+        .schedule-table th.employee-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-width: 150px;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 11;
+        }
+        
+        .schedule-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+            background: white;
+            position: relative;
+        }
+        
+        .schedule-table td.employee-cell {
+            background: #f8f9fa;
+            font-weight: 600;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            border-right: 2px solid #dee2e6;
+        }
+        
+        .day-toggle {
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .day-toggle:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .day-cell {
+            transition: all 0.2s ease;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            border-radius: 6px;
+            margin: 0 auto;
+            pointer-events: auto;
+        }
+        
+        .day-cell:hover {
+            background: #e3f2fd !important;
+            transform: scale(1.1);
+        }
+        
+        .day-cell.pending-change {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            color: white;
+            font-weight: bold;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .weekend-header {
+            background: linear-gradient(135deg, #ff8a80 0%, #ff5722 100%) !important;
+        }
+        
+        .weekend-cell {
+            background: #fff5f5;
+        }
+        
+        .today-cell {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #d63384;
+            font-weight: bold;
+        }
+        
+        .day-off-requested {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .day-off-requested:hover {
+            background: linear-gradient(135deg, #e55555 0%, #d84315 100%) !important;
+        }
+        
+        .employee-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .employee-code {
+            font-size: 0.75rem;
+            color: #6c757d;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        .employee-selector {
+            max-height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        
+        .employee-item {
+            display: block;
+            width: 100%;
+            padding: 12px 15px;
+            border: none;
+            background: white;
+            text-align: left;
+            border-bottom: 1px solid #f1f3f4;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .employee-item:hover {
+            background: #f8f9fa;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .employee-item.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .employee-code {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        
+        .employee-item.active .employee-code {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            padding: 0.75rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: none;
+            border-radius: 8px;
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #218838 0%, #1ea89a 100%);
+        }
+        
+        .instructions {
+            background: #e9ecef;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="content-header">
+        <h1><i class="bi bi-calendar-x"></i> 希望休入力</h1>
+        <p class="mb-0">従業員の希望休を月単位で管理できます</p>
+    </div>
+
+    <!-- 成功・エラーメッセージ -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> <span th:text="${success}">成功メッセージ</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}">エラーメッセージ</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- 検索条件 -->
+    <div class="card search-card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-sliders"></i> 検索条件</h5>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/employee-requests}" method="get">
+                <div class="row align-items-end">
+                    <div class="col-md-4">
+                        <label for="targetMonth" class="form-label">対象月</label>
+                        <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                               th:value="${year + '-' + (#numbers.formatInteger(month, 2))}" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="storeCode" class="form-label">店舗</label>
+                        <select id="storeCode" name="storeCode" class="form-select">
+                            <option value="">すべての店舗</option>
+                            <option th:each="store : ${stores}" 
+                                    th:value="${store.storeCode}"
+                                    th:text="|${store.storeCode} - ${store.storeName}|"
+                                    th:selected="${store.storeCode == selectedStoreCode}">店舗名</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search"></i> 表示更新
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 操作説明 -->
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> 
+        店舗を選択してから、表の日付セルをクリックして希望休を設定・解除できます。
+    </div>
+    
+    <!-- 店舗選択必須の警告 -->
+    <div th:if="${#strings.isEmpty(selectedStoreCode)}" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <strong>店舗を選択してください。</strong> 希望休を管理するには、まず上の検索条件で店舗を選択する必要があります。
+    </div>
+    
+    <!-- 従業員上限の警告 -->
+    <div th:if="${employeeTruncated}" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> 
+        パフォーマンス向上のため、表示を最初の200名に制限しています。
+    </div>
+
+    <!-- 希望休一覧表 -->
+    <div class="card table-container">
+        <div class="card-header table-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar3"></i> 
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 希望休一覧
+            </h5>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-muted small" th:if="${selectedStoreCode}">
+                    <i class="bi bi-shop"></i> 
+                    店舗: <span th:text="${selectedStoreCode}">STORE001</span>
+                </div>
+                <div th:if="${!#lists.isEmpty(employees)}">
+                    <button type="button" id="saveAllBtn" class="btn btn-success btn-sm" disabled>
+                        <i class="bi bi-check-circle"></i> 一括保存
+                    </button>
+                    <button type="button" id="resetBtn" class="btn btn-outline-secondary btn-sm ms-2">
+                        <i class="bi bi-arrow-clockwise"></i> リセット
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div th:if="${#lists.isEmpty(employees)}" class="card-body text-center text-muted">
+            <i class="bi bi-person-x"></i> 
+            <span th:if="${#strings.isEmpty(selectedStoreCode)}">
+                店舗を選択してください。
+            </span>
+            <span th:if="${!#strings.isEmpty(selectedStoreCode)}">
+                選択された店舗には従業員が登録されていません。
+            </span>
+        </div>
+        <div th:if="${!#lists.isEmpty(employees)}" class="table-body">
+            <table class="schedule-table">
+            <thead>
+                <tr>
+                    <th class="employee-header">
+                        <i class="bi bi-person"></i> 従業員
+                    </th>
+                    <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:class="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:text="${day}">1</div>
+                        <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
+                             th:text="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getDisplayName(T(java.time.format.TextStyle).SHORT, T(java.util.Locale).JAPANESE)}">月</div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="emp : ${employees}">
+                    <td class="employee-cell">
+                        <div class="employee-info">
+                            <div class="employee-name" th:text="${emp.employeeName}">従業員名</div>
+                            <div class="employee-code" th:text="${emp.employeeCode}">EMP001</div>
+                        </div>
+                    </td>
+                    <td th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
+                        class="day-toggle"
+                        th:classappend="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''}"
+                        th:data-employee-code="${emp.employeeCode}"
+                        th:data-date="|${year}-${#numbers.formatInteger(month, 2)}-${#numbers.formatInteger(day, 2)}|">
+                        <div th:class="'day-cell' + (${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? ' day-off-requested' : 
+                                       (T(java.time.LocalDate).of(year, month, day).equals(T(java.time.LocalDate).now()) ? ' today-cell' : '')})"
+                             th:text="${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? '休' : ''}"
+                             th:data-original-state="${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? 'on' : 'off'}">
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- 凡例 -->
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);"></div>
+            <span>希望休</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #fff5f5; border: 1px solid #ffc1cc;"></div>
+            <span>土日</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);"></div>
+            <span>今日</span>
+        </div>
+    </div>
+
+    <script>
+        let pendingChanges = new Map(); // employeeCode_date -> 'on'/'off'
+        
+        function toggleDayOffLocal(employeeCode, date, dayCell) {
+            const key = `${employeeCode}_${date}`;
+            const originalState = dayCell.getAttribute('data-original-state');
+            const currentState = pendingChanges.get(key) || originalState;
+            const newState = currentState === 'on' ? 'off' : 'on';
+            
+            pendingChanges.set(key, newState);
+            updateCellDisplay(dayCell, newState, originalState);
+            updateSaveButton();
+        }
+        
+        function updateCellDisplay(dayCell, state, originalState) {
+            dayCell.classList.remove('day-off-requested', 'pending-change');
+            
+            if (state === 'on') {
+                dayCell.classList.add('day-off-requested');
+                dayCell.textContent = '休';
+            } else {
+                dayCell.textContent = '';
+            }
+            
+            // 元の状態と異なる場合は変更待ちとして表示
+            if (state !== originalState) {
+                dayCell.classList.add('pending-change');
+            }
+        }
+        
+        function updateSaveButton() {
+            const saveBtn = document.getElementById('saveAllBtn');
+            if (pendingChanges.size > 0) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = `<i class="bi bi-check-circle"></i> 一括保存 (${pendingChanges.size}件の変更)`;
+            } else {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> 一括保存';
+            }
+        }
+        
+        function saveAllChanges() {
+            if (pendingChanges.size === 0) return;
+            
+            const saveBtn = document.getElementById('saveAllBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 保存中...';
+            
+            // 変更をサーバーに送信
+            const changes = Array.from(pendingChanges.entries()).map(([key, state]) => {
+                const [employeeCode, date] = key.split('_');
+                return { employeeCode, date, state };
+            });
+            
+            fetch('/employee-requests/batch-save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    changes: changes,
+                    targetMonth: document.getElementById('targetMonth').value
+                })
+            })
+            .then(response => response.text())
+            .then(result => {
+                if (result === 'success') {
+                    // 成功した場合はページをリロード
+                    window.location.reload();
+                } else {
+                    alert('保存に失敗しました: ' + result);
+                    saveBtn.disabled = false;
+                    updateSaveButton();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('通信エラーが発生しました');
+                saveBtn.disabled = false;
+                updateSaveButton();
+            });
+        }
+        
+        function resetChanges() {
+            pendingChanges.clear();
+            
+            // 全てのセルを元の状態に戻す
+            document.querySelectorAll('.day-cell').forEach(cell => {
+                const originalState = cell.getAttribute('data-original-state');
+                updateCellDisplay(cell, originalState, originalState);
+            });
+            
+            updateSaveButton();
+        }
+        
+        // 店舗選択が変更されたときに自動的にフォームを送信
+        // 日付セルのクリックイベント処理
+        document.addEventListener('DOMContentLoaded', function() {
+            const storeSelect = document.getElementById('storeCode');
+            if (storeSelect) {
+                storeSelect.addEventListener('change', function() {
+                    this.form.submit();
+                });
+            }
+            
+            // 日付セルのクリックイベントを設定
+            console.log('Setting up click events for', document.querySelectorAll('.day-toggle').length, 'cells');
+            document.querySelectorAll('.day-toggle').forEach(function(cell, index) {
+                console.log('Setting up cell', index, cell);
+                cell.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Cell clicked!', this);
+                    
+                    const employeeCode = this.getAttribute('data-employee-code');
+                    const date = this.getAttribute('data-date');
+                    const dayCell = this.querySelector('.day-cell');
+                    console.log('Cell clicked:', employeeCode, date, dayCell);
+                    if (employeeCode && date && dayCell) {
+                        toggleDayOffLocal(employeeCode, date, dayCell);
+                    } else {
+                        console.log('Missing data:', {employeeCode, date, dayCell});
+                    }
+                });
+            });
+            
+            // 保存ボタンのイベント
+            const saveBtn = document.getElementById('saveAllBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveAllChanges);
+            }
+            
+            // リセットボタンのイベント
+            const resetBtn = document.getElementById('resetBtn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', resetChanges);
+            }
+        });
+    </script>
+</div>
+</body>
+</html>

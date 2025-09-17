@@ -97,4 +97,13 @@ public interface EmployeeRequestMapper {
     int updateByPrimaryKey(EmployeeRequest row);
 
     List<EmployeeRequest> selectByMonth(@Param("targetDate") LocalDate targetDate);
+    
+    // カスタムメソッド
+    List<EmployeeRequest> selectByDateRange(@Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
+    
+    EmployeeRequest selectByEmployeeAndDate(@Param("employeeCode") String employeeCode, @Param("requestDate") LocalDate requestDate);
+    
+    List<EmployeeRequest> selectByEmployeeAndDateRange(@Param("employeeCode") String employeeCode, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
+    
+    int deleteById(@Param("id") Long id);
 }

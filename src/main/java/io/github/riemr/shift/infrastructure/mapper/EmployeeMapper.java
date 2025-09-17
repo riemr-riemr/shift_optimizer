@@ -96,4 +96,7 @@ public interface EmployeeMapper {
 
     /** 従業員マスタをすべて取得（シフト作成用） */
     List<Employee> selectAll();
+
+    /** 店舗コードで従業員を取得 */
+    List<Employee> selectByStoreCode(@Param("storeCode") String storeCode);
 }

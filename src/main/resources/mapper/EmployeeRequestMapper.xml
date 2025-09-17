@@ -346,4 +346,30 @@
     where TO_CHAR(request_date, 'YYYY-MM') = TO_CHAR(#{targetDate}, 'YYYY-MM')
     order by store_code, employee_code, request_date
   </select>
+  
+  <!-- カスタムクエリ -->
+  <select id="selectByDateRange" resultMap="BaseResultMap">
+    select request_id, store_code, employee_code, request_date, from_time, to_time, request_kind, priority, note
+    from public.employee_request
+    where request_date between #{fromDate} and #{toDate}
+    order by employee_code, request_date
+  </select>
+  
+  <select id="selectByEmployeeAndDate" resultMap="BaseResultMap">
+    select request_id, store_code, employee_code, request_date, from_time, to_time, request_kind, priority, note
+    from public.employee_request
+    where employee_code = #{employeeCode} and request_date = #{requestDate}
+    limit 1
+  </select>
+  
+  <select id="selectByEmployeeAndDateRange" resultMap="BaseResultMap">
+    select request_id, store_code, employee_code, request_date, from_time, to_time, request_kind, priority, note
+    from public.employee_request
+    where employee_code = #{employeeCode} and request_date between #{fromDate} and #{toDate}
+    order by request_date
+  </select>
+  
+  <delete id="deleteById">
+    delete from public.employee_request where request_id = #{id}
+  </delete>
 </mapper>

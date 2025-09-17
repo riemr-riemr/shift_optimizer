@@ -264,4 +264,13 @@
       FROM employee
     ORDER BY employee_code
   </select>
+
+  <select id="selectByStoreCode" parameterType="string" resultMap="BaseResultMap">
+    SELECT
+      employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month,
+      base_start_time, base_end_time
+    FROM public.employee
+    WHERE store_code = #{storeCode}
+    ORDER BY employee_code
+  </select>
 </mapper>
