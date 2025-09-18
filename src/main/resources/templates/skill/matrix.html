@@ -68,6 +68,47 @@
       border: 1px solid #dee2e6;
       border-radius: 8px;
     }
+    
+    /* 範囲選択関連のスタイル */
+    .skill-cell {
+      position: relative;
+      user-select: none;
+      cursor: pointer;
+    }
+    
+    .skill-cell.selecting {
+      background: rgba(13, 110, 253, 0.1) !important;
+      border: 2px solid #0d6efd !important;
+    }
+    
+    .skill-cell.selected {
+      background: rgba(13, 110, 253, 0.2) !important;
+      border: 2px solid #0d6efd !important;
+    }
+    
+    .range-selector-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border: 2px solid #0d6efd;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      z-index: 1500;
+      display: none;
+      min-width: 300px;
+    }
+    
+    .range-selector-panel.show {
+      display: block;
+    }
+    
+    .bulk-action-btn {
+      margin-bottom: 10px;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -79,23 +120,27 @@
 
   <div class="card mb-3">
     <div class="card-header">
-      <h5 class="mb-2"><i class="bi bi-info-circle"></i> 習熟度レベル</h5>
+      <h5 class="mb-2"><i class="bi bi-info-circle"></i> スキルレベル</h5>
       <div class="skill-legend">
         <div class="skill-legend-item">
-          <span class="fw-bold text-danger">×</span>
-          <span>対応不可</span>
+          <span class="fw-bold text-muted">- (0)</span>
+          <span>自動割当不可</span>
         </div>
         <div class="skill-legend-item">
-          <span class="fw-bold text-warning">△</span>
-          <span>基本レベル</span>
+          <span class="fw-bold text-danger">× (1)</span>
+          <span>割り当て不可</span>
         </div>
         <div class="skill-legend-item">
-          <span class="fw-bold text-success">○</span>
-          <span>習熟レベル</span>
+          <span class="fw-bold text-warning">△ (2)</span>
+          <span>優先度: 低</span>
         </div>
         <div class="skill-legend-item">
-          <span class="fw-bold text-primary">◎</span>
-          <span>エキスパート</span>
+          <span class="fw-bold text-success">○ (3)</span>
+          <span>優先度: 中</span>
+        </div>
+        <div class="skill-legend-item">
+          <span class="fw-bold text-primary">◎ (4)</span>
+          <span>優先度: 高</span>
         </div>
       </div>
     </div>
@@ -136,15 +181,15 @@
                   <select class="skill-select form-select form-select-sm"
                           th:onchange="updateCell('${emp.employeeCode}','${reg.registerNo}', this.value)">
                     <option th:value="0" 
-                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 0}">×</option>
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] == null or matrixDto.levelMap[emp.employeeCode][reg.registerNo] == null or matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 0}">-</option>
                     <option th:value="1" 
-                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 1}">△</option>
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 1}">×</option>
                     <option th:value="2" 
-                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 2}">○</option>
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 2}">△</option>
                     <option th:value="3" 
-                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 3}">◎</option>
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 3}">○</option>
                     <option th:value="4" 
-                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 4}">◎+</option>
+                            th:selected="${matrixDto.levelMap[emp.employeeCode] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] != null and matrixDto.levelMap[emp.employeeCode][reg.registerNo] == 4}">◎</option>
                   </select>
                 </td>
               </tr>
@@ -164,7 +209,8 @@
         <div class="p-3 border-top bg-light d-flex justify-content-between align-items-center">
           <div class="text-muted small">
             <i class="bi bi-info-circle"></i>
-            各セルのドロップダウンから習熟度を選択してください
+            個別選択: ドロップダウンからスキルレベルを選択 | 
+            <strong>範囲選択: ドラッグで複数セルを選択して一括設定</strong>
           </div>
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check-lg"></i> スキル設定を保存
@@ -182,8 +228,9 @@
         </div>
         <div class="card-body">
           <ol class="small">
-            <li>各従業員のレジスター習熟度を選択します</li>
-            <li>「×」は対応不可、「◎+」は最高レベルです</li>
+            <li><strong>個別設定:</strong> 各セルのドロップダウンからスキルレベルを選択</li>
+            <li><strong>範囲設定:</strong> マウスでドラッグして複数セルを選択し、一括で同じ値を設定</li>
+            <li>「-(0)」は自動割当不可、「×(1)」は割り当て不可、「△○◎(2-4)」は優先度（低・中・高）です</li>
             <li>すべて設定後、「保存」ボタンをクリックします</li>
             <li>設定内容はシフト最適化時に活用されます</li>
           </ol>
@@ -215,7 +262,49 @@
     </div>
   </div>
 
+  <!-- 範囲選択パネル -->
+  <div id="rangeSelectorPanel" class="range-selector-panel">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="mb-0"><i class="bi bi-grid-3x3-gap"></i> 範囲選択 - 一括設定</h6>
+      <button type="button" class="btn-close" id="closeRangePanel"></button>
+    </div>
+    <p class="text-muted small mb-3">
+      選択した <span id="selectedCount">0</span> 個のセルに同じスキルレベルを設定します
+    </p>
+    <div class="d-grid gap-2">
+      <button type="button" class="btn btn-outline-secondary bulk-action-btn" data-value="0">
+        <span class="fw-bold">-</span> 自動割当不可
+      </button>
+      <button type="button" class="btn btn-outline-danger bulk-action-btn" data-value="1">
+        <span class="fw-bold">×</span> 割り当て不可
+      </button>
+      <button type="button" class="btn btn-outline-warning bulk-action-btn" data-value="2">
+        <span class="fw-bold">△</span> 優先度: 低
+      </button>
+      <button type="button" class="btn btn-outline-success bulk-action-btn" data-value="3">
+        <span class="fw-bold">○</span> 優先度: 中
+      </button>
+      <button type="button" class="btn btn-outline-primary bulk-action-btn" data-value="4">
+        <span class="fw-bold">◎</span> 優先度: 高
+      </button>
+    </div>
+    <div class="mt-3 d-flex gap-2">
+      <button type="button" class="btn btn-secondary btn-sm flex-fill" id="clearSelection">
+        <i class="bi bi-x-circle"></i> 選択解除
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" id="cancelRange">
+        <i class="bi bi-x"></i> キャンセル
+      </button>
+    </div>
+  </div>
+
   <script>
+    // 範囲選択の状態管理
+    let isSelecting = false;
+    let startCell = null;
+    let selectedCells = new Set();
+    let rangeSelectorPanel = null;
+
     /**
      * セル変更時にhidden inputを生成/更新し、
      * emp|reg|val形式で値を保持する
@@ -233,23 +322,238 @@
       hidden.value = `${emp}|${reg}|${val}`;
       
       // 視覚的フィードバック
-      const cell = event.target.closest('td');
-      if (cell) {
-        cell.style.backgroundColor = '#e3f2fd';
-        setTimeout(() => {
-          cell.style.backgroundColor = '';
-        }, 500);
+      if (typeof event !== 'undefined' && event && event.target && event.target.closest) {
+        const cell = event.target.closest('td');
+        if (cell) {
+          cell.style.backgroundColor = '#e3f2fd';
+          setTimeout(() => {
+            cell.style.backgroundColor = '';
+          }, 500);
+        }
       }
     }
 
-    // ページ読み込み時に既存の値でhidden inputを初期化
+    // セルから従業員コードとレジ番号を取得
+    function getCellInfo(cell) {
+      const select = cell.querySelector('.skill-select');
+      if (!select || !select.onchange) return null;
+      
+      // onchange属性から従業員コードとレジ番号を抽出
+      const onchangeAttr = select.getAttribute('onchange');
+      const match = onchangeAttr.match(/updateCell\('([^']+)','([^']+)'/);
+      if (match) {
+        return {
+          employeeCode: match[1],
+          registerNo: match[2],
+          select: select
+        };
+      }
+      return null;
+    }
+
+    // 範囲選択の開始
+    function startRangeSelection(cell) {
+      isSelecting = true;
+      startCell = cell;
+      selectedCells.clear();
+      
+      // 既存の選択をクリア
+      document.querySelectorAll('.skill-cell.selected, .skill-cell.selecting').forEach(c => {
+        c.classList.remove('selected', 'selecting');
+      });
+      
+      cell.classList.add('selecting');
+      selectedCells.add(cell);
+    }
+
+    // 範囲選択の更新
+    function updateRangeSelection(currentCell) {
+      if (!isSelecting || !startCell) return;
+      
+      // 現在の選択状態をクリア
+      document.querySelectorAll('.skill-cell.selecting').forEach(c => {
+        c.classList.remove('selecting');
+      });
+      selectedCells.clear();
+      
+      // 開始セルと現在セルの位置を取得
+      const startPos = getCellPosition(startCell);
+      const currentPos = getCellPosition(currentCell);
+      
+      if (!startPos || !currentPos) return;
+      
+      // 矩形範囲内のすべてのセルを選択
+      const minRow = Math.min(startPos.row, currentPos.row);
+      const maxRow = Math.max(startPos.row, currentPos.row);
+      const minCol = Math.min(startPos.col, currentPos.col);
+      const maxCol = Math.max(startPos.col, currentPos.col);
+      
+      const rows = document.querySelectorAll('.skill-matrix-table tbody tr');
+      for (let r = minRow; r <= maxRow; r++) {
+        const row = rows[r];
+        if (row) {
+          const cells = row.querySelectorAll('.skill-cell');
+          for (let c = minCol; c <= maxCol; c++) {
+            const cell = cells[c];
+            if (cell) {
+              cell.classList.add('selecting');
+              selectedCells.add(cell);
+            }
+          }
+        }
+      }
+    }
+
+    // セルの位置を取得
+    function getCellPosition(cell) {
+      const row = cell.closest('tr');
+      const table = cell.closest('tbody');
+      
+      if (!row || !table) return null;
+      
+      const rowIndex = Array.from(table.querySelectorAll('tr')).indexOf(row);
+      const cellIndex = Array.from(row.querySelectorAll('.skill-cell')).indexOf(cell);
+      
+      return { row: rowIndex, col: cellIndex };
+    }
+
+    // 範囲選択の完了
+    function finishRangeSelection() {
+      if (!isSelecting || selectedCells.size === 0) {
+        isSelecting = false;
+        return;
+      }
+      
+      // 選択状態を確定
+      selectedCells.forEach(cell => {
+        cell.classList.remove('selecting');
+        cell.classList.add('selected');
+      });
+      
+      // パネルを表示
+      showRangePanel();
+      isSelecting = false;
+    }
+
+    // 範囲選択パネルを表示
+    function showRangePanel() {
+      if (!rangeSelectorPanel) {
+        rangeSelectorPanel = document.getElementById('rangeSelectorPanel');
+      }
+      
+      document.getElementById('selectedCount').textContent = selectedCells.size;
+      rangeSelectorPanel.classList.add('show');
+      
+      // 外側クリックで閉じる
+      setTimeout(() => {
+        document.addEventListener('click', closeRangePanelOnOutsideClick);
+      }, 10);
+    }
+
+    // 範囲選択パネルを閉じる
+    function hideRangePanel() {
+      if (rangeSelectorPanel) {
+        rangeSelectorPanel.classList.remove('show');
+        document.removeEventListener('click', closeRangePanelOnOutsideClick);
+      }
+    }
+
+    // 外側クリックでパネルを閉じる
+    function closeRangePanelOnOutsideClick(event) {
+      if (rangeSelectorPanel && !rangeSelectorPanel.contains(event.target)) {
+        hideRangePanel();
+      }
+    }
+
+    // 選択範囲に値を適用
+    function applyValueToSelection(value) {
+      selectedCells.forEach(cell => {
+        const cellInfo = getCellInfo(cell);
+        if (cellInfo) {
+          cellInfo.select.value = value;
+          updateCell(cellInfo.employeeCode, cellInfo.registerNo, value);
+          
+          // 視覚的フィードバック
+          cell.style.backgroundColor = '#d4edda';
+          setTimeout(() => {
+            cell.style.backgroundColor = '';
+          }, 1000);
+        }
+      });
+      
+      clearSelection();
+      hideRangePanel();
+    }
+
+    // 選択をクリア
+    function clearSelection() {
+      selectedCells.forEach(cell => {
+        cell.classList.remove('selected', 'selecting');
+      });
+      selectedCells.clear();
+      isSelecting = false;
+      startCell = null;
+    }
+
+    // ページ読み込み時の初期化
     document.addEventListener('DOMContentLoaded', function() {
+      // 既存の機能: 初期値設定
       const selects = document.querySelectorAll('.skill-select');
       selects.forEach(function(select) {
         if (select.value && select.value !== '0') {
-          // onchangeイベントを手動で発火させて初期値を設定
           select.onchange();
         }
+      });
+
+      // 範囲選択機能の初期化
+      const skillCells = document.querySelectorAll('.skill-cell');
+      
+      skillCells.forEach(cell => {
+        // マウスダウンで範囲選択開始
+        cell.addEventListener('mousedown', function(e) {
+          // selectを避けてセル自体をクリックした場合のみ
+          if (e.target.classList.contains('skill-select')) return;
+          
+          e.preventDefault();
+          startRangeSelection(this);
+        });
+        
+        // マウスエンターで範囲更新
+        cell.addEventListener('mouseenter', function(e) {
+          if (isSelecting) {
+            updateRangeSelection(this);
+          }
+        });
+      });
+      
+      // マウスアップで範囲選択完了
+      document.addEventListener('mouseup', function(e) {
+        if (isSelecting) {
+          finishRangeSelection();
+        }
+      });
+      
+      // 範囲選択パネルのイベント
+      document.querySelectorAll('.bulk-action-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const value = this.dataset.value;
+          applyValueToSelection(value);
+        });
+      });
+      
+      document.getElementById('clearSelection').addEventListener('click', function() {
+        clearSelection();
+        hideRangePanel();
+      });
+      
+      document.getElementById('cancelRange').addEventListener('click', function() {
+        clearSelection();
+        hideRangePanel();
+      });
+      
+      document.getElementById('closeRangePanel').addEventListener('click', function() {
+        clearSelection();
+        hideRangePanel();
       });
     });
   </script>

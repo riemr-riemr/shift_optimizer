@@ -38,6 +38,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
 
             // Soft constraints
             satisfyRegisterDemand(factory),
+            preferHigherSkillLevel(factory),
             preferBaseWorkTimes(factory),
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
@@ -75,9 +76,31 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .join(EmployeeRegisterSkill.class,
                         Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRegisterSkill::getEmployeeCode),
                         Joiners.equal(ShiftAssignmentPlanningEntity::getRegisterNo, EmployeeRegisterSkill::getRegisterNo))
-                .filter((sa, skill) -> skill.getSkillLevel() == 0)
+                .filter((sa, skill) -> skill.getSkillLevel() != null && 
+                                       (skill.getSkillLevel() == 0 || skill.getSkillLevel() == 1))
                 .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Skill level zero");
+                .asConstraint("Forbidden skill assignment (0: auto-assign disabled, 1: assignment forbidden)");
+    }
+
+    /**
+     * より高いスキルレベルの従業員を優先的に割り当てる制約
+     * スキルレベル: 2(低) < 3(中) < 4(高)
+     */
+    private Constraint preferHigherSkillLevel(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeRegisterSkill.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRegisterSkill::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getRegisterNo, EmployeeRegisterSkill::getRegisterNo))
+                .filter((sa, skill) -> skill.getSkillLevel() != null && 
+                                       skill.getSkillLevel() >= 2 && skill.getSkillLevel() <= 4)
+                .reward(HardSoftScore.ofSoft(200), 
+                        (sa, skill) -> {
+                            // スキルレベルが高いほど高い報酬
+                            // レベル2: 200, レベル3: 400, レベル4: 600
+                            return (skill.getSkillLevel() - 1) * 200;
+                        })
+                .asConstraint("Prefer higher skill level assignment");
     }
 
     private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
