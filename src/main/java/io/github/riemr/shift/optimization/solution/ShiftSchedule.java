@@ -38,6 +38,9 @@ public class ShiftSchedule {
     /** 月次 (例: 2025‑07‑01) */
     private LocalDate month;
 
+    /** 店舗コード */
+    private String storeCode;
+
     /* === Value range / Problem facts === */
 
     /** 従業員（PlanningVariable の候補） */
@@ -86,6 +89,7 @@ public class ShiftSchedule {
 
     public ShiftSchedule(Long problemId,
                          LocalDate month,
+                         String storeCode,
                          List<Employee> employeeList,
                          List<Register> registerList,
                          List<RegisterDemandQuarter> demandList,
@@ -96,6 +100,7 @@ public class ShiftSchedule {
                          List<ShiftAssignmentPlanningEntity> assignmentList) {
         this.problemId = problemId;
         this.month = month;
+        this.storeCode = storeCode;
         this.employeeList = employeeList;
         this.registerList = registerList;
         this.demandList = demandList;

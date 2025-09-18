@@ -58,47 +58,52 @@ public class ShiftCalcController {
 
     @GetMapping("/api/calc/status/{id}")
     @ResponseBody
-    public SolveStatusDto status(@PathVariable("id") Long id) {
-        return service.getStatus(id);
+    public SolveStatusDto status(@PathVariable("id") Long id,
+                                 @RequestParam("storeCode") String storeCode) {
+        return service.getStatus(id, storeCode);
     }
 
     @GetMapping("/api/calc/result/{id}")
     @ResponseBody
-    public List<ShiftAssignmentView> result(@PathVariable("id") Long id) {
-        return service.fetchResult(id);
+    public List<ShiftAssignmentView> result(@PathVariable("id") Long id,
+                                            @RequestParam("storeCode") String storeCode) {
+        return service.fetchResult(id, storeCode);
     }
 
     @GetMapping("/api/calc/assignments/daily/{date}")
     @ResponseBody
-    public List<ShiftAssignmentView> getAssignmentsByDate(@PathVariable("date") String dateString) {
+    public List<ShiftAssignmentView> getAssignmentsByDate(@PathVariable("date") String dateString,
+                                                          @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        return service.fetchAssignmentsByDate(date);
+        return service.fetchAssignmentsByDate(date, storeCode);
     }
 
     @GetMapping("/api/calc/shifts/monthly/{month}")
     @ResponseBody
-    public List<ShiftAssignmentMonthlyView> getShiftsByMonth(@PathVariable("month") String monthString) {
+    public List<ShiftAssignmentMonthlyView> getShiftsByMonth(@PathVariable("month") String monthString,
+                                                             @RequestParam("storeCode") String storeCode) {
         LocalDate month = LocalDate.parse(monthString + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return service.fetchShiftsByMonth(month);
+        return service.fetchShiftsByMonth(month, storeCode);
     }
 
     @GetMapping("/api/calc/work-model/{date}")
     @ResponseBody
-    public List<RegisterDemandHourDto> getWorkModelByDate(@PathVariable("date") String dateString) {
+    public List<RegisterDemandHourDto> getWorkModelByDate(@PathVariable("date") String dateString,
+                                                          @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        // TODO: 店舗コードは将来的にはパラメータから取得
-        return registerDemandHourService.findHourlyDemands("569", date);
+        return registerDemandHourService.findHourlyDemands(storeCode, date);
     }
 
     @GetMapping("/api/calc/work-model-quarter/{date}")
     @ResponseBody
-    public List<RegisterDemandQuarter> getWorkModelQuarterByDate(@PathVariable("date") String dateString) {
+    public List<RegisterDemandQuarter> getWorkModelQuarterByDate(@PathVariable("date") String dateString,
+                                                                 @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         
         // RegisterDemandQuarterExampleを使用してクエリ条件を設定
         var example = new io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarterExample();
         example.createCriteria()
-            .andStoreCodeEqualTo("569")
+            .andStoreCodeEqualTo(storeCode)
             .andDemandDateEqualTo(java.sql.Date.valueOf(date));
         
         return registerDemandQuarterMapper.selectByExample(example);
@@ -141,7 +146,7 @@ public class ShiftCalcController {
             stores.sort(Comparator.comparing(Store::getStoreCode));
             
             // 月次シフトデータ取得
-            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(yearMonth.atDay(1));
+            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(yearMonth.atDay(1), storeCode);
             
             // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();

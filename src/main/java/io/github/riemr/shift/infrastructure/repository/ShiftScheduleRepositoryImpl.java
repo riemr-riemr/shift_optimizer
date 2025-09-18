@@ -46,9 +46,9 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     // ============================================================================
 
     @Override
-    public ShiftSchedule fetchShiftSchedule(LocalDate month) {
+    public ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode) {
         // 1. 必要なマスタ／トランザクションデータを取得
-        List<Employee>               employees = employeeMapper.selectAll();
+        List<Employee>               employees = storeCode == null ? employeeMapper.selectAll() : employeeMapper.selectByStoreCode(storeCode);
         List<Register>               registers = registerMapper.selectAll();
         List<RegisterDemandQuarter>  demands   = demandMapper.selectByMonth(month);
         log.info("demands.size() = {}", demands.size());
@@ -71,6 +71,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setPreviousAssignmentList(previous);
         schedule.setAssignmentList(emptyAssignments);
         schedule.setMonth(month);
+        schedule.setStoreCode(storeCode);
         return schedule;
     }
 

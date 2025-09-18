@@ -37,7 +37,7 @@ public class OptaPlannerConfig {
     }
     
     @Bean
-    public SolverManager<ShiftSchedule, Long> solverManager(SolverFactory<ShiftSchedule> solverFactory) {
+    public SolverManager<ShiftSchedule, io.github.riemr.shift.optimization.service.ProblemKey> solverManager(SolverFactory<ShiftSchedule> solverFactory) {
         return SolverManager.create(solverFactory);
     }
     

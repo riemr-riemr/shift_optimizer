@@ -55,7 +55,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ShiftScheduleService {
 
     /* === Collaborators === */
-    private final SolverManager<ShiftSchedule, Long> solverManager;
+    private final SolverManager<ShiftSchedule, ProblemKey> solverManager;
     private final ShiftScheduleRepository repository;
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
@@ -67,9 +67,9 @@ public class ShiftScheduleService {
     private Duration spentLimit;
 
     /* === Runtime State === */
-    private final Map<Long, Instant> startMap = new ConcurrentHashMap<>();
-    private final Map<Long, SolverJob<ShiftSchedule, Long>> jobMap = new ConcurrentHashMap<>();
-    private final Map<Long, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
+    private final Map<ProblemKey, Instant> startMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, SolverJob<ShiftSchedule, ProblemKey>> jobMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
 
     /* ===================================================================== */
     /* Public API                                                            */
@@ -91,30 +91,31 @@ public class ShiftScheduleService {
     @Transactional
     public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
         long problemId = toProblemId(month);
+        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode);
 
-        // -- ジョブが既に存在する場合はチケットのみ再発行 --
-        if (jobMap.containsKey(problemId)) {
-            Instant started = startMap.get(problemId);
+        // 既存ジョブならチケット再発行
+        if (jobMap.containsKey(key)) {
+            Instant started = startMap.get(key);
             return new SolveTicket(problemId,
                     started.toEpochMilli(),
                     started.plus(spentLimit).toEpochMilli());
         }
 
-        // -- Solver 起動 (listen 方式) --
-        SolverJob<ShiftSchedule, Long> job = solverManager.solveAndListen(
-                problemId,
+        // Solver 起動 (listen)
+        SolverJob<ShiftSchedule, ProblemKey> job = solverManager.solveAndListen(
+                key,
                 this::loadProblem,
                 bestSolution -> {
                     // フェーズ情報のみ更新
-                    updatePhase(problemId, bestSolution);
+                    updatePhase(key, bestSolution);
                     persistResult(bestSolution);
                 },
                 this::onError);
-        jobMap.put(problemId, job);
+        jobMap.put(key, job);
 
-        // -- 進捗トラッキング用メタ情報 --
+        // 進捗メタ情報
         Instant start = Instant.now();
-        startMap.put(problemId, start);
+        startMap.put(key, start);
 
         return new SolveTicket(problemId,
                 start.toEpochMilli(),
@@ -122,9 +123,10 @@ public class ShiftScheduleService {
     }
 
     /** 進捗バー用ステータス */
-    public SolveStatusDto getStatus(Long problemId) {
-        SolverStatus status = solverManager.getSolverStatus(problemId);
-        Instant began = startMap.get(problemId);
+    public SolveStatusDto getStatus(Long problemId, String storeCode) {
+        ProblemKey key = new ProblemKey(java.time.YearMonth.of((int)(problemId/100), (int)(problemId%100)), storeCode);
+        SolverStatus status = solverManager.getSolverStatus(key);
+        Instant began = startMap.get(key);
         if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
 
         long now = Instant.now().toEpochMilli();
@@ -134,19 +136,24 @@ public class ShiftScheduleService {
         int pct = (int) Math.min(100, ((now - began.toEpochMilli()) * 100) / (finish - began.toEpochMilli()));
         
         // フェーズ情報を取得
-        String currentPhase = currentPhaseMap.getOrDefault(problemId, "初期化中");
+        String currentPhase = currentPhaseMap.getOrDefault(key, "初期化中");
         
         if (status == SolverStatus.NOT_SOLVING) {
             pct = 100;
             currentPhase = "完了";
+            // 後始末
+            jobMap.remove(key);
+            startMap.remove(key);
+            currentPhaseMap.remove(key);
         }
 
         return new SolveStatusDto(status.name(), pct, finish, currentPhase);
     }
 
     /** 計算終了後の最終解をフロント用 DTO に変換して返す */
-    public List<ShiftAssignmentView> fetchResult(Long problemId) {
-        SolverJob<ShiftSchedule, Long> job = jobMap.get(problemId);
+    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode) {
+        ProblemKey key = new ProblemKey(java.time.YearMonth.of((int)(problemId/100), (int)(problemId%100)), storeCode);
+        SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(key);
         if (job == null) return List.of();
 
         try {
@@ -172,34 +179,42 @@ public class ShiftScheduleService {
     }
 
     /** 月別シフト取得 - レジアサインメント表示 */
-    public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth) {
+    public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth, String storeCode) {
         LocalDate from = anyDayInMonth.withDayOfMonth(1);
         LocalDate to   = from.plusMonths(1);  // 翌月 1 日 (半開区間)
 
-        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByMonth(from, to);
+        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByMonth(from, to)
+                .stream()
+                .filter(a -> storeCode == null || storeCode.equals(a.getStoreCode()))
+                .toList();
+
+        // 事前に従業員名を一括取得
+        Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
+                .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
 
         return assignments.stream()
                 .map(a -> new ShiftAssignmentMonthlyView(
                         toLocalDateTime(a.getStartAt()),
                         toLocalDateTime(a.getEndAt()),
                         a.getRegisterNo(),
-                        a.getEmployeeCode(), // Set employeeCode
-                        Optional.ofNullable(a.getEmployeeCode())
-                                .map(c -> {
-                                    var emp = employeeMapper.selectByPrimaryKey(c);
-                                    return emp != null ? emp.getEmployeeName() : "";
-                                })
-                                .orElse("")
+                        a.getEmployeeCode(),
+                        Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
                 ))
                 .toList();
     }
 
     /** 月別出勤時間取得 - シフトアサインメント表示 */
-    public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth) {
+    public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode) {
         LocalDate from = anyDayInMonth.withDayOfMonth(1);
         LocalDate to   = from.plusMonths(1);  // 翌月 1 日 (半開区間)
 
-        List<ShiftAssignment> shifts = shiftAssignmentMapper.selectByMonth(from, to);
+        List<ShiftAssignment> shifts = shiftAssignmentMapper.selectByMonth(from, to)
+                .stream()
+                .filter(s -> storeCode == null || storeCode.equals(s.getStoreCode()))
+                .toList();
+
+        Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
+                .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
 
         return shifts.stream()
                 .map(s -> new ShiftAssignmentMonthlyView(
@@ -207,18 +222,18 @@ public class ShiftScheduleService {
                         toLocalDateTime(s.getEndAt()),
                         null, // No register for shift assignments
                         s.getEmployeeCode(),
-                        Optional.ofNullable(s.getEmployeeCode())
-                                .map(c -> {
-                                    var emp = employeeMapper.selectByPrimaryKey(c);
-                                    return emp != null ? emp.getEmployeeName() : "";
-                                })
-                                .orElse("")
+                        Optional.ofNullable(s.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
                 ))
                 .toList();
     }
 
-    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date) {
-        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date);
+    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date, String storeCode) {
+        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date, date.plusDays(1))
+                .stream()
+                .filter(a -> storeCode == null || storeCode.equals(a.getStoreCode()))
+                .toList();
+        Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
+                .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
         return assignments.stream()
                 .map(a -> new ShiftAssignmentView(
                         Optional.ofNullable(a.getStartAt())
@@ -229,12 +244,7 @@ public class ShiftScheduleService {
                                 .orElse(""),
                         a.getRegisterNo(),
                         Optional.ofNullable(a.getEmployeeCode()).orElse(""),
-                        Optional.ofNullable(a.getEmployeeCode())
-                                .map(c -> {
-                                    var emp = employeeMapper.selectByPrimaryKey(c);
-                                    return emp != null ? emp.getEmployeeName() : "";
-                                })
-                                .orElse("")
+                        Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
                 ))
                 .toList();
     }
@@ -266,7 +276,7 @@ public class ShiftScheduleService {
             // 新しい割り当てを作成（currentRegisterが空でない場合）
             if (currentRegister != null && !currentRegister.trim().isEmpty()) {
                 RegisterAssignment assignment = new RegisterAssignment();
-                assignment.setStoreCode("569"); // TODO: 店舗コードをパラメータから取得
+                assignment.setStoreCode(request.storeCode());
                 assignment.setEmployeeCode(employeeCode);
                 assignment.setRegisterNo(Integer.parseInt(currentRegister));
                 assignment.setStartAt(startAt);
@@ -288,16 +298,16 @@ public class ShiftScheduleService {
      * Solver が最初に呼び出す問題生成関数。
      * problemId は yyyyMM の long 値で渡される。
      */
-    private ShiftSchedule loadProblem(Long problemId) {
-        LocalDate month = toMonth(problemId);
-        ShiftSchedule unsolved = repository.fetchShiftSchedule(month);
+    private ShiftSchedule loadProblem(ProblemKey key) {
+        LocalDate month = LocalDate.of(key.getMonth().getYear(), key.getMonth().getMonthValue(), 1);
+        ShiftSchedule unsolved = repository.fetchShiftSchedule(month, key.getStoreCode());
         unsolved.setEmployeeRegisterSkillList(employeeRegisterSkillMapper.selectByExample(null));
         // Repository 側で必要なフィールドをセット済みだが、問題 ID だけはここで上書きしておく
-        unsolved.setProblemId(problemId);
+        unsolved.setProblemId(toProblemId(month));
         if (unsolved.getAssignmentList() == null) {
             unsolved.setAssignmentList(new ArrayList<>());
         }
-        log.info("Loaded unsolved problem for {} ({} assignments)", month, unsolved.getAssignmentList().size());
+        log.info("Loaded unsolved problem for {} store {} ({} assignments)", month, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
         return unsolved;
     }
 
@@ -305,10 +315,21 @@ public class ShiftScheduleService {
      * 新しいベスト解が到着する度に呼び出され、DB に永続化する。
      * shift_assignmentテーブルには出勤時間を、register_assignmentテーブルにはレジアサイン時間を保存する。
      */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     private void persistResult(ShiftSchedule best) {
         // 既存データをクリア
-        registerAssignmentMapper.deleteByProblemId(best.getProblemId());
-        shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+        LocalDate month = best.getMonth();
+        LocalDate from = month.withDayOfMonth(1);
+        LocalDate to = from.plusMonths(1);
+        String store = best.getStoreCode();
+        if (store != null) {
+            registerAssignmentMapper.deleteByMonthAndStore(from, to, store);
+            shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
+        } else {
+            // 後方互換: storeCode が無い場合は従来の削除（非推奨）
+            registerAssignmentMapper.deleteByProblemId(best.getProblemId());
+            shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+        }
 
         // Group by employee and date for shift assignments (work time)
         Map<String, List<ShiftAssignmentPlanningEntity>> shiftsByEmployeeAndDate = best.getAssignmentList().stream()
@@ -390,7 +411,7 @@ public class ShiftScheduleService {
     /**
      * BestSolutionChangedEvent時に呼ばれるフェーズ更新メソッド
      */
-    private void updatePhase(Long problemId, ShiftSchedule bestSolution) {
+    private void updatePhase(ProblemKey key, ShiftSchedule bestSolution) {
         if (bestSolution == null) return;
         
         var score = bestSolution.getScore();
@@ -405,17 +426,17 @@ public class ShiftScheduleService {
                 phase = "最適化中";
             }
             
-            currentPhaseMap.put(problemId, phase);
-            log.debug("Phase update for {}: {} - Score: {}", problemId, phase, score);
+            currentPhaseMap.put(key, phase);
+            log.debug("Phase update for {}: {} - Score: {}", key, phase, score);
         }
     }
 
     /**
      * Solver 実行中に例外が発生した場合のハンドラ。
      */
-    private void onError(Long problemId, Throwable throwable) {
-        log.error("Solver failed for problem {}", problemId, throwable);
-        currentPhaseMap.remove(problemId);
+    private void onError(ProblemKey key, Throwable throwable) {
+        log.error("Solver failed for problem {}", key, throwable);
+        currentPhaseMap.remove(key);
     }
 
     /* ===================================================================== */

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record ShiftAssignmentSaveRequest(
+    String storeCode,
     LocalDate date,
     List<ShiftAssignmentChange> changes
 ) {
