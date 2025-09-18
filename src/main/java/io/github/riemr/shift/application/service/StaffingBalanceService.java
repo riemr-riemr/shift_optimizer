@@ -28,7 +28,7 @@ public class StaffingBalanceService {
 
     public List<StaffingBalanceDto> getStaffingBalance(String storeCode, LocalDate targetDate) {
         List<RegisterDemandQuarter> demands = demandMapper.selectByStoreAndDate(storeCode, targetDate);
-        List<ShiftAssignment> assignments = shiftMapper.selectByDate(targetDate);
+        List<ShiftAssignment> assignments = shiftMapper.selectByDate(targetDate, targetDate.plusDays(1));
 
         Map<LocalTime, StaffingBalanceDto> balanceMap = new LinkedHashMap<>();
 
