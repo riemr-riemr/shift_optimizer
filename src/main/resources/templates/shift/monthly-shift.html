@@ -560,7 +560,8 @@
             
             console.log('Checking status for ticket ID:', optimizationTicket.problemId);
             
-            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}`)
+            const storeCode = document.getElementById('storeCode').value;
+            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

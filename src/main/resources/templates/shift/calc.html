@@ -956,7 +956,7 @@ async function loadResult(dateString){
     
     // 並行してデータを取得
     const [shiftData, employeeData] = await Promise.all([
-      fetch(`/shift/api/calc/assignments/daily/${dateString}`).then(r=>r.json()),
+      fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r=>r.json()),
       fetch(`/shift/api/calc/employees/${storeCode}`).then(r=>r.json())
     ]);
     
@@ -1088,7 +1088,8 @@ async function loadResult(dateString){
 
 async function loadWorkModel(dateString, shiftData) {
   try {
-    const workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}`).then(r => r.json());
+    const storeCode = $('storeCode').value;
+    const workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
     const workModelGrid = $('workModelGrid');
     const workModelCard = $('workModelCard');
     
