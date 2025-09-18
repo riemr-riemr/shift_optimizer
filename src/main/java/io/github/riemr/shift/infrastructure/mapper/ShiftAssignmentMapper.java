@@ -104,7 +104,8 @@ public interface ShiftAssignmentMapper {
     List<ShiftAssignment> selectByMonth(@Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
-    List<ShiftAssignment> selectByDate(@Param("date") LocalDate date);
+    List<ShiftAssignment> selectByDate(@Param("from") LocalDate from,
+            @Param("to") LocalDate to);
 
     /** 全シフト割り当てを取得 */
     List<ShiftAssignment> selectAll();
@@ -122,4 +123,8 @@ public interface ShiftAssignmentMapper {
      * @return 影響行数 (INSERT=1 / UPDATE=1 / 失敗=0)
      */
     int upsert(ShiftAssignment entity);
+
+    int deleteByMonthAndStore(@Param("from") LocalDate from,
+                              @Param("to") LocalDate to,
+                              @Param("storeCode") String storeCode);
 }

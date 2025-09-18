@@ -249,7 +249,8 @@
     select 
     <include refid="Base_Column_List" />
     from public.register_assignment
-    where DATE(start_at) = #{date}
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
     order by start_at
   </select>
 
@@ -258,5 +259,12 @@
     where employee_code = #{employeeCode}
       and start_at = #{startAt}
       and end_at = #{endAt}
+  </delete>
+
+  <delete id="deleteByMonthAndStore">
+    delete from public.register_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+      and store_code = #{storeCode}
   </delete>
 </mapper>

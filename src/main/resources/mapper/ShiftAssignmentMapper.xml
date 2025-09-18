@@ -234,7 +234,8 @@
     select 
     <include refid="Base_Column_List" />
     from public.shift_assignment
-    where DATE(start_at) = #{date}
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
     order by start_at
   </select>
 
@@ -254,6 +255,13 @@
       end_at = excluded.end_at,
       created_by = excluded.created_by
   </insert>
+
+  <delete id="deleteByMonthAndStore">
+    delete from public.shift_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+      and store_code = #{storeCode}
+  </delete>
 
   <select id="selectAll" resultMap="BaseResultMap">
     SELECT

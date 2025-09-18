@@ -37,9 +37,14 @@ public interface RegisterAssignmentMapper {
 
     List<RegisterAssignment> selectByMonth(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
-    List<RegisterAssignment> selectByDate(@Param("date") LocalDate date);
+    List<RegisterAssignment> selectByDate(@Param("from") LocalDate from,
+                                          @Param("to") LocalDate to);
     
     int deleteByEmployeeCodeAndTimeRange(@Param("employeeCode") String employeeCode, 
                                        @Param("startAt") Date startAt, 
                                        @Param("endAt") Date endAt);
+
+    int deleteByMonthAndStore(@Param("from") LocalDate from,
+                               @Param("to") LocalDate to,
+                               @Param("storeCode") String storeCode);
 }
