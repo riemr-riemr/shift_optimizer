@@ -229,7 +229,8 @@ public class EmployeeRequestController {
                 EmployeeRequest existingRequest = employeeRequestMapper.selectByEmployeeAndDate(
                     employeeCode, requestDate);
                 
-                if ("off".equals(state)) {
+                // state: 'on' = 希望休あり, 'off' = 希望休なし
+                if ("on".equals(state)) {
                     // 希望休を追加
                     if (existingRequest == null) {
                         Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
@@ -245,7 +246,7 @@ public class EmployeeRequestController {
                             employeeRequestMapper.insert(newRequest);
                         }
                     }
-                } else {
+                } else if ("off".equals(state)) {
                     // 希望休を削除
                     if (existingRequest != null) {
                         employeeRequestMapper.deleteById(existingRequest.getRequestId());

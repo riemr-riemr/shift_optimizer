@@ -433,7 +433,12 @@
             const currentState = pendingChanges.get(key) || originalState;
             const newState = currentState === 'on' ? 'off' : 'on';
             
-            pendingChanges.set(key, newState);
+            // 元に戻った場合は変更リストから削除
+            if (newState === originalState) {
+                pendingChanges.delete(key);
+            } else {
+                pendingChanges.set(key, newState);
+            }
             updateCellDisplay(dayCell, newState, originalState);
             updateSaveButton();
         }
