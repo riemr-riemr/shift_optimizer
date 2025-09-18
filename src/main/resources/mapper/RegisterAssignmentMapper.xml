@@ -252,4 +252,11 @@
     where DATE(start_at) = #{date}
     order by start_at
   </select>
+
+  <delete id="deleteByEmployeeCodeAndTimeRange">
+    delete from public.register_assignment
+    where employee_code = #{employeeCode}
+      and start_at = #{startAt}
+      and end_at = #{endAt}
+  </delete>
 </mapper>

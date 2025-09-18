@@ -3,6 +3,7 @@ package io.github.riemr.shift.infrastructure.mapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmentExample;
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -37,4 +38,8 @@ public interface RegisterAssignmentMapper {
     List<RegisterAssignment> selectByMonth(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
     List<RegisterAssignment> selectByDate(@Param("date") LocalDate date);
+    
+    int deleteByEmployeeCodeAndTimeRange(@Param("employeeCode") String employeeCode, 
+                                       @Param("startAt") Date startAt, 
+                                       @Param("endAt") Date endAt);
 }

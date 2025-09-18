@@ -15,6 +15,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQua
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
+import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -107,6 +108,17 @@ public class ShiftCalcController {
     @ResponseBody
     public List<Employee> getEmployeesByStore(@PathVariable("storeCode") String storeCode) {
         return employeeMapper.selectByStoreCode(storeCode);
+    }
+
+    @PostMapping("/api/calc/assignments/save")
+    @ResponseBody
+    public Map<String, Object> saveShiftAssignments(@RequestBody ShiftAssignmentSaveRequest request) {
+        try {
+            service.saveShiftAssignmentChanges(request);
+            return Map.of("success", true, "message", "変更が保存されました");
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "保存中にエラーが発生しました: " + e.getMessage());
+        }
     }
 
     @GetMapping

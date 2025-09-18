@@ -67,7 +67,7 @@
         <h5 class="mb-0">
           <i class="bi bi-bar-chart me-2"></i>作業モデル（必要レジ台数）
         </h5>
-        <button type="button" id="scrollSyncBtn" class="btn btn-outline-primary btn-sm">
+        <button type="button" id="scrollSyncBtn" class="btn btn-primary btn-sm">
           <i class="bi bi-arrow-down-up"></i> スクロール同期: ON
         </button>
       </div>
@@ -88,11 +88,29 @@
         <h5 class="mb-0">
           <i class="bi bi-table me-2"></i>シフト割り当て結果
         </h5>
-        <div class="text-muted small" id="displayDate">
-          表示日を選択してください
+        <div class="d-flex align-items-center gap-3">
+          <div class="text-muted small" id="displayDate">
+            表示日を選択してください
+          </div>
+          <button id="saveChangesBtn" class="btn btn-success btn-sm" style="display: none;">
+            <i class="bi bi-floppy"></i> 変更を保存
+          </button>
+          <button id="cancelChangesBtn" class="btn btn-secondary btn-sm" style="display: none;">
+            <i class="bi bi-x-circle"></i> キャンセル
+          </button>
         </div>
       </div>
       <div class="card-body p-0">
+        <div class="alert alert-info m-3" id="dragDropHelp">
+          <div class="d-flex align-items-center">
+            <i class="bi bi-info-circle me-2"></i>
+            <div>
+              <strong>使い方:</strong> 
+              <strong>ドラッグ:</strong> 割り当て済みセルを他の従業員の同じ時間にドラッグして移動 |
+              <strong>右クリック:</strong> セルを右クリックで割り当て・変更・解除メニュー
+            </div>
+          </div>
+        </div>
         <div id="noDataMessage" class="text-center py-5 text-muted">
           <i class="bi bi-calendar-x display-4 d-block mb-3"></i>
           <h6>シフトデータがありません</h6>
@@ -162,6 +180,116 @@
     font-weight: 600;
   }
   
+  .grid-cell.assigned[draggable="true"] {
+    cursor: grab;
+    position: relative;
+  }
+  
+  .grid-cell.assigned[draggable="true"]:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+  }
+  
+  .grid-cell.assigned.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: rotate(3deg) scale(0.95);
+    z-index: 1000;
+  }
+  
+  .grid-cell.assigned[draggable="true"]:hover::after {
+    content: "\\f47a"; /* Bootstrap grip icon */
+    font-family: "Bootstrap Icons";
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.6rem;
+    color: rgba(255,255,255,0.7);
+  }
+  
+  .drop-zone {
+    transition: all 0.2s ease;
+  }
+  
+  .drop-zone.drag-over {
+    background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
+    border: 2px dashed #4caf50;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+  }
+  
+  .drop-zone.modified {
+    border: 2px solid #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+  }
+  
+  .register-selector {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border: 2px solid #007bff;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: none;
+  }
+  
+  .register-selector.show {
+    display: block;
+  }
+  
+  .context-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1500;
+    min-width: 150px;
+    padding: 4px 0;
+    display: none;
+  }
+  
+  .context-menu.show {
+    display: block;
+  }
+  
+  .context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .context-menu-item:hover {
+    background: #f8f9fa;
+    color: #0d6efd;
+  }
+  
+  .context-menu-item.danger {
+    color: #dc3545;
+  }
+  
+  .context-menu-item.danger:hover {
+    background: #f8f9fa;
+    color: #dc3545;
+  }
+  
+  .context-menu-divider {
+    height: 1px;
+    background: #dee2e6;
+    margin: 4px 0;
+  }
+  
   .employee-name {
     font-size: 0.8rem;
     font-weight: 600;
@@ -192,6 +320,18 @@
     border: 1px solid #1e7e34;
   }
   
+  .work-model-cell.register-needed.has-employee {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    border: 1px solid #0056b3;
+    color: white;
+    font-weight: 600;
+    font-size: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  
   .work-model-cell-empty {
     background: transparent;
     border: none;
@@ -211,6 +351,11 @@
 <script>
 const $=id=>document.getElementById(id);
 
+// 編集状態管理
+let isEditing = false;
+let hasChanges = false;
+let changes = new Map(); // key: employeeCode_time, value: {original, current}
+
 // Function to generate a consistent color based on employee name
 function getEmployeeColorClass(employeeName) {
   let hash = 0;
@@ -218,6 +363,496 @@ function getEmployeeColorClass(employeeName) {
     hash = employeeName.charCodeAt(i) + ((hash << 5) - hash);
   }
   return `color-${Math.abs(hash) % 5}`; // Use 5 distinct colors
+}
+
+// ドラッグアンドドロップと右クリックメニュー処理
+let draggedAssignment = null;
+let registerSelector = null;
+let contextMenu = null;
+
+// 割り当てセルのドラッグ処理
+function handleAssignmentDragStart(event) {
+  const cell = event.target;
+  draggedAssignment = {
+    sourceCell: cell,
+    employeeCode: cell.dataset.employee,
+    employeeName: cell.dataset.employeeName,
+    time: cell.dataset.time,
+    registerNo: cell.dataset.currentRegister,
+    assignedEmployeeName: cell.dataset.assignedEmployeeName
+  };
+  
+  cell.classList.add('dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', '');
+}
+
+function handleAssignmentDragEnd(event) {
+  event.target.classList.remove('dragging');
+  draggedAssignment = null;
+  
+  // 全てのdrag-overクラスを削除
+  document.querySelectorAll('.drag-over').forEach(cell => {
+    cell.classList.remove('drag-over');
+  });
+  
+  hideContextMenu();
+}
+
+function handleDragOver(event) {
+  if (!draggedAssignment) return;
+  
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  
+  const cell = event.currentTarget;
+  const targetEmployee = cell.dataset.employee;
+  const sourceEmployee = draggedAssignment.employeeCode;
+  
+  // 異なる従業員のセルのみドロップ可能
+  if (targetEmployee !== sourceEmployee) {
+    cell.classList.add('drag-over');
+  }
+}
+
+function handleDragLeave(event) {
+  const cell = event.currentTarget;
+  cell.classList.remove('drag-over');
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  
+  if (!draggedAssignment) return;
+  
+  const cell = event.currentTarget;
+  cell.classList.remove('drag-over');
+  
+  const targetEmployee = cell.dataset.employee;
+  const sourceEmployee = draggedAssignment.employeeCode;
+  const targetTime = draggedAssignment.time;
+  
+  // 異なる従業員への移動のみ許可
+  if (targetEmployee !== sourceEmployee) {
+    moveAssignmentToEmployee(draggedAssignment, targetEmployee, targetTime);
+  }
+}
+
+function showRegisterSelectorForCell(cell) {
+  hideRegisterSelector();
+  
+  const currentRegister = cell.dataset.currentRegister || '';
+  
+  // レジスターセレクターを作成
+  registerSelector = document.createElement('div');
+  registerSelector.className = 'register-selector show';
+  registerSelector.innerHTML = `
+    <div class="mb-2"><strong>レジを選択:</strong></div>
+    <div class="btn-group-vertical" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-register="">未割当</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-register="1">レジ1</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-register="2">レジ2</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-register="3">レジ3</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-register="4">レジ4</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-register="5">レジ5</button>
+    </div>
+  `;
+  
+  // 現在のレジが選択されている場合はハイライト
+  const currentButton = registerSelector.querySelector(`[data-register="${currentRegister}"]`);
+  if (currentButton) {
+    currentButton.classList.remove('btn-outline-primary', 'btn-outline-secondary');
+    currentButton.classList.add('btn-primary');
+  }
+  
+  // イベントリスナーを追加
+  registerSelector.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const registerValue = e.target.dataset.register;
+      assignRegisterToCell(cell, registerValue);
+      hideRegisterSelector();
+    });
+  });
+  
+  // セルに配置
+  cell.style.position = 'relative';
+  cell.appendChild(registerSelector);
+  
+  // 外側クリックで閉じる
+  setTimeout(() => {
+    document.addEventListener('click', closeRegisterSelectorOnOutsideClick);
+  }, 10);
+}
+
+function hideRegisterSelector() {
+  if (registerSelector) {
+    registerSelector.remove();
+    registerSelector = null;
+    document.removeEventListener('click', closeRegisterSelectorOnOutsideClick);
+  }
+}
+
+function closeRegisterSelectorOnOutsideClick(event) {
+  if (registerSelector && !registerSelector.contains(event.target)) {
+    hideRegisterSelector();
+  }
+}
+
+function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
+  const employeeCode = cell.dataset.employee;
+  const time = cell.dataset.time;
+  const originalValue = cell.dataset.originalRegister || '';
+  const key = `${employeeCode}_${time}`;
+  
+  if (newValue !== originalValue) {
+    // 変更があった場合
+    changes.set(key, {
+      employeeCode,
+      time,
+      original: originalValue,
+      current: newValue
+    });
+    
+    cell.dataset.currentRegister = newValue;
+    cell.classList.add('modified');
+    
+    if (newValue) {
+      cell.classList.add('assigned');
+      const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
+      const colorClass = getEmployeeColorClass(employeeNameForColor);
+      cell.classList.add(colorClass);
+      cell.textContent = `R${newValue}`;
+      cell.dataset.assignedEmployeeName = employeeNameForColor;
+      
+      // ドラッグ可能にする（重複イベント防止）
+      cell.draggable = true;
+      cell.removeEventListener('dragstart', handleAssignmentDragStart);
+      cell.removeEventListener('dragend', handleAssignmentDragEnd);
+      cell.addEventListener('dragstart', handleAssignmentDragStart);
+      cell.addEventListener('dragend', handleAssignmentDragEnd);
+    } else {
+      cell.classList.remove('assigned');
+      cell.textContent = '';
+      cell.classList.remove('color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+      cell.draggable = false;
+      cell.removeEventListener('dragstart', handleAssignmentDragStart);
+      cell.removeEventListener('dragend', handleAssignmentDragEnd);
+    }
+    
+    hasChanges = true;
+    showSaveButtons();
+    
+    // 作業モデルを更新
+    updateWorkModel();
+  } else {
+    // 変更なし
+    changes.delete(key);
+    cell.classList.remove('modified');
+    
+    if (changes.size === 0) {
+      hasChanges = false;
+      hideSaveButtons();
+    }
+  }
+}
+
+// 右クリックメニュー処理
+function handleRightClick(event) {
+  event.preventDefault();
+  hideContextMenu();
+  
+  const cell = event.currentTarget;
+  const isAssigned = cell.classList.contains('assigned');
+  
+  showContextMenu(event.pageX, event.pageY, cell, isAssigned);
+}
+
+function showContextMenu(x, y, cell, isAssigned) {
+  contextMenu = document.createElement('div');
+  contextMenu.className = 'context-menu show';
+  
+  if (isAssigned) {
+    // 割り当て済みセル用メニュー
+    contextMenu.innerHTML = `
+      <button class="context-menu-item" data-action="change-register">
+        <i class="bi bi-gear"></i> レジ変更
+      </button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item danger" data-action="remove-assignment">
+        <i class="bi bi-trash"></i> 割り当て解除
+      </button>
+    `;
+  } else {
+    // 未割り当てセル用メニュー
+    const employeeName = cell.dataset.employeeName;
+    contextMenu.innerHTML = `
+      <button class="context-menu-item" data-action="assign-register">
+        <i class="bi bi-plus-circle"></i> ${employeeName}に割り当て
+      </button>
+    `;
+  }
+  
+  // イベントリスナーを追加
+  contextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      const action = e.target.closest('.context-menu-item').dataset.action;
+      handleContextMenuAction(action, cell);
+      hideContextMenu();
+    });
+  });
+  
+  // 位置を調整
+  contextMenu.style.left = x + 'px';
+  contextMenu.style.top = y + 'px';
+  
+  document.body.appendChild(contextMenu);
+  
+  // 外側クリックで閉じる
+  setTimeout(() => {
+    document.addEventListener('click', closeContextMenuOnOutsideClick);
+  }, 10);
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.remove();
+    contextMenu = null;
+    document.removeEventListener('click', closeContextMenuOnOutsideClick);
+  }
+}
+
+function closeContextMenuOnOutsideClick(event) {
+  if (contextMenu && !contextMenu.contains(event.target)) {
+    hideContextMenu();
+  }
+}
+
+function handleContextMenuAction(action, cell) {
+  switch (action) {
+    case 'change-register':
+      showRegisterSelectorForCell(cell);
+      break;
+    case 'remove-assignment':
+      removeAssignment(cell);
+      break;
+    case 'assign-register':
+      showRegisterSelectorForCell(cell);
+      break;
+  }
+}
+
+// 割り当て移動処理
+function moveAssignmentToEmployee(assignment, targetEmployeeCode, targetTime) {
+  const sourceCell = assignment.sourceCell;
+  const targetCell = document.querySelector(`.grid-cell[data-employee="${targetEmployeeCode}"][data-time="${targetTime}"]`);
+  
+  if (!targetCell) return;
+  
+  // ターゲットセルが既に割り当て済みの場合は確認
+  if (targetCell.classList.contains('assigned')) {
+    const targetEmployeeName = targetCell.dataset.employeeName;
+    const sourceEmployeeName = assignment.assignedEmployeeName;
+    if (!confirm(`${targetEmployeeName}の${targetTime}は既に割り当てられています。${sourceEmployeeName}の割り当てで上書きしますか？`)) {
+      return;
+    }
+  }
+  
+  // 元のセルから割り当てを削除（変更を追跡して保存時に削除される）
+  const sourceEmployeeCode = sourceCell.dataset.employee;
+  const sourceTime = sourceCell.dataset.time;
+  const sourceOriginalValue = sourceCell.dataset.originalRegister || '';
+  const sourceKey = `${sourceEmployeeCode}_${sourceTime}`;
+  
+  // 元のセルの削除を変更として追跡
+  changes.set(sourceKey, {
+    employeeCode: sourceEmployeeCode,
+    time: sourceTime,
+    original: sourceOriginalValue,
+    current: ''
+  });
+  
+  // 元のセルの表示をクリア
+  sourceCell.classList.remove('assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+  sourceCell.classList.add('modified');
+  sourceCell.textContent = '';
+  sourceCell.dataset.currentRegister = '';
+  sourceCell.draggable = false;
+  sourceCell.removeEventListener('dragstart', handleAssignmentDragStart);
+  sourceCell.removeEventListener('dragend', handleAssignmentDragEnd);
+  delete sourceCell.dataset.assignedEmployeeName;
+  
+  // 新しいセルに割り当てを追加
+  assignRegisterToCell(targetCell, assignment.registerNo, assignment.assignedEmployeeName);
+  
+  hasChanges = true;
+  showSaveButtons();
+}
+
+function removeAssignment(cell) {
+  const employeeCode = cell.dataset.employee;
+  const time = cell.dataset.time;
+  const originalValue = cell.dataset.originalRegister || '';
+  const currentValue = cell.dataset.currentRegister || '';
+  const key = `${employeeCode}_${time}`;
+  
+  // 既存の変更を確認
+  const existingChange = changes.get(key);
+  
+  if (originalValue) {
+    // 元々割り当てがあった場合は削除として記録
+    changes.set(key, {
+      employeeCode,
+      time,
+      original: originalValue,
+      current: ''
+    });
+    hasChanges = true;
+  } else if (existingChange && existingChange.original === '') {
+    // 新規作成したものを削除する場合は変更履歴から削除
+    changes.delete(key);
+    hasChanges = changes.size > 0;
+  } else if (existingChange) {
+    // その他の変更がある場合は削除として記録
+    changes.set(key, {
+      employeeCode,
+      time,
+      original: existingChange.original,
+      current: ''
+    });
+    hasChanges = true;
+  }
+  
+  // セルから割り当てを削除
+  cell.classList.remove('assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+  
+  if (hasChanges) {
+    cell.classList.add('modified');
+    showSaveButtons();
+  } else {
+    cell.classList.remove('modified');
+    hideSaveButtons();
+  }
+  
+  // 作業モデルを更新
+  updateWorkModel();
+  
+  cell.textContent = '';
+  cell.dataset.currentRegister = '';
+  cell.draggable = false;
+  cell.removeEventListener('dragstart', handleAssignmentDragStart);
+  cell.removeEventListener('dragend', handleAssignmentDragEnd);
+  delete cell.dataset.assignedEmployeeName;
+}
+
+
+function showSaveButtons() {
+  $('saveChangesBtn').style.display = 'inline-block';
+  $('cancelChangesBtn').style.display = 'inline-block';
+}
+
+function hideSaveButtons() {
+  $('saveChangesBtn').style.display = 'none';
+  $('cancelChangesBtn').style.display = 'none';
+}
+
+// 保存・キャンセルボタンの処理
+$('saveChangesBtn').onclick = saveChanges;
+$('cancelChangesBtn').onclick = cancelChanges;
+
+async function saveChanges() {
+  if (!hasChanges) return;
+  
+  // 変更データを準備
+  const changesArray = Array.from(changes.values());
+  const date = $('date').value;
+  
+  try {
+    $('saveChangesBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>保存中...';
+    $('saveChangesBtn').disabled = true;
+    
+    const response = await fetch('/shift/api/calc/assignments/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        date: date,
+        changes: changesArray
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`保存に失敗しました: ${response.statusText}`);
+    }
+    
+    // 成功時の処理
+    changes.clear();
+    hasChanges = false;
+    hideSaveButtons();
+    
+    // 変更マークを削除
+    document.querySelectorAll('.modified').forEach(cell => {
+      cell.classList.remove('modified');
+      cell.dataset.originalRegister = cell.dataset.currentRegister || '';
+    });
+    
+    alert('変更が保存されました。');
+    
+  } catch (error) {
+    console.error('Save error:', error);
+    alert('保存中にエラーが発生しました: ' + error.message);
+  } finally {
+    $('saveChangesBtn').innerHTML = '<i class="bi bi-floppy"></i> 変更を保存';
+    $('saveChangesBtn').disabled = false;
+  }
+}
+
+function cancelChanges() {
+  if (!hasChanges) return;
+  
+  if (confirm('変更をキャンセルしますか？')) {
+    // 全ての変更を元に戻す
+    changes.forEach((change, key) => {
+      const [employeeCode, time] = key.split('_');
+      const cell = document.querySelector(`.grid-cell[data-employee="${employeeCode}"][data-time="${time}"]`);
+      if (cell) {
+        cell.classList.remove('modified');
+        cell.dataset.currentRegister = change.original;
+        
+        // 全ての割り当て関連クラスとイベントを削除
+        cell.classList.remove('assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+        cell.draggable = false;
+        cell.removeEventListener('dragstart', handleAssignmentDragStart);
+        cell.removeEventListener('dragend', handleAssignmentDragEnd);
+        
+        if (change.original) {
+          // 元の割り当てを復元
+          cell.classList.add('assigned');
+          cell.textContent = `R${change.original}`;
+          
+          // 元の従業員名を使って色を復元
+          const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
+          const colorClass = getEmployeeColorClass(originalEmployeeName);
+          cell.classList.add(colorClass);
+          
+          // ドラッグ機能を復元（重複イベント防止）
+          cell.draggable = true;
+          cell.removeEventListener('dragstart', handleAssignmentDragStart);
+          cell.removeEventListener('dragend', handleAssignmentDragEnd);
+          cell.addEventListener('dragstart', handleAssignmentDragStart);
+          cell.addEventListener('dragend', handleAssignmentDragEnd);
+        } else {
+          // 元が未割り当ての場合
+          cell.textContent = '';
+          delete cell.dataset.assignedEmployeeName;
+        }
+      }
+    });
+    
+    changes.clear();
+    hasChanges = false;
+    hideSaveButtons();
+  }
 }
 
 // 今日ボタンの処理
@@ -245,8 +880,8 @@ function setupScrollSync() {
       '<i class="bi bi-arrow-down-up"></i> スクロール同期: ON' : 
       '<i class="bi bi-arrow-down-up"></i> スクロール同期: OFF';
     syncBtn.className = scrollSyncEnabled ? 
-      'btn btn-outline-primary btn-sm' : 
-      'btn btn-outline-secondary btn-sm';
+      'btn btn-primary btn-sm' : 
+      'btn btn-outline-primary btn-sm';
   };
   
   // 作業モデルのスクロールイベント
@@ -337,12 +972,14 @@ async function loadResult(dateString){
     if (employees && employees.length > 0) {
       noDataMessage.style.display = 'none';
       tableContainer.style.display = 'block';
+      $('dragDropHelp').style.display = 'block';
       
       // 作業モデルデータも同時に取得・表示
-      loadWorkModel(dateString);
+      loadWorkModel(dateString, data);
     } else {
       noDataMessage.style.display = 'block';
       tableContainer.style.display = 'none';
+      $('dragDropHelp').style.display = 'none';
       $('workModelCard').style.display = 'none';
       return;
     }
@@ -350,6 +987,7 @@ async function loadResult(dateString){
     console.error('データ取得エラー:', error);
     $('noDataMessage').style.display = 'block';
     $('tableContainer').style.display = 'none';
+    $('dragDropHelp').style.display = 'none';
     $('workModelCard').style.display = 'none';
     return;
   }
@@ -384,14 +1022,24 @@ async function loadResult(dateString){
       <div class="employee-name">${employee.employeeName}</div>
       <div class="employee-code">${employee.employeeCode}</div>
     `;
+    
     shiftGrid.appendChild(employeeRowHeader);
 
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 15) {
         const cell = document.createElement('div');
-        cell.className = 'grid-cell employee-shift-cell';
+        cell.className = 'grid-cell employee-shift-cell drop-zone';
         cell.dataset.employee = employee.employeeCode;
+        cell.dataset.employeeName = employee.employeeName;
         cell.dataset.time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        cell.dataset.originalRegister = '';
+        
+        // イベントを追加
+        cell.addEventListener('dragover', handleDragOver);
+        cell.addEventListener('drop', handleDrop);
+        cell.addEventListener('dragleave', handleDragLeave);
+        cell.addEventListener('contextmenu', handleRightClick);
+        
         shiftGrid.appendChild(cell);
       }
     }
@@ -415,6 +1063,19 @@ async function loadResult(dateString){
         if (cell) {
           cell.classList.add('assigned', colorClass);
           cell.textContent = `R${assignment.registerNo}`;
+          cell.dataset.originalRegister = assignment.registerNo;
+          cell.dataset.currentRegister = assignment.registerNo;
+          
+          // 従業員名を正しく設定（APIからの名前またはセルの従業員名を使用）
+          const employeeName = assignment.employeeName || cell.dataset.employeeName;
+          cell.dataset.assignedEmployeeName = employeeName;
+          
+          // 割り当てセルをドラッグ可能にする（重複イベント防止）
+          cell.draggable = true;
+          cell.removeEventListener('dragstart', handleAssignmentDragStart);
+          cell.removeEventListener('dragend', handleAssignmentDragEnd);
+          cell.addEventListener('dragstart', handleAssignmentDragStart);
+          cell.addEventListener('dragend', handleAssignmentDragEnd);
         }
         currentTime.setMinutes(currentTime.getMinutes() + 15);
       }
@@ -425,7 +1086,7 @@ async function loadResult(dateString){
   setupScrollSync();
 }
 
-async function loadWorkModel(dateString) {
+async function loadWorkModel(dateString, shiftData) {
   try {
     const workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}`).then(r => r.json());
     const workModelGrid = $('workModelGrid');
@@ -433,6 +1094,7 @@ async function loadWorkModel(dateString) {
     
     workModelGrid.innerHTML = ''; // Clear previous content
     console.log('Work model data:', workModelData); // デバッグ用
+    console.log('Shift data for work model:', shiftData); // デバッグ用
     
     if (workModelData && workModelData.length > 0) {
       workModelCard.style.display = 'block';
@@ -479,6 +1141,27 @@ async function loadWorkModel(dateString) {
           demandByTime.set(`${h}_${m}`, demandCount);
         }
       }
+      
+      // シフトデータから時間・レジごとの従業員マッピングを作成
+      const employeeByTimeRegister = new Map();
+      if (shiftData && shiftData.length > 0) {
+        shiftData.forEach(assignment => {
+          const start = new Date(assignment.startAt);
+          const end = new Date(assignment.endAt);
+          const employeeName = assignment.employeeName || assignment.employeeCode;
+          const registerNo = assignment.registerNo;
+          
+          // 15分間隔でマッピングを作成
+          let currentTime = new Date(start);
+          while (currentTime < end) {
+            const hour = currentTime.getHours();
+            const minute = currentTime.getMinutes();
+            const key = `${hour}_${minute}_${registerNo}`;
+            employeeByTimeRegister.set(key, employeeName);
+            currentTime.setMinutes(currentTime.getMinutes() + 15);
+          }
+        });
+      }
 
       // レジ番号の行を作成（レジ1からmaxDemandまで）
       for (let registerNo = 1; registerNo <= maxDemand; registerNo++) {
@@ -495,6 +1178,18 @@ async function loadWorkModel(dateString) {
             if (registerNo <= demandCount) {
               const cell = document.createElement('div');
               cell.className = 'grid-cell work-model-cell register-needed';
+              
+              // 割り当てられた従業員名を取得
+              const employeeKey = `${h}_${m}_${registerNo}`;
+              const employeeName = employeeByTimeRegister.get(employeeKey);
+              
+              if (employeeName) {
+                // 従業員名の頭2文字を表示
+                const shortName = employeeName.length >= 2 ? employeeName.substring(0, 2) : employeeName;
+                cell.textContent = shortName;
+                cell.classList.add('has-employee');
+              }
+              
               workModelGrid.appendChild(cell);
             } else {
               // 不要な場合は空のdivを作成（グリッドレイアウト維持のため）
@@ -514,6 +1209,81 @@ async function loadWorkModel(dateString) {
   } catch (error) {
     console.error('作業モデルデータ取得エラー:', error);
     $('workModelCard').style.display = 'none';
+  }
+}
+
+// 現在の割り当て状況で作業モデルを更新
+function updateWorkModel() {
+  // 現在のシフトデータを収集
+  const currentShiftData = [];
+  const shiftCells = document.querySelectorAll('.grid-cell.assigned[data-current-register]');
+  
+  shiftCells.forEach(cell => {
+    const employeeCode = cell.dataset.employee;
+    const employeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
+    const time = cell.dataset.time;
+    const registerNo = parseInt(cell.dataset.currentRegister);
+    
+    if (registerNo && time) {
+      const [hour, minute] = time.split(':').map(Number);
+      const startAt = new Date();
+      startAt.setHours(hour, minute, 0, 0);
+      const endAt = new Date(startAt);
+      endAt.setMinutes(endAt.getMinutes() + 15);
+      
+      currentShiftData.push({
+        employeeCode,
+        employeeName,
+        registerNo,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString()
+      });
+    }
+  });
+  
+  // 作業モデルのセルを更新
+  const workModelCells = document.querySelectorAll('.work-model-cell.register-needed');
+  
+  // 従業員マッピングを再作成
+  const employeeByTimeRegister = new Map();
+  currentShiftData.forEach(assignment => {
+    const start = new Date(assignment.startAt);
+    const hour = start.getHours();
+    const minute = start.getMinutes();
+    const key = `${hour}_${minute}_${assignment.registerNo}`;
+    employeeByTimeRegister.set(key, assignment.employeeName);
+  });
+  
+  // 各セルを更新
+  let cellIndex = 0;
+  const workModelGrid = $('workModelGrid');
+  if (!workModelGrid) return;
+  
+  // 作業モデルのグリッド構造を仮定してセルを更新
+  const workModelData = document.querySelectorAll('.work-model-cell.register-needed');
+  
+  // 現在表示されている作業モデルを基に更新
+  for (let registerNo = 1; registerNo <= 10; registerNo++) { // 最大レジ数を仮定
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 15) {
+        const cell = workModelData[cellIndex];
+        if (cell) {
+          const employeeKey = `${h}_${m}_${registerNo}`;
+          const employeeName = employeeByTimeRegister.get(employeeKey);
+          
+          cell.classList.remove('has-employee');
+          cell.textContent = '';
+          
+          if (employeeName) {
+            const shortName = employeeName.length >= 2 ? employeeName.substring(0, 2) : employeeName;
+            cell.textContent = shortName;
+            cell.classList.add('has-employee');
+          }
+          
+          cellIndex++;
+        }
+      }
+    }
   }
 }
 </script>

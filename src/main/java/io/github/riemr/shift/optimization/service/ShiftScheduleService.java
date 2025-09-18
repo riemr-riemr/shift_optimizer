@@ -29,6 +29,7 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentMonthlyView;
 import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
+import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
@@ -236,6 +237,47 @@ public class ShiftScheduleService {
                                 .orElse("")
                 ))
                 .toList();
+    }
+
+    @Transactional
+    public void saveShiftAssignmentChanges(ShiftAssignmentSaveRequest request) {
+        LocalDate date = request.date();
+        
+        for (var change : request.changes()) {
+            String employeeCode = change.employeeCode();
+            String timeStr = change.time(); // "HH:mm" format
+            String currentRegister = change.current();
+            
+            // 時刻文字列をLocalTimeに変換
+            String[] timeParts = timeStr.split(":");
+            int hour = Integer.parseInt(timeParts[0]);
+            int minute = Integer.parseInt(timeParts[1]);
+            
+            // 15分スロットの開始・終了時間を計算
+            LocalDateTime startDateTime = date.atTime(hour, minute);
+            LocalDateTime endDateTime = startDateTime.plusMinutes(15);
+            
+            Date startAt = Date.from(startDateTime.atZone(ZoneId.systemDefault()).toInstant());
+            Date endAt = Date.from(endDateTime.atZone(ZoneId.systemDefault()).toInstant());
+            
+            // 既存の割り当てを削除
+            registerAssignmentMapper.deleteByEmployeeCodeAndTimeRange(employeeCode, startAt, endAt);
+            
+            // 新しい割り当てを作成（currentRegisterが空でない場合）
+            if (currentRegister != null && !currentRegister.trim().isEmpty()) {
+                RegisterAssignment assignment = new RegisterAssignment();
+                assignment.setStoreCode("569"); // TODO: 店舗コードをパラメータから取得
+                assignment.setEmployeeCode(employeeCode);
+                assignment.setRegisterNo(Integer.parseInt(currentRegister));
+                assignment.setStartAt(startAt);
+                assignment.setEndAt(endAt);
+                assignment.setCreatedBy("manual_edit");
+                
+                registerAssignmentMapper.insert(assignment);
+            }
+        }
+        
+        log.info("Saved {} shift assignment changes for date {}", request.changes().size(), date);
     }
 
     /* ===================================================================== */
