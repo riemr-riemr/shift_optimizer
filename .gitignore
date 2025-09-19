@@ -34,6 +34,8 @@ build/
 
 ### Claude ###
 CLAUDE.md
+AGENTS.md
+.mcp.json
 
 ### Log ###
 app.log
