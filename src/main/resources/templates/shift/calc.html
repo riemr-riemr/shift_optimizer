@@ -59,6 +59,26 @@
   </div>
 </div>
 
+<!-- Hard Constraint Violation Alert -->
+<div class="row g-4" id="constraintAlertContainer" style="display: none;">
+  <div class="col-12">
+    <div class="alert alert-danger" role="alert">
+      <div class="d-flex align-items-start">
+        <i class="bi bi-exclamation-triangle-fill me-3" style="font-size: 1.5rem; margin-top: 0.125rem;"></i>
+        <div class="flex-grow-1">
+          <h5 class="alert-heading mb-2">⚠️ ハード制約違反が検出されました</h5>
+          <div id="constraintViolationMessages"></div>
+          <hr class="my-3">
+          <p class="mb-0">
+            <strong>対処方法:</strong> 上記の制約違反を解決してから再度最適化を実行してください。
+            制約違反がある状態では結果を保存できません。
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Work Model Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">

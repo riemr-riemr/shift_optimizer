@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,6 +142,28 @@ public class ShiftScheduleService {
         if (status == SolverStatus.NOT_SOLVING) {
             pct = 100;
             currentPhase = "完了";
+            
+            // ハード制約違反チェック
+            SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(key);
+            if (job != null) {
+                try {
+                    ShiftSchedule finalSolution = job.getFinalBestSolution();
+                    if (finalSolution.getScore() != null && finalSolution.getScore().hardScore() < 0) {
+                        // ハード制約違反がある場合は違反情報を含めて返す
+                        List<String> violationMessages = analyzeConstraintViolationsForUI(finalSolution);
+                        // 後始末
+                        jobMap.remove(key);
+                        startMap.remove(key);
+                        currentPhaseMap.remove(key);
+                        return SolveStatusDto.withConstraintViolations(status.name(), pct, finish, "制約違反あり", violationMessages);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException e) {
+                    log.error("Failed to get final solution", e);
+                }
+            }
+            
             // 後始末
             jobMap.remove(key);
             startMap.remove(key);
@@ -307,16 +330,262 @@ public class ShiftScheduleService {
         if (unsolved.getAssignmentList() == null) {
             unsolved.setAssignmentList(new ArrayList<>());
         }
+        
+        // 実行可能性チェック：全員希望休の日があるかチェック
+        validateProblemFeasibility(unsolved);
+        
         log.info("Loaded unsolved problem for {} store {} ({} assignments)", month, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
         return unsolved;
+    }
+    
+    /**
+     * 問題の実行可能性をチェックし、警告を出力
+     */
+    private void validateProblemFeasibility(ShiftSchedule schedule) {
+        if (schedule.getEmployeeRequestList() == null || schedule.getEmployeeList() == null) {
+            return;
+        }
+        
+        // 日付ごとの希望休者数をカウント
+        Map<LocalDate, Long> dayOffCounts = schedule.getEmployeeRequestList().stream()
+            .filter(req -> "off".equalsIgnoreCase(req.getRequestKind()))
+            .collect(Collectors.groupingBy(
+                req -> req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+                Collectors.counting()
+            ));
+        
+        long totalEmployees = schedule.getEmployeeList().size();
+        
+        dayOffCounts.forEach((date, count) -> {
+            if (count >= totalEmployees) {
+                log.warn("⚠️ FEASIBILITY WARNING: All {} employees have requested day off on {}. " +
+                        "Hard constraints will be violated!", count, date);
+            } else if (count > totalEmployees * 0.8) {
+                log.warn("⚠️ FEASIBILITY WARNING: {}% of employees ({}/{}) have requested day off on {}. " +
+                        "Optimal solution may be difficult to find.", 
+                        Math.round(count * 100.0 / totalEmployees), count, totalEmployees, date);
+            }
+        });
+    }
+    
+    /**
+     * 制約違反の詳細分析と改善提案を出力
+     */
+    private void analyzeConstraintViolations(ShiftSchedule schedule) {
+        if (schedule.getEmployeeRequestList() == null || schedule.getAssignmentList() == null) {
+            return;
+        }
+        
+        // 希望休違反の分析
+        Map<LocalDate, List<String>> dayOffViolations = new HashMap<>();
+        
+        // 割り当てられた従業員の希望休チェック
+        schedule.getAssignmentList().stream()
+            .filter(assignment -> assignment.getAssignedEmployee() != null)
+            .forEach(assignment -> {
+                String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
+                LocalDate shiftDate = assignment.getShiftDate();
+                
+                // この従業員がこの日に希望休を出していないかチェック
+                boolean hasRequestedOff = schedule.getEmployeeRequestList().stream()
+                    .anyMatch(req -> 
+                        employeeCode.equals(req.getEmployeeCode()) &&
+                        "off".equalsIgnoreCase(req.getRequestKind()) &&
+                        shiftDate.equals(req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate())
+                    );
+                
+                if (hasRequestedOff) {
+                    dayOffViolations.computeIfAbsent(shiftDate, k -> new ArrayList<>()).add(employeeCode);
+                }
+            });
+        
+        // 希望休違反の詳細報告
+        if (!dayOffViolations.isEmpty()) {
+            log.error("🔴 REQUESTED DAY OFF VIOLATIONS:");
+            dayOffViolations.forEach((date, employees) -> {
+                log.error("  📅 {}: {} employees assigned despite requesting day off: {}", 
+                         date, employees.size(), String.join(", ", employees));
+            });
+            
+            // 改善提案
+            log.error("💡 IMPROVEMENT SUGGESTIONS:");
+            log.error("  1. Remove day-off requests for the dates above");
+            log.error("  2. Or ensure minimum staffing by removing some day-off requests");
+            log.error("  3. Consider closing the store on days when all employees request time off");
+        }
+        
+        // スキルレベル違反の分析
+        analyzeSkillViolations(schedule);
+        
+        // その他のハード制約違反の可能性
+        log.error("🔍 OTHER POSSIBLE CONSTRAINT VIOLATIONS:");
+        log.error("  - Check employee skill levels for all register types");
+        log.error("  - Verify maximum work hours per day settings");
+        log.error("  - Review consecutive work day limits");
+        log.error("  - Ensure lunch break requirements are feasible");
+    }
+    
+    /**
+     * UI用の制約違反分析 - フロントエンド向けのメッセージを生成
+     */
+    private List<String> analyzeConstraintViolationsForUI(ShiftSchedule schedule) {
+        List<String> messages = new ArrayList<>();
+        
+        if (schedule.getEmployeeRequestList() == null || schedule.getAssignmentList() == null) {
+            messages.add("制約違反の詳細分析に必要なデータが不足しています。");
+            return messages;
+        }
+        
+        // 希望休違反の分析
+        Map<LocalDate, List<String>> dayOffViolations = new HashMap<>();
+        
+        // 割り当てられた従業員の希望休チェック
+        schedule.getAssignmentList().stream()
+            .filter(assignment -> assignment.getAssignedEmployee() != null)
+            .forEach(assignment -> {
+                String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
+                LocalDate shiftDate = assignment.getShiftDate();
+                
+                // この従業員がこの日に希望休を出していないかチェック
+                boolean hasRequestedOff = schedule.getEmployeeRequestList().stream()
+                    .anyMatch(req -> 
+                        employeeCode.equals(req.getEmployeeCode()) &&
+                        "off".equalsIgnoreCase(req.getRequestKind()) &&
+                        shiftDate.equals(req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate())
+                    );
+                
+                if (hasRequestedOff) {
+                    dayOffViolations.computeIfAbsent(shiftDate, k -> new ArrayList<>()).add(employeeCode);
+                }
+            });
+        
+        // 希望休違反のメッセージ生成
+        if (!dayOffViolations.isEmpty()) {
+            messages.add("⚠️ 希望休違反が検出されました");
+            dayOffViolations.forEach((date, employees) -> {
+                messages.add(String.format("📅 %s: %d名が希望休にも関わらず割り当てられています", 
+                           date, employees.size()));
+            });
+            
+            messages.add("💡 改善方法:");
+            messages.add("• 最低限の人員確保のため一部の希望休を調整する");
+        }
+        
+        // スキルレベル違反の分析
+        List<String> skillViolations = analyzeSkillViolationsForUI(schedule);
+        messages.addAll(skillViolations);
+        
+        if (messages.isEmpty()) {
+            messages.add("制約違反の詳細を分析中です...");
+        }
+        
+        return messages;
+    }
+    
+    /**
+     * スキルレベル違反の分析
+     */
+    private void analyzeSkillViolations(ShiftSchedule schedule) {
+        if (schedule.getEmployeeRegisterSkillList() == null || schedule.getAssignmentList() == null) {
+            return;
+        }
+        
+        List<String> skillViolations = new ArrayList<>();
+        
+        schedule.getAssignmentList().stream()
+            .filter(assignment -> assignment.getAssignedEmployee() != null)
+            .forEach(assignment -> {
+                String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
+                Integer registerNo = assignment.getRegisterNo();
+                
+                // このレジに対するスキルレベルを確認
+                Optional<Short> skillLevel = schedule.getEmployeeRegisterSkillList().stream()
+                    .filter(skill -> 
+                        employeeCode.equals(skill.getEmployeeCode()) && 
+                        registerNo.equals(skill.getRegisterNo()))
+                    .map(skill -> skill.getSkillLevel())
+                    .findFirst();
+                
+                if (skillLevel.isPresent() && (skillLevel.get() == 0 || skillLevel.get() == 1)) {
+                    skillViolations.add(String.format("Employee %s assigned to Register %d (skill level: %d)", 
+                                                     employeeCode, registerNo, skillLevel.get()));
+                }
+            });
+        
+        if (!skillViolations.isEmpty()) {
+            log.error("🔴 SKILL LEVEL VIOLATIONS:");
+            skillViolations.forEach(violation -> log.error("  ⚠️ {}", violation));
+            log.error("💡 SKILL IMPROVEMENT SUGGESTIONS:");
+            log.error("  1. Increase skill levels (0→2+, 1→2+) for the employees above");
+            log.error("  2. Assign skilled employees to cover these registers");
+            log.error("  3. Provide training to improve employee capabilities");
+        }
+    }
+    
+    /**
+     * UI用のスキルレベル違反分析
+     */
+    private List<String> analyzeSkillViolationsForUI(ShiftSchedule schedule) {
+        List<String> messages = new ArrayList<>();
+        
+        if (schedule.getEmployeeRegisterSkillList() == null || schedule.getAssignmentList() == null) {
+            return messages;
+        }
+        
+        List<String> skillViolations = new ArrayList<>();
+        
+        schedule.getAssignmentList().stream()
+            .filter(assignment -> assignment.getAssignedEmployee() != null)
+            .forEach(assignment -> {
+                String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
+                Integer registerNo = assignment.getRegisterNo();
+                
+                // このレジに対するスキルレベルを確認
+                Optional<Short> skillLevel = schedule.getEmployeeRegisterSkillList().stream()
+                    .filter(skill -> 
+                        employeeCode.equals(skill.getEmployeeCode()) && 
+                        registerNo.equals(skill.getRegisterNo()))
+                    .map(skill -> skill.getSkillLevel())
+                    .findFirst();
+                
+                if (skillLevel.isPresent() && (skillLevel.get() == 0 || skillLevel.get() == 1)) {
+                    String levelText = skillLevel.get() == 0 ? "自動割当不可" : "割り当て不可";
+                    skillViolations.add(String.format("従業員 %s がレジ %d に割り当て (%s)", 
+                                                     employeeCode, registerNo, levelText));
+                }
+            });
+        
+        if (!skillViolations.isEmpty()) {
+            messages.add("⚠️ スキルレベル違反が検出されました");
+            skillViolations.forEach(violation -> messages.add("• " + violation));
+            messages.add("💡 改善方法:");
+            messages.add("• 該当従業員のスキルレベルを2以上に変更する");
+            messages.add("• 適切なスキルを持つ従業員をこのレジに割り当てる");
+            messages.add("• 従業員の研修を実施してスキル向上を図る");
+        }
+        
+        return messages;
     }
 
     /**
      * 新しいベスト解が到着する度に呼び出され、DB に永続化する。
      * shift_assignmentテーブルには出勤時間を、register_assignmentテーブルにはレジアサイン時間を保存する。
+     * ハード制約違反がある場合は保存を阻止し、アラートを出力する。
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     private void persistResult(ShiftSchedule best) {
+        // ハード制約違反チェック
+        if (best.getScore() != null && best.getScore().hardScore() < 0) {
+            log.error("🚨 HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
+            log.error("🚫 Database save BLOCKED due to constraint violations");
+            log.error("📋 Please review and fix the following:");
+            
+            // 制約違反の詳細分析と改善提案を出力
+            analyzeConstraintViolations(best);
+            
+            // ハード制約違反時は保存を実行しない
+            return;
+        }
         // 既存データをクリア
         LocalDate month = best.getMonth();
         LocalDate from = month.withDayOfMonth(1);

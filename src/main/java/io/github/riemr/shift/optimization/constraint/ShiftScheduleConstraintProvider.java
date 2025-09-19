@@ -166,9 +166,19 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter(sa -> sa.getAssignedEmployee() != null)
                 .join(EmployeeRequest.class,
                         Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRequest::getEmployeeCode),
-                        Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate, EmployeeRequest::getRequestDate))
-                .filter((sa, req) -> "off".equalsIgnoreCase(req.getRequestKind()))
-                .penalize(HardSoftScore.ONE_HARD)
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate, 
+                                     req -> req.getRequestDate().toInstant()
+                                           .atZone(ZoneId.systemDefault())
+                                           .toLocalDate()))
+                .filter((sa, req) -> {
+                    boolean isOff = "off".equalsIgnoreCase(req.getRequestKind());
+                    if (isOff) {
+                        System.out.println("CONSTRAINT VIOLATION: Employee " + sa.getAssignedEmployee().getEmployeeCode() + 
+                                         " assigned on requested day off: " + sa.getShiftDate());
+                    }
+                    return isOff;
+                })
+                .penalize(HardSoftScore.of(10000, 0))
                 .asConstraint("Assigned on requested day off");
     }
 

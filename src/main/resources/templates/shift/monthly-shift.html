@@ -179,17 +179,6 @@
             min-width: 80px;
         }
         
-        .required-hours {
-            font-size: 0.65rem;
-            color: rgba(255,255,255,0.9);
-            margin-bottom: 1px;
-        }
-        
-        .assigned-hours {
-            font-size: 0.65rem;
-            color: rgba(255,255,255,0.9);
-            margin-bottom: 1px;
-        }
         
         .balance-hours {
             font-size: 0.7rem;
@@ -337,11 +326,12 @@
                         class="staffing-summary-cell"
                         th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
                         <div th:if="${summary != null}">
-                            <div class="required-hours" th:text="'必要:' + ${summary.totalRequired}">必要:8</div>
-                            <div class="assigned-hours" th:text="'配置:' + ${summary.totalAssigned}">配置:6</div>
-                            <div class="balance-hours" 
-                                 th:classappend="${summary.balance < 0 ? 'shortage' : (summary.balance > 0 ? 'excess' : 'balanced')}"
-                                 th:text="${summary.balance >= 0 ? '+' + summary.balance : summary.balance}">-2</div>
+                            <div th:if="${summary.balance < 0}" class="balance-hours shortage" 
+                                 th:text="'不足:' + ${-summary.balance}">不足:2</div>
+                            <div th:if="${summary.balance > 0}" class="balance-hours excess" 
+                                 th:text="'超過:' + ${summary.balance}">超過:2</div>
+                            <div th:if="${summary.balance == 0}" class="balance-hours balanced" 
+                                 th:text="'適正'">適正</div>
                         </div>
                         <div th:if="${summary == null}" class="text-muted">-</div>
                     </th>
@@ -385,6 +375,7 @@
                 <div class="card-body">
                     <ul class="small mb-0">
                         <li><strong>時間表示:</strong> hh:mm ~ hh:mm 形式で勤務時間を表示</li>
+                        <li><strong>人時表示:</strong> 不足時は赤背景、超過時は緑背景、適正時は青背景</li>
                         <li><strong>休日:</strong> 土日は薄赤の背景色で表示</li>
                         <li><strong>今日:</strong> オレンジのグラデーション背景で強調</li>
                         <li><strong>休み:</strong> 「-」で表示</li>
@@ -575,7 +566,13 @@
                 // NOT_SOLVING が完了状態、SOLVING_ACTIVE が実行中
                 if (status.status === 'NOT_SOLVING') {
                     clearInterval(statusCheckInterval);
-                    showSuccess();
+                    
+                    // ハード制約違反チェック
+                    if (status.hasHardConstraintViolations) {
+                        showConstraintViolationError(status.constraintViolationMessages || []);
+                    } else {
+                        showSuccess();
+                    }
                 } else if (status.status === 'FAILED' || status.status === 'ERROR') {
                     clearInterval(statusCheckInterval);
                     showError('最適化に失敗しました: ' + (status.errorMessage || '不明なエラー'));
@@ -619,6 +616,35 @@
             document.getElementById('optimizationProgress').style.display = 'none';
             document.getElementById('optimizationError').style.display = 'block';
             document.getElementById('errorMessage').textContent = message;
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+        
+        function showConstraintViolationError(violationMessages) {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'block';
+            
+            // 制約違反メッセージを構築
+            let messageHtml = `
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading mb-2">⚠️ ハード制約違反が検出されました</h6>
+                    <div class="constraint-violations">
+            `;
+            
+            violationMessages.forEach(message => {
+                messageHtml += `<div class="mb-1">• ${message}</div>`;
+            });
+            
+            messageHtml += `
+                    </div>
+                    <hr class="my-3">
+                    <p class="mb-0">
+                        <strong>対処方法:</strong> 上記の制約違反を解決してから再度最適化を実行してください。
+                        制約違反がある状態では結果を保存できません。
+                    </p>
+                </div>
+            `;
+            
+            document.getElementById('errorMessage').innerHTML = messageHtml;
             document.getElementById('closeBtn').style.display = 'inline-block';
         }
         

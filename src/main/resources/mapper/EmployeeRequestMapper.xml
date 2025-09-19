@@ -341,7 +341,8 @@
     where request_id = #{requestId,jdbcType=BIGINT}
   </update>
   <select id="selectByMonth" resultMap="BaseResultMap">
-    select store_code, employee_code, request_date, from_time, to_time, request_kind, priority, note
+    select 
+    <include refid="Base_Column_List" />
     from public.employee_request
     where TO_CHAR(request_date, 'YYYY-MM') = TO_CHAR(#{targetDate}, 'YYYY-MM')
     order by store_code, employee_code, request_date
