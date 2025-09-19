@@ -193,19 +193,28 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     private static boolean exceedsSixHoursWithoutBreak(List<ShiftAssignmentPlanningEntity> list) {
+        if (list.isEmpty()) return false;
         list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
-        int continuous = 1;
+
+        var blockStart = list.get(0).getStartAt().toInstant();
+        var prevEnd = list.get(0).getEndAt().toInstant();
+
+        // Check the first block as well
+        if (Duration.between(blockStart, prevEnd).toMinutes() >= 360) return true;
+
         for (int i = 1; i < list.size(); i++) {
-            if (list.get(i).getStartAt().equals(list.get(i - 1).getEndAt())) {
-                continuous++;
-                if (continuous >= 24) return true; // 24*15min = 6h
-            } else {
-                if (Duration.between(list.get(i-1).getEndAt().toInstant(), list.get(i).getStartAt().toInstant()).toHours() >= 1) {
-                    continuous = 0;
-                } else {
-                    continuous = 1;
-                }
+            var start = list.get(i).getStartAt().toInstant();
+            var end = list.get(i).getEndAt().toInstant();
+            long gap = Duration.between(prevEnd, start).toMinutes();
+
+            if (gap >= 60) {
+                // A real lunch break resets the continuous window
+                blockStart = start;
             }
+            // else: gap < 60 means still considered continuous without proper break
+
+            prevEnd = end;
+            if (Duration.between(blockStart, prevEnd).toMinutes() >= 360) return true;
         }
         return false;
     }
@@ -259,38 +268,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      */
     private static int calculateWorkMinutesExcludingBreaks(List<ShiftAssignmentPlanningEntity> list) {
         if (list.isEmpty()) return 0;
-        
-        list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
-        
-        int totalWorkMinutes = list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
-        int breakMinutes = 0;
-        int continuousMinutes = 0;
-        
-        for (int i = 0; i < list.size(); i++) {
-            ShiftAssignmentPlanningEntity current = list.get(i);
-            continuousMinutes += current.getWorkMinutes();
-            
-            // 次のシフトとの間に1時間以上の休憩があるかチェック
-            if (i < list.size() - 1) {
-                ShiftAssignmentPlanningEntity next = list.get(i + 1);
-                Duration breakDuration = Duration.between(current.getEndAt().toInstant(), next.getStartAt().toInstant());
-                
-                if (breakDuration.toMinutes() >= 60) {
-                    // 6時間以上連続勤務していた場合、1時間の休憩時間を加算
-                    if (continuousMinutes >= 360) { // 6時間 = 360分
-                        breakMinutes += 60;
-                    }
-                    continuousMinutes = 0; // 連続勤務時間をリセット
-                }
-            }
-        }
-        
-        // 最後のブロックも6時間以上の場合、休憩時間を加算
-        if (continuousMinutes >= 360) {
-            breakMinutes += 60;
-        }
-        
-        return Math.max(0, totalWorkMinutes - breakMinutes);
+        // Each planning entity represents actual worked time (15-minute slot).
+        // Summing them already excludes gaps/breaks.
+        return list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
     }
 
     /**
@@ -517,6 +497,5 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return blocks;
     }
 }
-
 
 
