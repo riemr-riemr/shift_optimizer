@@ -293,13 +293,18 @@ public class ShiftScheduleService {
             Date startAt = Date.from(startDateTime.atZone(ZoneId.systemDefault()).toInstant());
             Date endAt = Date.from(endDateTime.atZone(ZoneId.systemDefault()).toInstant());
             
-            // 既存の割り当てを削除
-            registerAssignmentMapper.deleteByEmployeeCodeAndTimeRange(employeeCode, startAt, endAt);
+            // 既存の割り当てを削除（店舗単位に限定）
+            String storeCode = request.storeCode();
+            if (storeCode != null && !storeCode.isBlank()) {
+                registerAssignmentMapper.deleteByEmployeeCodeStoreAndTimeRange(employeeCode, storeCode, startAt, endAt);
+            } else {
+                registerAssignmentMapper.deleteByEmployeeCodeAndTimeRange(employeeCode, startAt, endAt);
+            }
             
             // 新しい割り当てを作成（currentRegisterが空でない場合）
             if (currentRegister != null && !currentRegister.trim().isEmpty()) {
                 RegisterAssignment assignment = new RegisterAssignment();
-                assignment.setStoreCode(request.storeCode());
+                assignment.setStoreCode(storeCode);
                 assignment.setEmployeeCode(employeeCode);
                 assignment.setRegisterNo(Integer.parseInt(currentRegister));
                 assignment.setStartAt(startAt);

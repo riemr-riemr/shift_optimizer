@@ -44,6 +44,11 @@ public interface RegisterAssignmentMapper {
                                        @Param("startAt") Date startAt, 
                                        @Param("endAt") Date endAt);
 
+    int deleteByEmployeeCodeStoreAndTimeRange(@Param("employeeCode") String employeeCode,
+                                              @Param("storeCode") String storeCode,
+                                              @Param("startAt") Date startAt,
+                                              @Param("endAt") Date endAt);
+
     int deleteByMonthAndStore(@Param("from") LocalDate from,
                                @Param("to") LocalDate to,
                                @Param("storeCode") String storeCode);

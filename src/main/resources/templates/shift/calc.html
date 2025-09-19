@@ -796,6 +796,7 @@ async function saveChanges() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        storeCode: $('storeCode').value,
         date: date,
         changes: changesArray
       })
