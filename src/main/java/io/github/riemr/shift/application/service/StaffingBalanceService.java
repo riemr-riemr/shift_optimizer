@@ -27,6 +27,10 @@ public class StaffingBalanceService {
     private final ShiftAssignmentMapper shiftMapper;
 
     public List<StaffingBalanceDto> getStaffingBalance(String storeCode, LocalDate targetDate) {
+        return getHourlyStaffingBalance(storeCode, targetDate);
+    }
+
+    public List<StaffingBalanceDto> getHourlyStaffingBalance(String storeCode, LocalDate targetDate) {
         List<RegisterDemandQuarter> demands = demandMapper.selectByStoreAndDate(storeCode, targetDate);
         List<ShiftAssignment> assignments = shiftMapper.selectByDate(targetDate, targetDate.plusDays(1));
 

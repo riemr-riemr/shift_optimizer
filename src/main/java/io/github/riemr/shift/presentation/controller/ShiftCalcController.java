@@ -16,6 +16,7 @@ import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
+import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -124,6 +125,14 @@ public class ShiftCalcController {
         } catch (Exception e) {
             return Map.of("success", false, "message", "保存中にエラーが発生しました: " + e.getMessage());
         }
+    }
+
+    @GetMapping("/api/calc/staffing-balance/{date}")
+    @ResponseBody
+    public List<StaffingBalanceDto> getStaffingBalance(@PathVariable("date") String dateString,
+                                                       @RequestParam("storeCode") String storeCode) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        return staffingBalanceService.getHourlyStaffingBalance(storeCode, date);
     }
 
     @GetMapping

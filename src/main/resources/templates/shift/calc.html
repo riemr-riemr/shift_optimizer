@@ -79,17 +79,32 @@
   </div>
 </div>
 
+<!-- Staffing Balance Section -->
+<div class="row g-4 mt-2">
+  <div class="col-12">
+    <div class="card" id="staffingBalanceCard" style="display: none;">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="bi bi-graph-up-arrow me-2"></i>時間帯別人時過不足
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" id="staffingBalanceContainer" style="max-height: 250px; overflow-x: auto; overflow-y: auto;">
+          <div id="staffingBalanceGrid" class="shift-grid-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Work Model Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">
     <div class="card" id="workModelCard" style="display: none;">
-      <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card-header">
         <h5 class="mb-0">
           <i class="bi bi-bar-chart me-2"></i>作業モデル（必要レジ台数）
         </h5>
-        <button type="button" id="scrollSyncBtn" class="btn btn-primary btn-sm">
-          <i class="bi bi-arrow-down-up"></i> スクロール同期: ON
-        </button>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive" id="workModelContainer" style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
@@ -192,6 +207,13 @@
   .grid-cell.assigned.color-2 { background: linear-gradient(135deg, #ffc107, #fd7e14); }
   .grid-cell.assigned.color-3 { background: linear-gradient(135deg, #dc3545, #e83e8c); }
   .grid-cell.assigned.color-4 { background: linear-gradient(135deg, #6c757d, #495057); }
+  
+  /* 勤務時間（レジ未割当も含む）の背景色 */
+  .work-hours-cell.working {
+    background: #fff3cd;   /* light amber */
+    color: #856404;
+    border: 1px solid #ffeaa7;
+  }
   
   .employee-shift-cell {
     background: #f8f9fa;
@@ -358,13 +380,72 @@
     height: 35px;
   }
   
-  #scrollSyncBtn {
-    transition: all 0.3s ease;
+  
+  .staffing-balance-cell {
+    position: relative;
+    padding: 4px;
+    height: 35px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border: 1px solid #dee2e6;
+    background: #f8f9fa;
   }
   
-  #scrollSyncBtn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  .staffing-balance-cell.shortage {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+    border: 1px solid #c82333;
+  }
+  
+  .staffing-balance-cell.excess {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+    color: #212529;
+    border: 1px solid #e0a800;
+  }
+  
+  .staffing-balance-cell.balanced {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    border: 1px solid #20c997;
+  }
+  
+  .balance-value {
+    font-size: 0.6rem;
+    font-weight: 700;
+  }
+  
+  .balance-detail {
+    font-size: 0.5rem;
+    opacity: 0.8;
+  }
+  
+  .work-hours-cell {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .break-assigned {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+    color: white;
+    border: 1px solid #138496;
+  }
+  
+  .break-assigned::before {
+    content: "休";
+    font-size: 0.7rem;
+    font-weight: 700;
   }
 </style>
 
@@ -470,6 +551,7 @@ function showRegisterSelectorForCell(cell) {
     <div class="mb-2"><strong>レジを選択:</strong></div>
     <div class="btn-group-vertical" role="group">
       <button type="button" class="btn btn-outline-secondary btn-sm" data-register="">未割当</button>
+      <button type="button" class="btn btn-outline-info btn-sm" data-register="break">休憩</button>
       <button type="button" class="btn btn-outline-primary btn-sm" data-register="1">レジ1</button>
       <button type="button" class="btn btn-outline-primary btn-sm" data-register="2">レジ2</button>
       <button type="button" class="btn btn-outline-primary btn-sm" data-register="3">レジ3</button>
@@ -539,9 +621,22 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
     if (newValue) {
       cell.classList.add('assigned');
       const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
-      const colorClass = getEmployeeColorClass(employeeNameForColor);
-      cell.classList.add(colorClass);
-      cell.textContent = `R${newValue}`;
+      
+      if (newValue === 'break') {
+        // 休憩の場合
+        cell.classList.add('break-assigned');
+        cell.textContent = '';
+      } else {
+        // レジ割り当ての場合
+        const colorClass = getEmployeeColorClass(employeeNameForColor);
+        cell.classList.add(colorClass);
+        cell.textContent = `R${newValue}`;
+        // 勤務時間外であっても、このスロットを勤務時間として取り込む
+        try {
+          addWorkingSlot(cell.dataset.employee, cell.dataset.time);
+        } catch(e) { console.warn('addWorkingSlot failed', e); }
+      }
+      
       cell.dataset.assignedEmployeeName = employeeNameForColor;
       
       // ドラッグ可能にする（重複イベント防止）
@@ -551,7 +646,7 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
       cell.addEventListener('dragstart', handleAssignmentDragStart);
       cell.addEventListener('dragend', handleAssignmentDragEnd);
     } else {
-      cell.classList.remove('assigned');
+      cell.classList.remove('assigned', 'break-assigned');
       cell.textContent = '';
       cell.classList.remove('color-0', 'color-1', 'color-2', 'color-3', 'color-4');
       cell.draggable = false;
@@ -562,8 +657,10 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
     hasChanges = true;
     showSaveButtons();
     
-    // 作業モデルを更新
+    // 作業モデル、人時過不足、勤務時間を更新
     updateWorkModel();
+    updateStaffingBalance();
+    updateWorkHours();
   } else {
     // 変更なし
     changes.delete(key);
@@ -572,6 +669,71 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
     if (changes.size === 0) {
       hasChanges = false;
       hideSaveButtons();
+    }
+  }
+}
+
+// 指定の従業員・時刻(HH:mm)の15分スロットを勤務時間として取り込む
+function addWorkingSlot(employeeCode, timeHHmm) {
+  const dateStr = document.getElementById('date').value; // YYYY-MM-DD
+  if (!dateStr) return;
+
+  // work-hours セルに薄色背景を付与
+  const workCell = document.querySelector(`.work-hours-cell[data-employee="${employeeCode}"][data-time="${timeHHmm}"]`);
+  if (workCell) workCell.classList.add('working');
+
+  // _workShiftsOfDay を15分スロットで拡張（隣接シフトとマージ）
+  const [h, m] = timeHHmm.split(':').map(Number);
+  const start = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+  const end = new Date(start); end.setMinutes(end.getMinutes() + 15);
+
+  if (!window._workShiftsOfDay) window._workShiftsOfDay = [];
+  const shifts = window._workShiftsOfDay.filter(s => s.employeeCode === employeeCode);
+
+  // ヘルパー: ISO比較
+  const iso = d => new Date(d).toISOString();
+  const startIso = iso(start);
+  const endIso = iso(end);
+
+  // 既存シフトに結合できるか確認
+  let merged = false;
+  for (const s of shifts) {
+    if (iso(s.endAt) === startIso) {
+      // 後ろに連結
+      s.endAt = endIso;
+      merged = true;
+      break;
+    }
+    if (iso(s.startAt) === endIso) {
+      // 前に連結
+      s.startAt = startIso;
+      merged = true;
+      break;
+    }
+  }
+  if (!merged) {
+    window._workShiftsOfDay.push({
+      employeeCode,
+      startAt: startIso,
+      endAt: endIso,
+      employeeName: (workCell && workCell.closest('.grid-row')) ? '' : ''
+    });
+  } else {
+    // 連結後、さらに隣のシフトとマージ可能かチェック
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const empShifts = window._workShiftsOfDay.filter(s => s.employeeCode === employeeCode).sort((a,b)=>new Date(a.startAt)-new Date(b.startAt));
+      for (let i=1;i<empShifts.length;i++){
+        if (iso(empShifts[i-1].endAt) === iso(empShifts[i].startAt)){
+          empShifts[i-1].endAt = empShifts[i].endAt;
+          // remove i
+          const idx = window._workShiftsOfDay.indexOf(empShifts[i]);
+          if (idx >= 0) window._workShiftsOfDay.splice(idx,1);
+          changed = true;
+          break;
+        }
+      }
     }
   }
 }
@@ -743,7 +905,7 @@ function removeAssignment(cell) {
   }
   
   // セルから割り当てを削除
-  cell.classList.remove('assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+  cell.classList.remove('assigned', 'break-assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
   
   if (hasChanges) {
     cell.classList.add('modified');
@@ -753,8 +915,10 @@ function removeAssignment(cell) {
     hideSaveButtons();
   }
   
-  // 作業モデルを更新
+  // 作業モデル、人時過不足、勤務時間を更新
   updateWorkModel();
+  updateStaffingBalance();
+  updateWorkHours();
   
   cell.textContent = '';
   cell.dataset.currentRegister = '';
@@ -841,7 +1005,7 @@ function cancelChanges() {
         cell.dataset.currentRegister = change.original;
         
         // 全ての割り当て関連クラスとイベントを削除
-        cell.classList.remove('assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+        cell.classList.remove('assigned', 'break-assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
         cell.draggable = false;
         cell.removeEventListener('dragstart', handleAssignmentDragStart);
         cell.removeEventListener('dragend', handleAssignmentDragEnd);
@@ -849,12 +1013,20 @@ function cancelChanges() {
         if (change.original) {
           // 元の割り当てを復元
           cell.classList.add('assigned');
-          cell.textContent = `R${change.original}`;
           
-          // 元の従業員名を使って色を復元
-          const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
-          const colorClass = getEmployeeColorClass(originalEmployeeName);
-          cell.classList.add(colorClass);
+          if (change.original === 'break') {
+            // 休憩の場合
+            cell.classList.add('break-assigned');
+            cell.textContent = '';
+          } else {
+            // レジ割り当ての場合
+            cell.textContent = `R${change.original}`;
+            
+            // 元の従業員名を使って色を復元
+            const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
+            const colorClass = getEmployeeColorClass(originalEmployeeName);
+            cell.classList.add(colorClass);
+          }
           
           // ドラッグ機能を復元（重複イベント防止）
           cell.draggable = true;
@@ -883,46 +1055,33 @@ $('btnToday').onclick=()=>{
   loadResult(today);
 };
 
-// スクロール同期機能
-let scrollSyncEnabled = true;
+// スクロール同期機能（常にON）
 let isScrolling = false;
 
 function setupScrollSync() {
+  const staffingBalanceContainer = $('staffingBalanceContainer');
   const workModelContainer = $('workModelContainer');
   const shiftContainer = $('tableContainer');
-  const syncBtn = $('scrollSyncBtn');
   
-  if (!workModelContainer || !shiftContainer || !syncBtn) return;
+  const containers = [staffingBalanceContainer, workModelContainer, shiftContainer].filter(c => c);
   
-  // スクロール同期/解除ボタンのイベント
-  syncBtn.onclick = () => {
-    scrollSyncEnabled = !scrollSyncEnabled;
-    syncBtn.innerHTML = scrollSyncEnabled ? 
-      '<i class="bi bi-arrow-down-up"></i> スクロール同期: ON' : 
-      '<i class="bi bi-arrow-down-up"></i> スクロール同期: OFF';
-    syncBtn.className = scrollSyncEnabled ? 
-      'btn btn-primary btn-sm' : 
-      'btn btn-outline-primary btn-sm';
-  };
+  if (containers.length === 0) return;
   
-  // 作業モデルのスクロールイベント
-  workModelContainer.addEventListener('scroll', function() {
-    if (!scrollSyncEnabled || isScrolling) return;
-    isScrolling = true;
-    
-    shiftContainer.scrollLeft = this.scrollLeft;
-    
-    setTimeout(() => { isScrolling = false; }, 50);
-  });
-  
-  // シフト割り当てのスクロールイベント
-  shiftContainer.addEventListener('scroll', function() {
-    if (!scrollSyncEnabled || isScrolling) return;
-    isScrolling = true;
-    
-    workModelContainer.scrollLeft = this.scrollLeft;
-    
-    setTimeout(() => { isScrolling = false; }, 50);
+  // 各コンテナのスクロールイベントを設定
+  containers.forEach((container, index) => {
+    container.addEventListener('scroll', function() {
+      if (isScrolling) return;
+      isScrolling = true;
+      
+      // 他のコンテナのスクロール位置を同期
+      containers.forEach((otherContainer, otherIndex) => {
+        if (index !== otherIndex) {
+          otherContainer.scrollLeft = this.scrollLeft;
+        }
+      });
+      
+      setTimeout(() => { isScrolling = false; }, 50);
+    });
   });
 }
 
@@ -961,6 +1120,7 @@ $('btnNextDay').onclick=()=>{
 async function loadResult(dateString){
   let data;
   let employees;
+  let workTimeMonthly = [];
   
   try {
     // 表示日付を更新
@@ -976,13 +1136,16 @@ async function loadResult(dateString){
     const storeCode = $('storeCode').value;
     
     // 並行してデータを取得
-    const [shiftData, employeeData] = await Promise.all([
+    const [shiftData, employeeData, workTimeMonthlyResp] = await Promise.all([
       fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r=>r.json()),
-      fetch(`/shift/api/calc/employees/${storeCode}`).then(r=>r.json())
+      fetch(`/shift/api/calc/employees/${storeCode}`).then(r=>r.json()),
+      // 月次の勤務時間（シフト）を取得し、当日分にフィルタして利用
+      fetch(`/shift/api/calc/shifts/monthly/${dateString.substring(0,7)}?storeCode=${encodeURIComponent(storeCode)}`).then(r=>r.json())
     ]);
     
     data = shiftData;
     employees = employeeData;
+    workTimeMonthly = workTimeMonthlyResp || [];
     
     const shiftGrid = $('shiftGrid');
     const noDataMessage = $('noDataMessage');
@@ -995,13 +1158,15 @@ async function loadResult(dateString){
       tableContainer.style.display = 'block';
       $('dragDropHelp').style.display = 'block';
       
-      // 作業モデルデータも同時に取得・表示
+      // 作業モデルと人時過不足データも同時に取得・表示
       loadWorkModel(dateString, data);
+      loadStaffingBalance(dateString);
     } else {
       noDataMessage.style.display = 'block';
       tableContainer.style.display = 'none';
       $('dragDropHelp').style.display = 'none';
       $('workModelCard').style.display = 'none';
+      $('staffingBalanceCard').style.display = 'none';
       return;
     }
   } catch (error) {
@@ -1010,6 +1175,7 @@ async function loadResult(dateString){
     $('tableContainer').style.display = 'none';
     $('dragDropHelp').style.display = 'none';
     $('workModelCard').style.display = 'none';
+    $('staffingBalanceCard').style.display = 'none';
     return;
   }
 
@@ -1035,8 +1201,9 @@ async function loadResult(dateString){
   }
   shiftGrid.appendChild(timeHeaderRow);
 
-  // 従業員ごとの行を作成
+  // 従業員ごとの行を作成（シフト割り当て行 + 勤務時間行）
   employees.forEach(employee => {
+    // シフト割り当て行のヘッダー
     const employeeRowHeader = document.createElement('div');
     employeeRowHeader.className = 'grid-row-header';
     employeeRowHeader.innerHTML = `
@@ -1046,6 +1213,7 @@ async function loadResult(dateString){
     
     shiftGrid.appendChild(employeeRowHeader);
 
+    // シフト割り当てセル
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 15) {
         const cell = document.createElement('div');
@@ -1064,7 +1232,58 @@ async function loadResult(dateString){
         shiftGrid.appendChild(cell);
       }
     }
+    
+    // 勤務時間表示行のヘッダー
+    const workHoursHeader = document.createElement('div');
+    workHoursHeader.className = 'grid-row-header';
+    workHoursHeader.style.fontSize = '0.7rem';
+    workHoursHeader.textContent = '勤務時間';
+    
+    shiftGrid.appendChild(workHoursHeader);
+    
+    // 勤務時間表示セル
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 15) {
+        const workHoursCell = document.createElement('div');
+        workHoursCell.className = 'grid-cell work-hours-cell';
+        workHoursCell.dataset.employee = employee.employeeCode;
+        workHoursCell.dataset.time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        
+        shiftGrid.appendChild(workHoursCell);
+      }
+    }
   });
+
+  // 勤務時間（workTimeMonthly）で勤務行に薄色を塗る（レジ割当がなくても勤務中なら表示）
+  if (workTimeMonthly && workTimeMonthly.length > 0) {
+    const dayOnly = dateString; // 'YYYY-MM-DD'
+    const workShiftsOfDay = workTimeMonthly.filter(s => {
+      const d = new Date(s.startAt);
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${dd}` === dayOnly;
+    });
+
+    // グローバルに保持して、集計表示でも使う
+    window._workShiftsOfDay = workShiftsOfDay;
+
+    workShiftsOfDay.forEach(shift => {
+      const start = new Date(shift.startAt);
+      const end = new Date(shift.endAt);
+      let cur = new Date(start);
+      while (cur < end) {
+        const hour = cur.getHours();
+        const minute = cur.getMinutes();
+        const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const cell = document.querySelector(`.work-hours-cell[data-employee="${shift.employeeCode}"][data-time="${targetTime}"]`);
+        if (cell) cell.classList.add('working');
+        cur.setMinutes(cur.getMinutes() + 15);
+      }
+    });
+  } else {
+    window._workShiftsOfDay = [];
+  }
 
   // シフト割り当てデータでセルを塗りつぶし
   if (data && data.length > 0) {
@@ -1080,12 +1299,24 @@ async function loadResult(dateString){
         const minute = currentTime.getMinutes();
         const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 
-        const cell = shiftGrid.querySelector(`.grid-cell[data-employee="${assignment.employeeCode}"][data-time="${targetTime}"]`);
+        const cell = shiftGrid.querySelector(`.employee-shift-cell[data-employee="${assignment.employeeCode}"][data-time="${targetTime}"]`);
         if (cell) {
-          cell.classList.add('assigned', colorClass);
-          cell.textContent = `R${assignment.registerNo}`;
-          cell.dataset.originalRegister = assignment.registerNo;
-          cell.dataset.currentRegister = assignment.registerNo;
+          cell.classList.add('assigned');
+          
+          const registerValue = assignment.registerNo;
+          if (registerValue === 'break' || assignment.registerNo === 0) {
+            // 休憩の場合
+            cell.classList.add('break-assigned');
+            cell.textContent = '';
+            cell.dataset.originalRegister = 'break';
+            cell.dataset.currentRegister = 'break';
+          } else {
+            // レジ割り当ての場合
+            cell.classList.add(colorClass);
+            cell.textContent = `R${assignment.registerNo}`;
+            cell.dataset.originalRegister = assignment.registerNo;
+            cell.dataset.currentRegister = assignment.registerNo;
+          }
           
           // 従業員名を正しく設定（APIからの名前またはセルの従業員名を使用）
           const employeeName = assignment.employeeName || cell.dataset.employeeName;
@@ -1105,6 +1336,102 @@ async function loadResult(dateString){
   
   // スクロール同期をセットアップ
   setupScrollSync();
+  
+  // 勤務時間を計算・表示（勤務行の背景・合計時間ラベルなど）
+  updateWorkHours();
+}
+
+async function loadStaffingBalance(dateString) {
+  try {
+    const storeCode = $('storeCode').value;
+    const staffingData = await fetch(`/shift/api/calc/staffing-balance/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+    const staffingGrid = $('staffingBalanceGrid');
+    const staffingCard = $('staffingBalanceCard');
+    
+    staffingGrid.innerHTML = ''; // Clear previous content
+    console.log('Staffing balance data:', staffingData); // デバッグ用
+    
+    if (staffingData && staffingData.length > 0) {
+      staffingCard.style.display = 'block';
+      
+      // ヘッダー行を作成（必要・配置・差分の3行）
+      const headers = ['必要人数', '配置人数', '過不足'];
+      
+      headers.forEach(headerText => {
+        // 行ヘッダー
+        const rowHeader = document.createElement('div');
+        rowHeader.className = 'grid-row-header';
+        rowHeader.textContent = headerText;
+        staffingGrid.appendChild(rowHeader);
+        
+        // 15分間隔の時間スロット
+        for (let h = 0; h < 24; h++) {
+          for (let m = 0; m < 60; m += 15) {
+            const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+            
+            // 該当する時間帯のデータを検索
+            const balanceData = staffingData.find(data => {
+              if (!data.slotTime) return false;
+              const timeStr = typeof data.slotTime === 'string' ? data.slotTime : 
+                             (data.slotTime.hour !== undefined ? 
+                              `${String(data.slotTime.hour).padStart(2, '0')}:${String(data.slotTime.minute).padStart(2, '0')}:00` : 
+                              data.slotTime.toString());
+              return timeStr === targetTime;
+            });
+            
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell staffing-balance-cell';
+            
+            if (balanceData) {
+              const required = balanceData.requiredStaff || 0;
+              const assigned = balanceData.assignedStaff || 0;
+              const balance = assigned - required;
+              
+              if (headerText === '必要人数') {
+                cell.textContent = required;
+                if (required > 0) {
+                  cell.style.background = '#e3f2fd';
+                  cell.style.color = '#1565c0';
+                }
+              } else if (headerText === '配置人数') {
+                cell.textContent = assigned;
+                if (assigned > 0) {
+                  cell.style.background = '#f3e5f5';
+                  cell.style.color = '#7b1fa2';
+                }
+              } else if (headerText === '過不足') {
+                if (balance < 0) {
+                  cell.classList.add('shortage');
+                  cell.innerHTML = `<div class="balance-value">${balance}</div><div class="balance-detail">不足</div>`;
+                } else if (balance > 0) {
+                  cell.classList.add('excess');
+                  cell.innerHTML = `<div class="balance-value">+${balance}</div><div class="balance-detail">超過</div>`;
+                } else if (required > 0) {
+                  cell.classList.add('balanced');
+                  cell.innerHTML = `<div class="balance-value">0</div><div class="balance-detail">適正</div>`;
+                } else {
+                  cell.textContent = '-';
+                }
+              }
+            } else {
+              cell.textContent = '-';
+            }
+            
+            staffingGrid.appendChild(cell);
+          }
+        }
+      });
+      
+      // 人時過不足用のCSSグリッドを設定（15分間隔と同じ）
+      staffingGrid.style.gridTemplateColumns = '120px repeat(96, 50px)';
+      staffingGrid.style.gridTemplateRows = 'repeat(3, 35px)';
+    } else {
+      staffingCard.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('人時過不足データ取得エラー:', error);
+    $('staffingBalanceCard').style.display = 'none';
+  }
 }
 
 async function loadWorkModel(dateString, shiftData) {
@@ -1307,6 +1634,194 @@ function updateWorkModel() {
       }
     }
   }
+}
+
+// 現在の割り当て状況で人時過不足を更新
+function updateStaffingBalance() {
+  const staffingGrid = $('staffingBalanceGrid');
+  if (!staffingGrid) return;
+  
+  // 現在のシフトデータを収集
+  const currentShiftData = [];
+  const shiftCells = document.querySelectorAll('.grid-cell.assigned[data-current-register]');
+  
+  shiftCells.forEach(cell => {
+    const employeeCode = cell.dataset.employee;
+    const time = cell.dataset.time;
+    const registerNo = parseInt(cell.dataset.currentRegister);
+    
+    if (registerNo && time) {
+      const [hour, minute] = time.split(':').map(Number);
+      currentShiftData.push({
+        employeeCode,
+        time: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`
+      });
+    }
+  });
+  
+  // 時間帯別の配置人数をカウント
+  const assignedCountsByTime = new Map();
+  currentShiftData.forEach(assignment => {
+    const timeKey = assignment.time;
+    assignedCountsByTime.set(timeKey, (assignedCountsByTime.get(timeKey) || 0) + 1);
+  });
+  
+  // 過不足行（3行目）のセルを更新
+  const balanceCells = staffingGrid.querySelectorAll('.grid-cell');
+  
+  // 3行目の過不足セルのみ更新（0から始まるインデックスで2行目）
+  const rowSize = 97; // ヘッダー1 + 時間スロット96
+  const balanceRowStartIndex = rowSize * 2; // 3行目の開始インデックス
+  
+  for (let i = 0; i < 96; i++) { // 96の時間スロット
+    const cellIndex = balanceRowStartIndex + 1 + i; // +1はヘッダー分
+    const cell = balanceCells[cellIndex];
+    
+    if (cell) {
+      const h = Math.floor(i / 4);
+      const m = (i % 4) * 15;
+      const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+      
+      // 元の必要人数を取得（データから）
+      const requiredCell = balanceCells[1 + i]; // 1行目の対応するセル
+      const required = requiredCell ? parseInt(requiredCell.textContent) || 0 : 0;
+      
+      // 現在の配置人数を取得
+      const assigned = assignedCountsByTime.get(targetTime) || 0;
+      
+      // 配置人数行（2行目）を更新
+      const assignedCell = balanceCells[rowSize + 1 + i];
+      if (assignedCell) {
+        assignedCell.textContent = assigned;
+        if (assigned > 0) {
+          assignedCell.style.background = '#f3e5f5';
+          assignedCell.style.color = '#7b1fa2';
+        } else {
+          assignedCell.style.background = '#f8f9fa';
+          assignedCell.style.color = '#6c757d';
+        }
+      }
+      
+      // 過不足を計算して更新
+      const balance = assigned - required;
+      
+      // セルのクラスをリセット
+      cell.classList.remove('shortage', 'excess', 'balanced');
+      
+      if (balance < 0) {
+        cell.classList.add('shortage');
+        cell.innerHTML = `<div class="balance-value">${balance}</div><div class="balance-detail">不足</div>`;
+      } else if (balance > 0) {
+        cell.classList.add('excess');
+        cell.innerHTML = `<div class="balance-value">+${balance}</div><div class="balance-detail">超過</div>`;
+      } else if (required > 0) {
+        cell.classList.add('balanced');
+        cell.innerHTML = `<div class="balance-value">0</div><div class="balance-detail">適正</div>`;
+      } else {
+        cell.textContent = '-';
+      }
+    }
+  }
+}
+
+// 勤務時間を計算・表示する関数
+function updateWorkHours() {
+  const employees = document.querySelectorAll('.employee-shift-cell');
+  if (employees.length === 0) return;
+  
+  // 従業員コードごとにグループ化
+  const employeeCodes = new Set();
+  employees.forEach(cell => { if (cell.dataset.employee) employeeCodes.add(cell.dataset.employee); });
+  
+  employeeCodes.forEach(employeeCode => {
+    // この従業員の割り当てセルを取得
+    const assignmentCells = document.querySelectorAll(`.employee-shift-cell[data-employee="${employeeCode}"]`);
+    const workHoursCells = document.querySelectorAll(`.work-hours-cell[data-employee="${employeeCode}"]`);
+    
+    // 勤務時間スロットを勤務シフト（_workShiftsOfDay）から構成
+    const timeSlots = new Map(); // time -> { working: boolean }
+    const workByEmp = (window._workShiftsOfDay || []).filter(s => s.employeeCode === employeeCode);
+    workByEmp.forEach(shift => {
+      let cur = new Date(shift.startAt);
+      const end = new Date(shift.endAt);
+      while (cur < end) {
+        const hh = String(cur.getHours()).padStart(2,'0');
+        const mm = String(cur.getMinutes()).padStart(2,'0');
+        timeSlots.set(`${hh}:${mm}`, { working: true });
+        cur.setMinutes(cur.getMinutes() + 15);
+      }
+    });
+    
+    // 勤務時間セルを更新
+    workHoursCells.forEach(cell => {
+      const time = cell.dataset.time;
+      const status = timeSlots.get(time);
+      
+      // セルをクリア
+      cell.textContent = '';
+      if (status && status.working) {
+        cell.classList.add('working');
+      } else {
+        cell.classList.remove('working');
+      }
+    });
+    
+    // 連続勤務時間の計算（休憩を除く）
+    calculateContinuousWorkPeriods(employeeCode, timeSlots, workHoursCells);
+  });
+}
+
+// 連続勤務時間を計算して表示
+function calculateContinuousWorkPeriods(employeeCode, timeSlots, workHoursCells) {
+  const times = Array.from(timeSlots.keys()).sort();
+  let workPeriods = [];
+  let currentPeriod = null;
+  
+  times.forEach(time => {
+    const status = timeSlots.get(time);
+    
+    if (status && status.working) {
+      // 勤務時間
+      if (!currentPeriod) {
+        currentPeriod = { start: time, end: time, duration: 15 };
+      } else {
+        currentPeriod.end = time;
+        currentPeriod.duration += 15;
+      }
+    } else {
+      // 未割り当てまたは休憩
+      if (currentPeriod) {
+        workPeriods.push(currentPeriod);
+        currentPeriod = null;
+      }
+    }
+  });
+  
+  // 最後の期間を追加
+  if (currentPeriod) {
+    workPeriods.push(currentPeriod);
+  }
+  
+  // 勤務時間の表示を更新（開始時間のみ表示、期間が長い場合は時間数も表示）
+  workHoursCells.forEach(cell => {
+    const time = cell.dataset.time;
+    const status = timeSlots.get(time);
+    
+    if (status && status.assigned && !status.break) {
+      // この時間が勤務期間の開始かどうかチェック
+      const period = workPeriods.find(p => p.start === time);
+      if (period) {
+        const hours = Math.floor(period.duration / 60);
+        const minutes = period.duration % 60;
+        
+        if (hours > 0) {
+          cell.textContent = `${hours}h${minutes > 0 ? minutes + 'm' : ''}`;
+        } else {
+          cell.textContent = `${minutes}m`;
+        }
+      }
+    }
+  });
 }
 </script>
 </div>
