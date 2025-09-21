@@ -309,7 +309,15 @@
                     <th class="employee-header">
                         <i class="bi bi-person"></i> 従業員
                     </th>
-                    <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:class="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:text="${d.dayOfMonth}">1</div>
+                        <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
+                             th:text="${#temporals.format(d, 'E')}">月</div>
+                    </th>
+                    <!-- 従来（月初〜月末） -->
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
                         th:class="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
                         <div th:text="${day}">1</div>
                         <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
@@ -320,7 +328,24 @@
                     <th class="employee-header summary-header">
                         <i class="bi bi-bar-chart"></i> 人時
                     </th>
-                    <th th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}">
+                            <div th:if="${summary.balance < 0}" class="balance-hours shortage" 
+                                 th:text="'不足:' + ${-summary.balance}">不足:2</div>
+                            <div th:if="${summary.balance > 0}" class="balance-hours excess" 
+                                 th:text="'超過:' + ${summary.balance}">超過:2</div>
+                            <div th:if="${summary.balance == 0}" class="balance-hours balanced" 
+                                 th:text="'適正'">適正</div>
+                        </div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <!-- 従来（月初〜月末） -->
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
                         th:with="date=${T(java.time.LocalDate).of(year, month, day)},
                                  summary=${dailyStaffingInfo.get(day)}"
                         class="staffing-summary-cell"
@@ -345,7 +370,23 @@
                             <div class="employee-code" th:text="${emp.employeeCode}">EMP001</div>
                         </div>
                     </td>
-                    <td th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
+                    <!-- 設定に基づくサイクル（dateList） -->
+                    <td th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="key=${emp.employeeCode + '_' + #temporals.format(d, 'yyyy-MM-dd')},
+                                 shifts=${employeeShifts != null ? employeeShifts.get(key) : null}"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? ' weekend-cell' : ''} + ${d.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''}">
+                        <div th:if="${shifts != null and !shifts.isEmpty()}">
+                            <span class="shift-time" 
+                                  th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
+                                09:00 ~ 17:00
+                            </span>
+                        </div>
+                        <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
+                            -
+                        </div>
+                    </td>
+                    <!-- 従来（月初〜月末） -->
+                    <td th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
                         th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
                                  shifts=${employeeShifts != null ? employeeShifts.get(emp.employeeCode + '_' + day) : null}"
                         th:classappend="${date.getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''} + 

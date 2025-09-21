@@ -47,16 +47,55 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
     @Override
     public ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode) {
+        // 呼び出し側は「サイクル開始日」を渡してくる前提
+        LocalDate cycleStart = month;
+        LocalDate cycleEnd   = cycleStart.plusMonths(1); // 半開区間 [start, end)
+
         // 1. 必要なマスタ／トランザクションデータを取得
-        List<Employee>               employees = storeCode == null ? employeeMapper.selectAll() : employeeMapper.selectByStoreCode(storeCode);
-        List<Register>               registers = registerMapper.selectAll();
-        List<RegisterDemandQuarter>  demands   = demandMapper.selectByMonth(month);
-        log.info("demands.size() = {}", demands.size());
-        List<EmployeeRequest>        requests  = requestMapper.selectByMonth(month);
-        List<ConstraintMaster>       settings  = constraintMasterMapper.selectAll();
-        List<RegisterAssignment>        previous  = assignmentMapper.selectByMonth(
-                month.minusMonths(1).withDayOfMonth(1),
-                month.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth()));
+        List<Employee> employees = (storeCode == null)
+                ? employeeMapper.selectAll()
+                : employeeMapper.selectByStoreCode(storeCode);
+
+        List<Register> registers = registerMapper.selectAll();
+
+        // 需要は「サイクル開始日〜+1ヶ月」で取得（店舗指定があれば絞り込み）
+        var demandEx = new RegisterDemandQuarterExample();
+        var dc = demandEx.createCriteria();
+        dc.andDemandDateGreaterThanOrEqualTo(java.sql.Date.valueOf(cycleStart));
+        dc.andDemandDateLessThan(java.sql.Date.valueOf(cycleEnd));
+        if (storeCode != null) {
+            dc.andStoreCodeEqualTo(storeCode);
+        }
+        demandEx.setOrderByClause("store_code, demand_date, slot_time");
+        List<RegisterDemandQuarter> demandsRaw = demandMapper.selectByExample(demandEx);
+        
+        // 重複行（同一 store/date/slot）が存在する場合があるため集約（最大値採用）
+        Map<String, RegisterDemandQuarter> dedup = new LinkedHashMap<>();
+        for (RegisterDemandQuarter d : demandsRaw) {
+            String key = d.getStoreCode() + "|" + d.getDemandDate() + "|" + d.getSlotTime();
+            RegisterDemandQuarter prev = dedup.get(key);
+            if (prev == null) {
+                dedup.put(key, d);
+            } else {
+                // requiredUnits は大きい方を優先（誤重複の合算を避ける）
+                if (d.getRequiredUnits() != null && prev.getRequiredUnits() != null) {
+                    if (d.getRequiredUnits() > prev.getRequiredUnits()) {
+                        dedup.put(key, d);
+                    }
+                }
+            }
+        }
+        List<RegisterDemandQuarter> demands = new ArrayList<>(dedup.values());
+
+        // 希望は日付範囲APIを利用
+        List<EmployeeRequest> requests = requestMapper.selectByDateRange(cycleStart, cycleEnd);
+
+        List<ConstraintMaster> settings = constraintMasterMapper.selectAll();
+
+        // ウォームスタート用の前回結果は「前サイクル」範囲で取得
+        List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
+                cycleStart.minusMonths(1),
+                cycleStart);
 
         // 2. 未割当 Assignment 生成
         List<ShiftAssignmentPlanningEntity> emptyAssignments = buildEmptyAssignments(demands, registers);
@@ -70,7 +109,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setConstraintMasterList(settings);
         schedule.setPreviousAssignmentList(previous);
         schedule.setAssignmentList(emptyAssignments);
-        schedule.setMonth(month);
+        schedule.setMonth(cycleStart);
         schedule.setStoreCode(storeCode);
         return schedule;
     }
@@ -131,6 +170,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 result.add(ent);
             }
         }
+        
         return result;
     }
 }

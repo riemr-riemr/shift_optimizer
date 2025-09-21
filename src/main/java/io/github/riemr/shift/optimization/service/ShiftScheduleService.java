@@ -94,7 +94,7 @@ public class ShiftScheduleService {
     @Transactional
     public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
         long problemId = toProblemId(month);
-        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode);
+        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, month);
 
         // 既存ジョブならチケット再発行
         if (jobMap.containsKey(key)) {
@@ -127,9 +127,22 @@ public class ShiftScheduleService {
 
     /** 進捗バー用ステータス */
     public SolveStatusDto getStatus(Long problemId, String storeCode) {
-        ProblemKey key = new ProblemKey(java.time.YearMonth.of((int)(problemId/100), (int)(problemId%100)), storeCode);
-        SolverStatus status = solverManager.getSolverStatus(key);
-        Instant began = startMap.get(key);
+        // jobMapから該当するProblemKeyを検索
+        ProblemKey targetKey = null;
+        for (ProblemKey key : jobMap.keySet()) {
+            if (key.getStoreCode().equals(storeCode) && 
+                toProblemId(key.getCycleStart()) == problemId) {
+                targetKey = key;
+                break;
+            }
+        }
+        
+        if (targetKey == null) {
+            return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
+        }
+        
+        SolverStatus status = solverManager.getSolverStatus(targetKey);
+        Instant began = startMap.get(targetKey);
         if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
 
         long now = Instant.now().toEpochMilli();
@@ -139,14 +152,14 @@ public class ShiftScheduleService {
         int pct = (int) Math.min(100, ((now - began.toEpochMilli()) * 100) / (finish - began.toEpochMilli()));
         
         // フェーズ情報を取得
-        String currentPhase = currentPhaseMap.getOrDefault(key, "初期化中");
+        String currentPhase = currentPhaseMap.getOrDefault(targetKey, "初期化中");
         
         if (status == SolverStatus.NOT_SOLVING) {
             pct = 100;
             currentPhase = "完了";
             
             // ハード制約違反チェック
-            SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(key);
+            SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(targetKey);
             if (job != null) {
                 try {
                     ShiftSchedule finalSolution = job.getFinalBestSolution();
@@ -154,9 +167,9 @@ public class ShiftScheduleService {
                         // ハード制約違反がある場合は違反情報を含めて返す
                         List<String> violationMessages = analyzeConstraintViolationsForUI(finalSolution);
                         // 後始末
-                        jobMap.remove(key);
-                        startMap.remove(key);
-                        currentPhaseMap.remove(key);
+                        jobMap.remove(targetKey);
+                        startMap.remove(targetKey);
+                        currentPhaseMap.remove(targetKey);
                         return SolveStatusDto.withConstraintViolations(status.name(), pct, finish, "制約違反あり", violationMessages);
                     }
                 } catch (InterruptedException e) {
@@ -167,9 +180,9 @@ public class ShiftScheduleService {
             }
             
             // 後始末
-            jobMap.remove(key);
-            startMap.remove(key);
-            currentPhaseMap.remove(key);
+            jobMap.remove(targetKey);
+            startMap.remove(targetKey);
+            currentPhaseMap.remove(targetKey);
         }
 
         return new SolveStatusDto(status.name(), pct, finish, currentPhase);
@@ -329,11 +342,14 @@ public class ShiftScheduleService {
      * problemId は yyyyMM の long 値で渡される。
      */
     private ShiftSchedule loadProblem(ProblemKey key) {
-        LocalDate month = LocalDate.of(key.getMonth().getYear(), key.getMonth().getMonthValue(), 1);
-        ShiftSchedule unsolved = repository.fetchShiftSchedule(month, key.getStoreCode());
+        // ProblemKeyからサイクル開始日を取得、なければ従来の方法
+        LocalDate cycleStart = key.getCycleStart() != null 
+            ? key.getCycleStart() 
+            : LocalDate.of(key.getMonth().getYear(), key.getMonth().getMonthValue(), 1);
+        ShiftSchedule unsolved = repository.fetchShiftSchedule(cycleStart, key.getStoreCode());
         unsolved.setEmployeeRegisterSkillList(employeeRegisterSkillMapper.selectByExample(null));
         // Repository 側で必要なフィールドをセット済みだが、問題 ID だけはここで上書きしておく
-        unsolved.setProblemId(toProblemId(month));
+        unsolved.setProblemId(toProblemId(cycleStart));
         if (unsolved.getAssignmentList() == null) {
             unsolved.setAssignmentList(new ArrayList<>());
         }
@@ -341,7 +357,7 @@ public class ShiftScheduleService {
         // 実行可能性チェック：全員希望休の日があるかチェック
         validateProblemFeasibility(unsolved);
         
-        log.info("Loaded unsolved problem for {} store {} ({} assignments)", month, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
+        log.info("Loaded unsolved problem for {} store {} ({} assignments)", cycleStart, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
         return unsolved;
     }
     
@@ -581,6 +597,11 @@ public class ShiftScheduleService {
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     private void persistResult(ShiftSchedule best) {
+        // Construction Heuristic中（未割当が残っている）なら保存をスキップ
+        if (best.getScore() != null && best.getScore().initScore() < 0) {
+            log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
+            return;
+        }
         // ハード制約違反チェック
         if (best.getScore() != null && best.getScore().hardScore() < 0) {
             log.error("🚨 HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
@@ -593,10 +614,10 @@ public class ShiftScheduleService {
             // ハード制約違反時は保存を実行しない
             return;
         }
-        // 既存データをクリア
-        LocalDate month = best.getMonth();
-        LocalDate from = month.withDayOfMonth(1);
-        LocalDate to = from.plusMonths(1);
+        // 既存データをクリア（サイクル開始日〜+1ヶ月の範囲で消す）
+        LocalDate cycleStart = best.getMonth();
+        LocalDate from = cycleStart;           // サイクル開始日
+        LocalDate to   = cycleStart.plusMonths(1); // 半開区間
         String store = best.getStoreCode();
         if (store != null) {
             registerAssignmentMapper.deleteByMonthAndStore(from, to, store);

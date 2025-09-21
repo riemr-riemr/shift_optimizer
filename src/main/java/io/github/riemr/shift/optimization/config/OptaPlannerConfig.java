@@ -19,6 +19,10 @@ import java.util.List;
 @Configuration
 public class OptaPlannerConfig {
 
+    // アプリ設定と揃えるため同じキーを参照（デフォルト: PT2M）
+    @org.springframework.beans.factory.annotation.Value("${shift.solver.spent-limit:PT2M}")
+    private Duration solverSpentLimit;
+
     @Bean
     public SolverFactory<ShiftSchedule> solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
@@ -43,10 +47,8 @@ public class OptaPlannerConfig {
     
     private TerminationConfig terminationConfig() {
         return new TerminationConfig()
-                // 最大3分で強制終了
-                .withSpentLimit(Duration.ofMinutes(3));
-                // Note: withBestScoreFeasible(true) を削除 - ソフト制約の最適化を継続するため
-                // Note: UnimprovedStepCountTermination はsolverレベルでは使用不可のため削除
+                // アプリ設定に合わせる（例: PT2M, PT5M 等）
+                .withSpentLimit(solverSpentLimit);
     }
     
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
@@ -59,6 +61,8 @@ public class OptaPlannerConfig {
                         // Local Searchフェーズで45秒間スコア改善がない場合にアーリーストッピング
                         .withUnimprovedSpentLimit(Duration.ofSeconds(45))
                         // フェーズレベルでも最大時間制限を設定（保険）
-                        .withSpentLimit(Duration.ofSeconds(135)));
+                        .withSpentLimit(solverSpentLimit.minus(Duration.ofSeconds(45)).isNegative()
+                                ? solverSpentLimit
+                                : solverSpentLimit.minus(Duration.ofSeconds(45))));
     }
 }

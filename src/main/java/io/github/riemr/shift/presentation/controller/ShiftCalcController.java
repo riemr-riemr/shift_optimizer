@@ -16,6 +16,7 @@ import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
+import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
@@ -43,6 +44,7 @@ public class ShiftCalcController {
     private final RegisterDemandHourService registerDemandHourService;
     private final RegisterDemandQuarterMapper registerDemandQuarterMapper;
     private final EmployeeMapper employeeMapper;
+    private final AppSettingService appSettingService;
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
@@ -53,8 +55,22 @@ public class ShiftCalcController {
     @PostMapping("/api/calc/start")
     @ResponseBody
     public SolveTicket start(@RequestBody SolveRequest req) {
-        LocalDate month = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return service.startSolveMonth(month, req.storeCode());
+        LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int startDay = appSettingService.getShiftCycleStartDay();
+        LocalDate cycleStart = computeCycleStart(base, startDay);
+        return service.startSolveMonth(cycleStart, req.storeCode());
+    }
+
+    private LocalDate computeCycleStart(LocalDate anyDate, int startDay) {
+        int dom = anyDate.getDayOfMonth();
+        if (dom >= startDay) {
+            int fixed = Math.min(startDay, anyDate.lengthOfMonth());
+            return anyDate.withDayOfMonth(fixed);
+        } else {
+            LocalDate prev = anyDate.minusMonths(1);
+            int fixed = Math.min(startDay, prev.lengthOfMonth());
+            return prev.withDayOfMonth(fixed);
+        }
     }
 
     @GetMapping("/api/calc/status/{id}")
@@ -146,16 +162,17 @@ public class ShiftCalcController {
             } else {
                 yearMonth = YearMonth.parse(targetMonth);
             }
-            int year = yearMonth.getYear();
-            int month = yearMonth.getMonthValue();
-            int daysInMonth = yearMonth.lengthOfMonth();
+            int startDay = appSettingService.getShiftCycleStartDay();
+            LocalDate anyDate = yearMonth.atDay(1);
+            LocalDate cycleStart = computeCycleStart(anyDate, startDay);
+            LocalDate cycleEnd = cycleStart.plusMonths(1);
             
             // 店舗リストを取得
             List<Store> stores = storeMapper.selectByExample(null);
             stores.sort(Comparator.comparing(Store::getStoreCode));
             
             // 月次シフトデータ取得
-            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(yearMonth.atDay(1), storeCode);
+            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(cycleStart, storeCode);
             
             // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();
@@ -205,7 +222,7 @@ public class ShiftCalcController {
                         return finalEmployeeCodes.contains(assignment.employeeCode());
                     })
                     .collect(Collectors.groupingBy(
-                        assignment -> assignment.employeeCode() + "_" + assignment.date().getDayOfMonth(),
+                        assignment -> assignment.employeeCode() + "_" + assignment.date().toString(),
                         Collectors.mapping(assignment -> new ShiftInfo(
                             assignment.startAt().format(DateTimeFormatter.ofPattern("HH:mm")),
                             assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -215,12 +232,23 @@ public class ShiftCalcController {
 
             // 日別人員配置サマリーを取得
             Map<LocalDate, StaffingBalanceService.DailyStaffingSummary> staffingSummaries = 
-                staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, yearMonth.atDay(1));
+                staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, cycleStart);
             
             // 日別人時サマリーを作成
+            int daysInMonth = (int) java.time.temporal.ChronoUnit.DAYS.between(cycleStart, cycleEnd);
+            // 検索フォームと見出しは「ユーザーが選択した月」を表示する
+            int year = yearMonth.getYear();
+            int month = yearMonth.getMonthValue();
+            
+            // サイクル期間の日付リストを生成
+            List<LocalDate> cycleDateList = java.util.stream.Stream
+                    .iterate(cycleStart, d -> d.plusDays(1))
+                    .limit(daysInMonth)
+                    .toList();
+            
             Map<Integer, DailyStaffingSummaryInfo> dailyStaffingInfo = new java.util.HashMap<>();
             for (int day = 1; day <= daysInMonth; day++) {
-                LocalDate date = yearMonth.atDay(day);
+                LocalDate date = cycleStart.plusDays(day - 1);
                 StaffingBalanceService.DailyStaffingSummary summary = staffingSummaries.get(date);
                 
                 if (summary != null) {
@@ -238,6 +266,7 @@ public class ShiftCalcController {
             model.addAttribute("month", month);
             model.addAttribute("daysInMonth", daysInMonth);
             model.addAttribute("stores", stores);
+            model.addAttribute("dateList", cycleDateList);
             model.addAttribute("selectedStoreCode", storeCode);
             model.addAttribute("employees", employees);
             model.addAttribute("employeeShifts", employeeShifts);
