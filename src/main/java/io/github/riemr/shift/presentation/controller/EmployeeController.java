@@ -25,7 +25,15 @@ public class EmployeeController {
     /* 新規フォーム */
     @GetMapping("/new")
     public String create(Model model) {
-        model.addAttribute("employeeForm", new EmployeeForm());
+        EmployeeForm form = new EmployeeForm();
+        // 曜日行を初期化（OPTIONAL）
+        for (short d = 1; d <= 7; d++) {
+            EmployeeForm.WeeklyPrefRow row = new EmployeeForm.WeeklyPrefRow();
+            row.setDayOfWeek(d);
+            row.setWorkStyle("OPTIONAL");
+            form.getWeeklyPreferences().add(row);
+        }
+        model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
         return "employee/form";
     }
@@ -33,7 +41,25 @@ public class EmployeeController {
     /* 編集フォーム */
     @GetMapping("/{code}")
     public String edit(@PathVariable String code, Model model) {
-        model.addAttribute("employeeForm", EmployeeForm.from(service.find(code)));
+        EmployeeForm form = EmployeeForm.from(service.find(code));
+        var prefs = service.findWeekly(code);
+        form.getWeeklyPreferences().clear();
+        java.util.Map<Short, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> map = new java.util.HashMap<>();
+        for (var p : prefs) map.put(p.getDayOfWeek(), p);
+        for (short d = 1; d <= 7; d++) {
+            var row = new EmployeeForm.WeeklyPrefRow();
+            row.setDayOfWeek(d);
+            var p = map.get(d);
+            if (p != null) {
+                row.setWorkStyle(p.getWorkStyle());
+                if (p.getBaseStartTime() != null) row.setBaseStartTime(p.getBaseStartTime().toString());
+                if (p.getBaseEndTime() != null) row.setBaseEndTime(p.getBaseEndTime().toString());
+            } else {
+                row.setWorkStyle("OPTIONAL");
+            }
+            form.getWeeklyPreferences().add(row);
+        }
+        model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
         return "employee/form";
     }
@@ -45,7 +71,26 @@ public class EmployeeController {
         if (result.hasErrors()) {
             return "employee/form";
         }
-        service.save(form.toEntity(), !edit);
+        // Map weekly prefs
+        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefs = new java.util.ArrayList<>();
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm");
+        for (var row : form.getWeeklyPreferences()) {
+            var p = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference();
+            p.setDayOfWeek(row.getDayOfWeek());
+            p.setWorkStyle(row.getWorkStyle());
+            if (!"OFF".equals(row.getWorkStyle())) {
+                try {
+                    if (row.getBaseStartTime() != null && !row.getBaseStartTime().isBlank())
+                        p.setBaseStartTime(new java.sql.Time(sdf.parse(row.getBaseStartTime()).getTime()));
+                    if (row.getBaseEndTime() != null && !row.getBaseEndTime().isBlank())
+                        p.setBaseEndTime(new java.sql.Time(sdf.parse(row.getBaseEndTime()).getTime()));
+                } catch (java.text.ParseException e) {
+                    // 入力エラーは無視し保存時はNULL扱い
+                }
+            }
+            prefs.add(p);
+        }
+        service.save(form.toEntity(), !edit, prefs);
         return "redirect:/employees";
     }
 

@@ -8,8 +8,7 @@
     <result column="short_follow" jdbcType="SMALLINT" property="shortFollow" />
     <result column="max_work_minutes_day" jdbcType="INTEGER" property="maxWorkMinutesDay" />
     <result column="max_work_days_month" jdbcType="INTEGER" property="maxWorkDaysMonth" />
-    <result column="base_start_time" jdbcType="TIME" property="baseStartTime" />
-    <result column="base_end_time" jdbcType="TIME" property="baseEndTime" />
+    
   </resultMap>
   <sql id="Example_Where_Clause">
     <where>
@@ -70,8 +69,7 @@
     </where>
   </sql>
   <sql id="Base_Column_List">
-    employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month,
-    base_start_time, base_end_time
+    employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month
   </sql>
   <select id="selectByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample" resultMap="BaseResultMap">
     select
@@ -105,13 +103,9 @@
   </delete>
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     insert into public.employee (employee_code, store_code, employee_name, 
-      short_follow, max_work_minutes_day, max_work_days_month,
-      base_start_time, base_end_time
-      )
+      short_follow, max_work_minutes_day, max_work_days_month)
     values (#{employeeCode,jdbcType=VARCHAR}, #{storeCode,jdbcType=VARCHAR}, #{employeeName,jdbcType=VARCHAR}, 
-      #{shortFollow,jdbcType=SMALLINT}, #{maxWorkMinutesDay,jdbcType=INTEGER}, #{maxWorkDaysMonth,jdbcType=INTEGER},
-      #{baseStartTime,jdbcType=TIME}, #{baseEndTime,jdbcType=TIME}
-      )
+      #{shortFollow,jdbcType=SMALLINT}, #{maxWorkMinutesDay,jdbcType=INTEGER}, #{maxWorkDaysMonth,jdbcType=INTEGER})
   </insert>
   <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     insert into public.employee
@@ -134,12 +128,7 @@
       <if test="maxWorkDaysMonth != null">
         max_work_days_month,
       </if>
-      <if test="baseStartTime != null">
-        base_start_time,
-      </if>
-      <if test="baseEndTime != null">
-        base_end_time,
-      </if>
+      
     </trim>
     <trim prefix="values (" suffix=")" suffixOverrides=",">
       <if test="employeeCode != null">
@@ -160,12 +149,7 @@
       <if test="maxWorkDaysMonth != null">
         #{maxWorkDaysMonth,jdbcType=INTEGER},
       </if>
-      <if test="baseStartTime != null">
-        #{baseStartTime,jdbcType=TIME},
-      </if>
-      <if test="baseEndTime != null">
-        #{baseEndTime,jdbcType=TIME},
-      </if>
+      
     </trim>
   </insert>
   <select id="countByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeExample" resultType="java.lang.Long">
@@ -195,12 +179,7 @@
       <if test="row.maxWorkDaysMonth != null">
         max_work_days_month = #{row.maxWorkDaysMonth,jdbcType=INTEGER},
       </if>
-      <if test="row.baseStartTime != null">
-        base_start_time = #{row.baseStartTime,jdbcType=TIME},
-      </if>
-      <if test="row.baseEndTime != null">
-        base_end_time = #{row.baseEndTime,jdbcType=TIME},
-      </if>
+      
     </set>
     <if test="example != null">
       <include refid="Update_By_Example_Where_Clause" />
@@ -213,9 +192,7 @@
       employee_name = #{row.employeeName,jdbcType=VARCHAR},
       short_follow = #{row.shortFollow,jdbcType=SMALLINT},
       max_work_minutes_day = #{row.maxWorkMinutesDay,jdbcType=INTEGER},
-      max_work_days_month = #{row.maxWorkDaysMonth,jdbcType=INTEGER},
-      base_start_time = #{row.baseStartTime,jdbcType=TIME},
-      base_end_time = #{row.baseEndTime,jdbcType=TIME}
+      max_work_days_month = #{row.maxWorkDaysMonth,jdbcType=INTEGER}
     <if test="example != null">
       <include refid="Update_By_Example_Where_Clause" />
     </if>
@@ -238,12 +215,7 @@
       <if test="maxWorkDaysMonth != null">
         max_work_days_month = #{maxWorkDaysMonth,jdbcType=INTEGER},
       </if>
-      <if test="baseStartTime != null">
-        base_start_time = #{baseStartTime,jdbcType=TIME},
-      </if>
-      <if test="baseEndTime != null">
-        base_end_time = #{baseEndTime,jdbcType=TIME},
-      </if>
+      
     </set>
     where employee_code = #{employeeCode,jdbcType=VARCHAR}
   </update>
@@ -253,9 +225,7 @@
       employee_name = #{employeeName,jdbcType=VARCHAR},
       short_follow = #{shortFollow,jdbcType=SMALLINT},
       max_work_minutes_day = #{maxWorkMinutesDay,jdbcType=INTEGER},
-      max_work_days_month = #{maxWorkDaysMonth,jdbcType=INTEGER},
-      base_start_time = #{baseStartTime,jdbcType=TIME},
-      base_end_time = #{baseEndTime,jdbcType=TIME}
+      max_work_days_month = #{maxWorkDaysMonth,jdbcType=INTEGER}
     where employee_code = #{employeeCode,jdbcType=VARCHAR}
   </update>
 
@@ -267,8 +237,7 @@
 
   <select id="selectByStoreCode" parameterType="string" resultMap="BaseResultMap">
     SELECT
-      employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month,
-      base_start_time, base_end_time
+      employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month
     FROM public.employee
     WHERE store_code = #{storeCode}
     ORDER BY employee_code

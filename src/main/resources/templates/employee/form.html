@@ -144,31 +144,57 @@
               </div>
             </div>
 
-            <div class="row">
-              <div class="col-md-6">
-                <div class="mb-3">
-                  <label for="baseStartTime" class="form-label">
-                    <i class="bi bi-clock-history"></i> 基本開始時刻
-                  </label>
-                  <input type="time" 
-                         id="baseStartTime"
-                         th:field="*{baseStartTime}" 
-                         class="form-control"/>
-                  <div class="form-text">希望する勤務開始時刻（任意）</div>
-                </div>
+            <div class="card mt-3">
+              <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-calendar-week"></i> 曜日別の働き方</h6>
               </div>
-              
-              <div class="col-md-6">
-                <div class="mb-3">
-                  <label for="baseEndTime" class="form-label">
-                    <i class="bi bi-clock"></i> 基本終了時刻
-                  </label>
-                  <input type="time" 
-                         id="baseEndTime"
-                         th:field="*{baseEndTime}" 
-                         class="form-control"/>
-                  <div class="form-text">希望する勤務終了時刻（任意）</div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th style="width: 120px;">曜日</th>
+                        <th style="width: 220px;">働き方</th>
+                        <th style="width: 180px;">開始時刻</th>
+                        <th style="width: 180px;">終了時刻</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr th:each="row,stat : *{weeklyPreferences}">
+                        <td>
+                          <input type="hidden" th:field="*{weeklyPreferences[__${stat.index}__].dayOfWeek}"/>
+                          <span th:switch="${row.dayOfWeek}">
+                            <span th:case="1">月</span>
+                            <span th:case="2">火</span>
+                            <span th:case="3">水</span>
+                            <span th:case="4">木</span>
+                            <span th:case="5">金</span>
+                            <span th:case="6">土</span>
+                            <span th:case="7">日</span>
+                            <span th:case="*">?</span>
+                          </span>
+                        </td>
+                        <td>
+                          <select class="form-select form-select-sm work-style"
+                                  th:field="*{weeklyPreferences[__${stat.index}__].workStyle}">
+                            <option value="OFF">休み</option>
+                            <option value="OPTIONAL">必要に応じて出勤</option>
+                            <option value="MANDATORY">必ず出勤</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input type="time" class="form-control form-control-sm start-time" step="600"
+                                 th:field="*{weeklyPreferences[__${stat.index}__].baseStartTime}"/>
+                        </td>
+                        <td>
+                          <input type="time" class="form-control form-control-sm end-time" step="600"
+                                 th:field="*{weeklyPreferences[__${stat.index}__].baseEndTime}"/>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
+                <div class="form-text">「休み」の場合、時刻は不要です（自動で無効化）。</div>
               </div>
             </div>
 
@@ -215,6 +241,24 @@
       </div>
     </div>
   </div>
+  <script>
+    // 働き方に応じて時刻入力を有効/無効化
+    function updateTimeInputs() {
+      document.querySelectorAll('tr').forEach(tr => {
+        const styleSel = tr.querySelector('select.work-style');
+        const start = tr.querySelector('input.start-time');
+        const end = tr.querySelector('input.end-time');
+        if (!styleSel || !start || !end) return;
+        const off = styleSel.value === 'OFF';
+        start.disabled = off; end.disabled = off;
+        if (off) { start.value = ''; end.value = ''; }
+      });
+    }
+    document.addEventListener('change', e => {
+      if (e.target && e.target.classList.contains('work-style')) updateTimeInputs();
+    });
+    document.addEventListener('DOMContentLoaded', updateTimeInputs);
+  </script>
 </div>
 </body>
 </html>

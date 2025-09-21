@@ -33,13 +33,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             maxConsecutiveDays(factory),
             forbidRequestedDayOff(factory),
             enforceLunchBreak(factory),
-            forbidNullBaseTimeEmployees(factory),
+            
             ensureWeeklyRestDays(factory),
 
             // Soft constraints
             satisfyRegisterDemand(factory),
             preferHigherSkillLevel(factory),
-            preferBaseWorkTimes(factory),
+            
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
             assignContiguously(factory),
@@ -277,47 +277,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * TODO: 将来的にはより柔軟な基本勤務時間制約に変更予定
      * 現在は暫定実装として、base_start_time/base_end_timeがnullの従業員はアサインしない
      */
-    private Constraint forbidNullBaseTimeEmployees(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null)
-                .filter(sa -> sa.getAssignedEmployee().getBaseStartTime() == null || 
-                             sa.getAssignedEmployee().getBaseEndTime() == null)
-                .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Employee with null base times assigned");
-    }
+    // baseStart/baseEnd 時刻の存在チェックは曜日別設定に置換予定
 
     /**
      * 従業員の基本勤務時間からの乖離を最小化する
      * base_start_time/base_end_timeに近い時間帯での勤務を優先
      */
-    private Constraint preferBaseWorkTimes(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null)
-                .filter(sa -> sa.getAssignedEmployee().getBaseStartTime() != null && 
-                             sa.getAssignedEmployee().getBaseEndTime() != null)
-                .penalize(HardSoftScore.ofSoft(100), sa -> {
-                    // java.util.Date（TIME型）からLocalTimeに変換
-                    LocalTime baseStart = sa.getAssignedEmployee().getBaseStartTime().toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalTime();
-                    LocalTime baseEnd = sa.getAssignedEmployee().getBaseEndTime().toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalTime();
-                    LocalTime shiftStart = sa.getStartAt().toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalTime();
-                    LocalTime shiftEnd = sa.getEndAt().toInstant()
-                        .atZone(ZoneId.systemDefault()).toLocalTime();
-                    
-                    // 基本勤務時間との乖離を計算（分単位）
-                    int startDeviation = Math.abs((int) Duration.between(baseStart, shiftStart).toMinutes());
-                    int endDeviation = Math.abs((int) Duration.between(baseEnd, shiftEnd).toMinutes());
-                    
-                    // 12時間を超える乖離は12時間として扱う（24時間制での計算ミス対応）
-                    startDeviation = Math.min(startDeviation, 720); // 12時間 = 720分
-                    endDeviation = Math.min(endDeviation, 720);
-                    
-                    return startDeviation + endDeviation;
-                })
-                .asConstraint("Deviation from base work times");
-    }
+    // preferBaseWorkTimes は曜日別の週間設定へ置換予定（未実装）
 
     /**
      * 週に2日以上の休日を保証するハード制約
@@ -497,5 +463,3 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return blocks;
     }
 }
-
-

@@ -130,30 +130,15 @@ public class MasterCsvImportJobConfig {
         
         // カスタムFieldSetMapper
         FieldSetMapper<Employee> mapper = fs -> {
-            try {
-                Employee e = new Employee();
-                e.setEmployeeCode(fs.readString("employeeCode"));
-                e.setStoreCode(fs.readString("storeCode"));
-                e.setEmployeeName(fs.readString("employeeName"));
-                e.setShortFollow(fs.readShort("shortFollow"));
-                e.setMaxWorkMinutesDay(fs.readInt("maxWorkMinutesDay"));
-                e.setMaxWorkDaysMonth(fs.readInt("maxWorkDaysMonth"));
-                
-                // 時刻フィールドの処理（空の場合はnull）
-                String startTimeStr = fs.readString("baseStartTime");
-                if (startTimeStr != null && !startTimeStr.trim().isEmpty()) {
-                    e.setBaseStartTime(TIME_FMT.parse(startTimeStr));
-                }
-                
-                String endTimeStr = fs.readString("baseEndTime");
-                if (endTimeStr != null && !endTimeStr.trim().isEmpty()) {
-                    e.setBaseEndTime(TIME_FMT.parse(endTimeStr));
-                }
-                
-                return e;
-            } catch (ParseException ex) {
-                throw new FlatFileParseException("時刻のパースに失敗しました", "");
-            }
+            Employee e = new Employee();
+            e.setEmployeeCode(fs.readString("employeeCode"));
+            e.setStoreCode(fs.readString("storeCode"));
+            e.setEmployeeName(fs.readString("employeeName"));
+            e.setShortFollow(fs.readShort("shortFollow"));
+            e.setMaxWorkMinutesDay(fs.readInt("maxWorkMinutesDay"));
+            e.setMaxWorkDaysMonth(fs.readInt("maxWorkDaysMonth"));
+            // 基本開始/終了時刻は曜日別テーブルに移行したため読み込み対象外
+            return e;
         };
         
         // FlatFileItemReaderを構築
@@ -163,7 +148,7 @@ public class MasterCsvImportJobConfig {
                 .linesToSkip(1)
                 .delimited()
                 .names("employeeCode", "storeCode", "employeeName", "shortFollow", 
-                       "maxWorkMinutesDay", "maxWorkDaysMonth", "baseStartTime", "baseEndTime")
+                       "maxWorkMinutesDay", "maxWorkDaysMonth")
                 .fieldSetMapper(mapper)
                 .build();
     }

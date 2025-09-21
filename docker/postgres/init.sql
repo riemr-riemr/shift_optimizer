@@ -44,9 +44,21 @@ CREATE TABLE employee (
     employee_name        VARCHAR(50) NOT NULL,
     short_follow         SMALLINT, -- 0~4
     max_work_minutes_day INT,
-    max_work_days_month  INT,
-    base_start_time      TIME,
-    base_end_time        TIME
+    max_work_days_month  INT
+);
+
+-- 従業員の曜日別勤務設定
+CREATE TABLE employee_weekly_preference (
+    employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
+    day_of_week     SMALLINT    NOT NULL CHECK (day_of_week BETWEEN 1 AND 7), -- 1=Mon ... 7=Sun (ISO)
+    work_style      VARCHAR(16) NOT NULL CHECK (work_style IN ('OFF','OPTIONAL','MANDATORY')),
+    base_start_time TIME NULL,
+    base_end_time   TIME NULL,
+    store_code      VARCHAR(10) NULL,
+    created_at      TIMESTAMP   DEFAULT now(),
+    updated_at      TIMESTAMP   DEFAULT now(),
+    PRIMARY KEY (employee_code, day_of_week),
+    CHECK ( (work_style = 'OFF' AND base_start_time IS NULL AND base_end_time IS NULL) OR (work_style <> 'OFF') )
 );
 
 -- ------------------------------------------------

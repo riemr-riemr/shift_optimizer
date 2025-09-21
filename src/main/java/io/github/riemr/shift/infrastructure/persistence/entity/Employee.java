@@ -14,8 +14,7 @@ public class Employee implements Serializable {
     private Short shortFollow;
     private Integer maxWorkMinutesDay;
     private Integer maxWorkDaysMonth;
-    private Date baseStartTime;
-    private Date baseEndTime;
+    
 
     private static final long serialVersionUID = 1L;
 
@@ -67,19 +66,5 @@ public class Employee implements Serializable {
         this.maxWorkDaysMonth = maxWorkDaysMonth;
     }
 
-    public Date getBaseStartTime() {
-        return baseStartTime;
-    }
-
-    public void setBaseStartTime(Date baseStartTime) {
-        this.baseStartTime = baseStartTime;
-    }
-
-    public Date getBaseEndTime() {
-        return baseEndTime;
-    }
-
-    public void setBaseEndTime(Date baseEndTime) {
-        this.baseEndTime = baseEndTime;
-    }
+    
 }

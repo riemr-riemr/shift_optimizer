@@ -29,28 +29,22 @@ public class EmployeeForm {
 
     @NotNull @Min(1) @Max(31)
     private Integer maxWorkDaysMonth;
+    // 曜日別設定（1=Mon .. 7=Sun）
+    @lombok.Data
+    public static class WeeklyPrefRow {
+        private Short dayOfWeek;
+        private String workStyle; // OFF / OPTIONAL / MANDATORY
+        private String baseStartTime; // HH:mm or null
+        private String baseEndTime;   // HH:mm or null
+    }
+    private java.util.List<WeeklyPrefRow> weeklyPreferences = new java.util.ArrayList<>();
 
-    private String baseStartTime;
-    private String baseEndTime;
+    
 
     /* -------- DTO ⇔ Entity 変換 -------- */
     public Employee toEntity() {
-        Date startTime = null;
-        Date endTime = null;
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
-        try {
-            if (baseStartTime != null && !baseStartTime.isEmpty()) {
-                startTime = sdf.parse(baseStartTime);
-            }
-            if (baseEndTime != null && !baseEndTime.isEmpty()) {
-                endTime = sdf.parse(baseEndTime);
-            }
-        } catch (ParseException e) {
-            throw new IllegalArgumentException("Invalid time format, please use HH:mm", e);
-        }
-
         return new Employee(employeeCode, storeCode, employeeName,
-                shortFollow, maxWorkMinutesDay, maxWorkDaysMonth, startTime, endTime);
+                shortFollow, maxWorkMinutesDay, maxWorkDaysMonth);
     }
 
     public static EmployeeForm from(Employee e) {
@@ -62,13 +56,7 @@ public class EmployeeForm {
         f.maxWorkMinutesDay = e.getMaxWorkMinutesDay();
         f.maxWorkDaysMonth = e.getMaxWorkDaysMonth();
 
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
-        if (e.getBaseStartTime() != null) {
-            f.baseStartTime = sdf.format(e.getBaseStartTime());
-        }
-        if (e.getBaseEndTime() != null) {
-            f.baseEndTime = sdf.format(e.getBaseEndTime());
-        }
+        
         return f;
     }
 }
