@@ -38,6 +38,7 @@ public class MasterCsvImportJobConfig {
     private final JobRepository jobRepository;
     private final PlatformTransactionManager txManager;
     private final SqlSessionFactory sqlSessionFactory;
+    private final io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
 
     /* === Job =========================================================== */
     @Bean
@@ -45,7 +46,9 @@ public class MasterCsvImportJobConfig {
             Step registerTypeStep,
             Step registerStep,
             Step employeeStep,
+            Step employeeWeeklyPreferenceStep,
             Step employeeRegisterSkillStep,
+            Step employeeWeeklyPreferenceFallbackStep,
             Step registerDemandQuarterStep) {
         return new JobBuilder("masterImportJob", jobRepository)
                 .incrementer(new RunIdIncrementer()) // run.id を自動付与
@@ -53,7 +56,9 @@ public class MasterCsvImportJobConfig {
                 .next(registerTypeStep)
                 .next(registerStep)
                 .next(employeeStep)
+                .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
+                .next(employeeWeeklyPreferenceFallbackStep)
                 .next(registerDemandQuarterStep)
                 .build();
     }
@@ -169,6 +174,118 @@ public class MasterCsvImportJobConfig {
         return csvReader(csvDir.resolve("employee_register_skill.csv"),
                 new String[] { "storeCode", "employeeCode", "registerNo", "skillLevel" },
                 EmployeeRegisterSkill.class);
+    }
+
+    /* === Step : employee_weekly_preference.csv ========================= */
+    @Bean
+    public Step employeeWeeklyPreferenceStep(FlatFileItemReader<EmployeeWeeklyPreference> employeeWeeklyPreferenceReader) {
+        return new StepBuilder("employeeWeeklyPreferenceStep", jobRepository)
+                .<EmployeeWeeklyPreference, EmployeeWeeklyPreference>chunk(1000, txManager)
+                .reader(employeeWeeklyPreferenceReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<EmployeeWeeklyPreference> employeeWeeklyPreferenceReader(@Value("${csv.dir}") Path csvDir) {
+        // HH:mm を java.sql.Time にするカスタムマッパ
+        FieldSetMapper<EmployeeWeeklyPreference> mapper = fs -> {
+            EmployeeWeeklyPreference p = new EmployeeWeeklyPreference();
+            p.setEmployeeCode(fs.readString("employeeCode"));
+            p.setDayOfWeek(fs.readShort("dayOfWeek"));
+            p.setWorkStyle(fs.readString("workStyle"));
+            String s = fs.readString("baseStartTime");
+            String e = fs.readString("baseEndTime");
+            if (s != null && !s.isBlank()) {
+                java.time.LocalTime lt = java.time.LocalTime.parse(s);
+                p.setBaseStartTime(java.sql.Time.valueOf(lt));
+            }
+            if (e != null && !e.isBlank()) {
+                java.time.LocalTime lt = java.time.LocalTime.parse(e);
+                p.setBaseEndTime(java.sql.Time.valueOf(lt));
+            }
+            // storeCode は任意
+            try { p.setStoreCode(fs.readString("storeCode")); } catch (Exception ignore) {}
+            return p;
+        };
+
+        return new FlatFileItemReaderBuilder<EmployeeWeeklyPreference>()
+                .name("employeeWeeklyPreferenceReader")
+                .resource(new FileSystemResource(csvDir.resolve("employee_weekly_preference.csv")))
+                .linesToSkip(1)
+                .delimited()
+                .names("employeeCode","dayOfWeek","workStyle","baseStartTime","baseEndTime","storeCode")
+                .fieldSetMapper(mapper)
+                .build();
+    }
+
+    /* === Step (fallback): employee.csv から曜日別設定を一括生成 ============ */
+    @lombok.Data
+    static class LegacyEmployeeRow {
+        private String employeeCode;
+        private String storeCode;
+        private String baseStartTime; // HHmm or blank
+        private String baseEndTime;   // HHmm or blank
+    }
+
+    @Bean
+    public Step employeeWeeklyPreferenceFallbackStep(FlatFileItemReader<LegacyEmployeeRow> employeeWeeklyPreferenceFallbackReader) {
+        return new StepBuilder("employeeWeeklyPreferenceFallbackStep", jobRepository)
+                .<LegacyEmployeeRow, LegacyEmployeeRow>chunk(1000, txManager)
+                .reader(employeeWeeklyPreferenceFallbackReader)
+                .writer(items -> {
+                    java.util.Set<String> processed = new java.util.HashSet<>();
+                    for (LegacyEmployeeRow row : items) {
+                        if (row.getEmployeeCode() == null || row.getEmployeeCode().isBlank()) continue;
+                        if (!processed.add(row.getEmployeeCode())) continue; // 重複行をスキップ
+                        var existing = weeklyPrefMapper.selectByEmployee(row.getEmployeeCode());
+                        if (existing != null && !existing.isEmpty()) continue; // 既に別CSVで設定済みならスキップ
+
+                        java.sql.Time start = null, end = null;
+                        try {
+                            if (row.getBaseStartTime() != null && !row.getBaseStartTime().isBlank()) {
+                                var lt = java.time.LocalTime.parse(row.getBaseStartTime().replaceFirst("^(..)(..)$", "$1:$2"));
+                                start = java.sql.Time.valueOf(lt);
+                            }
+                            if (row.getBaseEndTime() != null && !row.getBaseEndTime().isBlank()) {
+                                var lt = java.time.LocalTime.parse(row.getBaseEndTime().replaceFirst("^(..)(..)$", "$1:$2"));
+                                end = java.sql.Time.valueOf(lt);
+                            }
+                        } catch (Exception ignore) {}
+
+                        for (short d = 1; d <= 7; d++) {
+                            var p = new EmployeeWeeklyPreference();
+                            p.setEmployeeCode(row.getEmployeeCode());
+                            p.setDayOfWeek(d);
+                            p.setWorkStyle("OPTIONAL");
+                            p.setBaseStartTime(start);
+                            p.setBaseEndTime(end);
+                            p.setStoreCode(row.getStoreCode());
+                            weeklyPrefMapper.insert(p);
+                        }
+                    }
+                })
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<LegacyEmployeeRow> employeeWeeklyPreferenceFallbackReader(@Value("${csv.dir}") Path csvDir) {
+        FieldSetMapper<LegacyEmployeeRow> mapper = fs -> {
+            LegacyEmployeeRow r = new LegacyEmployeeRow();
+            r.setEmployeeCode(fs.readString("employeeCode"));
+            try { r.setStoreCode(fs.readString("storeCode")); } catch (Exception ignore) {}
+            try { r.setBaseStartTime(fs.readString("baseStartTime")); } catch (Exception ignore) {}
+            try { r.setBaseEndTime(fs.readString("baseEndTime")); } catch (Exception ignore) {}
+            return r;
+        };
+        return new FlatFileItemReaderBuilder<LegacyEmployeeRow>()
+                .name("employeeWeeklyPreferenceFallbackReader")
+                .resource(new FileSystemResource(csvDir.resolve("employee.csv")))
+                .linesToSkip(1)
+                .delimited()
+                .names("employeeCode","storeCode","employeeName","shortFollow","maxWorkMinutesDay","maxWorkDaysMonth","baseStartTime","baseEndTime")
+                .fieldSetMapper(mapper)
+                .build();
     }
 
     /* === Step : register_demand_quarter.csv ========================================== */
