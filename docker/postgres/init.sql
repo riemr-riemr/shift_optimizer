@@ -181,3 +181,14 @@ CREATE TABLE constraint_setting (
 COMMIT;
 
 -- end of init.sql
+-- ------------------------------------------------
+-- 0. app_setting : 汎用アプリ設定
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_setting (
+    setting_key   VARCHAR(64) PRIMARY KEY,
+    setting_value VARCHAR(256) NOT NULL,
+    updated_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+INSERT INTO app_setting(setting_key, setting_value)
+    VALUES ('shift_cycle_start_day','1')
+    ON CONFLICT (setting_key) DO NOTHING;

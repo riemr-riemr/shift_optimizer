@@ -38,6 +38,7 @@ import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
+import io.github.riemr.shift.application.service.AppSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,6 +63,7 @@ public class ShiftScheduleService {
     private final ShiftAssignmentMapper shiftAssignmentMapper;
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
+    private final AppSettingService appSettingService;
 
     /* === Settings === */
     @Value("${shift.solver.spent-limit:PT2M}") // ISO‑8601 Duration (default 2 minutes)
@@ -203,8 +205,8 @@ public class ShiftScheduleService {
 
     /** 月別シフト取得 - レジアサインメント表示 */
     public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth, String storeCode) {
-        LocalDate from = anyDayInMonth.withDayOfMonth(1);
-        LocalDate to   = from.plusMonths(1);  // 翌月 1 日 (半開区間)
+        LocalDate from = computeCycleStart(anyDayInMonth);
+        LocalDate to   = from.plusMonths(1);  // 半開区間
 
         List<RegisterAssignment> assignments = registerAssignmentMapper.selectByMonth(from, to)
                 .stream()
@@ -228,8 +230,8 @@ public class ShiftScheduleService {
 
     /** 月別出勤時間取得 - シフトアサインメント表示 */
     public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode) {
-        LocalDate from = anyDayInMonth.withDayOfMonth(1);
-        LocalDate to   = from.plusMonths(1);  // 翌月 1 日 (半開区間)
+        LocalDate from = computeCycleStart(anyDayInMonth);
+        LocalDate to   = from.plusMonths(1);  // 半開区間
 
         List<ShiftAssignment> shifts = shiftAssignmentMapper.selectByMonth(from, to)
                 .stream()
@@ -725,5 +727,15 @@ public class ShiftScheduleService {
         int year = (int) (problemId / 100);
         int month = (int) (problemId % 100);
         return LocalDate.of(year, month, 1);
+    }
+    private LocalDate computeCycleStart(LocalDate anyDate) {
+        int startDay = appSettingService.getShiftCycleStartDay();
+        int dom = anyDate.getDayOfMonth();
+        if (dom >= startDay) {
+            return anyDate.withDayOfMonth(Math.min(startDay, anyDate.lengthOfMonth()));
+        } else {
+            LocalDate prev = anyDate.minusMonths(1);
+            return prev.withDayOfMonth(Math.min(startDay, prev.lengthOfMonth()));
+        }
     }
 }
