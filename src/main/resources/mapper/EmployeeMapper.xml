@@ -8,6 +8,7 @@
     <result column="short_follow" jdbcType="SMALLINT" property="shortFollow" />
     <result column="max_work_minutes_day" jdbcType="INTEGER" property="maxWorkMinutesDay" />
     <result column="max_work_days_month" jdbcType="INTEGER" property="maxWorkDaysMonth" />
+    <!-- password_hash / authority_code はMBGエンティティへはマッピングしない（別DTOで取得） -->
     
   </resultMap>
   <sql id="Example_Where_Clause">
@@ -241,5 +242,21 @@
     FROM public.employee
     WHERE store_code = #{storeCode}
     ORDER BY employee_code
+  </select>
+
+  <!-- Auth: username(=employee_code) でログイン用情報を取得 -->
+  <resultMap id="AuthUserMap" type="io.github.riemr.shift.infrastructure.security.AuthUser">
+    <id     column="employee_code" property="employeeCode" />
+    <result column="employee_name" property="employeeName" />
+    <result column="store_code"    property="storeCode" />
+    <result column="password_hash" property="passwordHash" />
+    <result column="authority_code" property="authorityCode" />
+  </resultMap>
+
+  <select id="selectAuthByEmployeeCode" parameterType="string" resultMap="AuthUserMap">
+    SELECT employee_code, employee_name, store_code, password_hash, authority_code
+      FROM public.employee
+     WHERE employee_code = #{employeeCode}
+     LIMIT 1
   </select>
 </mapper>

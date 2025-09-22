@@ -7,6 +7,9 @@ SET search_path = public;
 
 BEGIN;
 
+-- Extensions (for bcrypt hashing)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ------------------------------------------------
 -- 1. store : 店舗マスタ
 -- ------------------------------------------------
@@ -36,6 +39,21 @@ CREATE TABLE register (
 );
 
 -- ------------------------------------------------
+-- 2.5 authority_master : 権限マスタ
+-- ------------------------------------------------
+CREATE TABLE authority_master (
+    authority_code   VARCHAR(20) PRIMARY KEY,
+    authority_name   VARCHAR(50) NOT NULL,
+    description      TEXT
+);
+
+INSERT INTO authority_master(authority_code, authority_name, description) VALUES
+    ('ADMIN',   '管理者',          '全機能へのアクセス'),
+    ('MANAGER', '店長/管理者',     '店舗運用・最適化・設定の一部'),
+    ('USER',    '一般ユーザ',      '閲覧・自身に関する操作')
+ON CONFLICT (authority_code) DO NOTHING;
+
+-- ------------------------------------------------
 -- 3. employee : 従業員マスタ
 -- ------------------------------------------------
 CREATE TABLE employee (
@@ -44,7 +62,9 @@ CREATE TABLE employee (
     employee_name        VARCHAR(50) NOT NULL,
     short_follow         SMALLINT, -- 0~4
     max_work_minutes_day INT,
-    max_work_days_month  INT
+    max_work_days_month  INT,
+    password_hash        VARCHAR(100),
+    authority_code       VARCHAR(20) REFERENCES authority_master(authority_code)
 );
 
 -- 従業員の曜日別勤務設定
@@ -192,3 +212,16 @@ CREATE TABLE IF NOT EXISTS app_setting (
 INSERT INTO app_setting(setting_key, setting_value)
     VALUES ('shift_cycle_start_day','1')
     ON CONFLICT (setting_key) DO NOTHING;
+
+-- ------------------------------------------------
+-- Seed: initial admin user (dev convenience)
+--   username: admin / password: admin
+--   NOTE: Change password after first login.
+-- ------------------------------------------------
+INSERT INTO employee(
+    employee_code, store_code, employee_name, short_follow,
+    max_work_minutes_day, max_work_days_month, password_hash, authority_code
+) VALUES (
+    'admin', NULL, 'Administrator', 0,
+    480, 31, crypt('admin', gen_salt('bf', 10)), 'ADMIN'
+) ON CONFLICT (employee_code) DO NOTHING;

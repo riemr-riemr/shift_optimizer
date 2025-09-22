@@ -99,4 +99,7 @@ public interface EmployeeMapper {
 
     /** 店舗コードで従業員を取得 */
     List<Employee> selectByStoreCode(@Param("storeCode") String storeCode);
+
+    // --- Auth (custom) ---
+    io.github.riemr.shift.infrastructure.security.AuthUser selectAuthByEmployeeCode(@Param("employeeCode") String employeeCode);
 }
