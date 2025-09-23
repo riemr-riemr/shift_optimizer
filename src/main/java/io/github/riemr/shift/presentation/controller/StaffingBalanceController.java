@@ -24,6 +24,7 @@ public class StaffingBalanceController {
     private final StaffingBalanceService staffingBalanceService;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).STAFFING_BALANCE)")
     public String index(@RequestParam(required = false) String date, Model model) {
         if (date == null) {
             date = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);

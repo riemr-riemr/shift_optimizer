@@ -46,6 +46,7 @@ public class MasterCsvImportJobConfig {
             Step registerTypeStep,
             Step registerStep,
             Step employeeStep,
+            Step employeeAuthStep,
             Step employeeWeeklyPreferenceStep,
             Step employeeRegisterSkillStep,
             Step registerDemandQuarterStep) {
@@ -55,6 +56,7 @@ public class MasterCsvImportJobConfig {
                 .next(registerTypeStep)
                 .next(registerStep)
                 .next(employeeStep)
+                .next(employeeAuthStep)
                 .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
                 .next(registerDemandQuarterStep)
@@ -151,9 +153,70 @@ public class MasterCsvImportJobConfig {
                 .linesToSkip(1)
                 .delimited()
                 .names("employeeCode", "storeCode", "employeeName", "shortFollow", 
-                       "maxWorkMinutesDay", "maxWorkDaysMonth")
+                       "maxWorkMinutesDay", "maxWorkDaysMonth", "password", "authorityCode")
                 .fieldSetMapper(mapper)
                 .build();
+    }
+
+    /* === Step : employee auth (password_hash, authority_code) 更新 === */
+    @Bean
+    public Step employeeAuthStep(FlatFileItemReader<EmployeeAuthRecord> employeeAuthReader) {
+        return new StepBuilder("employeeAuthStep", jobRepository)
+                .<EmployeeAuthRecord, EmployeeAuthRecord>chunk(1000, txManager)
+                .reader(employeeAuthReader)
+                .writer(items -> {
+                    for (EmployeeAuthRecord r : items) {
+                        // MyBatis直呼び出し
+                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        try {
+                            session.update("io.github.riemr.shift.infrastructure.mapper.EmployeeMapper.updateAuthFields", r);
+                            session.commit();
+                        } finally {
+                            session.close();
+                        }
+                    }
+                })
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<EmployeeAuthRecord> employeeAuthReader(@Value("${csv.dir}") Path csvDir) {
+        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+
+        FieldSetMapper<EmployeeAuthRecord> mapper = fs -> {
+            String code = fs.readString("employeeCode");
+            String rawPassword = fs.readString("password");
+            String authority = fs.readString("authorityCode");
+            EmployeeAuthRecord r = new EmployeeAuthRecord();
+            r.setEmployeeCode(code);
+            // 指示: パスワードはemployeeCodeと同じ値
+            String toHash = (rawPassword != null && !rawPassword.isBlank()) ? rawPassword : code;
+            r.setPasswordHash(encoder.encode(toHash));
+            r.setAuthorityCode(authority != null ? authority : "USER");
+            return r;
+        };
+
+        return new FlatFileItemReaderBuilder<EmployeeAuthRecord>()
+                .name("employeeAuthReader")
+                .resource(new FileSystemResource(csvDir.resolve("employee.csv")))
+                .linesToSkip(1)
+                .delimited()
+                .names("employeeCode", "storeCode", "employeeName", "shortFollow",
+                        "maxWorkMinutesDay", "maxWorkDaysMonth", "password", "authorityCode")
+                .fieldSetMapper(mapper)
+                .build();
+    }
+
+    public static class EmployeeAuthRecord {
+        private String employeeCode;
+        private String passwordHash;
+        private String authorityCode;
+        public String getEmployeeCode() { return employeeCode; }
+        public void setEmployeeCode(String employeeCode) { this.employeeCode = employeeCode; }
+        public String getPasswordHash() { return passwordHash; }
+        public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+        public String getAuthorityCode() { return authorityCode; }
+        public void setAuthorityCode(String authorityCode) { this.authorityCode = authorityCode; }
     }
 
     /* === Step : employee_register_skill.csv ========================================== */

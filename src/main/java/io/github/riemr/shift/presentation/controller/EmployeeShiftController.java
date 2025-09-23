@@ -29,6 +29,7 @@ public class EmployeeShiftController {
      * 従業員個人シフト表示画面
      */
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_SHIFT)")
     public String employeeShift(
             @RequestParam(required = false) String employeeCode,
             @RequestParam(required = false) String targetMonth,

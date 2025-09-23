@@ -259,4 +259,12 @@
      WHERE employee_code = #{employeeCode}
      LIMIT 1
   </select>
+
+  <!-- Custom: update auth fields -->
+  <update id="updateAuthFields">
+    UPDATE public.employee
+       SET password_hash = #{passwordHash},
+           authority_code = #{authorityCode}
+     WHERE employee_code = #{employeeCode}
+  </update>
 </mapper>

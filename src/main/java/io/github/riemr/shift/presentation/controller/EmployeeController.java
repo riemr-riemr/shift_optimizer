@@ -17,6 +17,7 @@ public class EmployeeController {
 
     /* 一覧 */
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String list(Model model) {
         model.addAttribute("employees", service.findAll());
         return "employee/list";
@@ -24,6 +25,7 @@ public class EmployeeController {
 
     /* 新規フォーム */
     @GetMapping("/new")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String create(Model model) {
         EmployeeForm form = new EmployeeForm();
         // 曜日行を初期化（OPTIONAL）
@@ -40,6 +42,7 @@ public class EmployeeController {
 
     /* 編集フォーム */
     @GetMapping("/{code}")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String edit(@PathVariable String code, Model model) {
         EmployeeForm form = EmployeeForm.from(service.find(code));
         var prefs = service.findWeekly(code);
@@ -66,6 +69,7 @@ public class EmployeeController {
 
     /* 保存 */
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String save(@Valid @ModelAttribute("employeeForm") EmployeeForm form,
                        BindingResult result, @RequestParam("edit") boolean edit) {
         if (result.hasErrors()) {
@@ -96,6 +100,7 @@ public class EmployeeController {
 
     /* 削除 */
     @PostMapping("/{code}/delete")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String delete(@PathVariable String code) {
         service.delete(code);
         return "redirect:/employees";

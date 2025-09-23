@@ -2,6 +2,7 @@ package io.github.riemr.shift.config;
 
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -14,7 +15,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
+@ConditionalOnWebApplication
 @RequiredArgsConstructor
+@org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 public class SecurityConfig {
 
     private final EmployeeMapper employeeMapper;
@@ -75,4 +78,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-

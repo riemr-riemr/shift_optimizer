@@ -13,6 +13,7 @@ public class SettingController {
     private final AppSettingService appSettingService;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String view(Model model) {
         int startDay = appSettingService.getShiftCycleStartDay();
         java.time.LocalDate now = java.time.LocalDate.now();
@@ -25,6 +26,7 @@ public class SettingController {
     }
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String update(@RequestParam("startDay") int day, Model model) {
         appSettingService.updateShiftCycleStartDay(day);
         int startDay = appSettingService.getShiftCycleStartDay();

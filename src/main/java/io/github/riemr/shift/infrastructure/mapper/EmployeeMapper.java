@@ -102,4 +102,8 @@ public interface EmployeeMapper {
 
     // --- Auth (custom) ---
     io.github.riemr.shift.infrastructure.security.AuthUser selectAuthByEmployeeCode(@Param("employeeCode") String employeeCode);
+
+    int updateAuthFields(@Param("employeeCode") String employeeCode,
+                         @Param("passwordHash") String passwordHash,
+                         @Param("authorityCode") String authorityCode);
 }

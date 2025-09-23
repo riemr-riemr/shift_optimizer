@@ -249,7 +249,8 @@
                                 <i class="bi bi-search"></i> 表示更新
                             </button>
                             <button type="button" id="optimizeBtn" class="btn btn-success" style="flex: 1;"
-                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}">
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
                                 <i class="bi bi-gear"></i> 最適化
                             </button>
                         </div>

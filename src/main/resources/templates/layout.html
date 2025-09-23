@@ -182,25 +182,25 @@
                     <i class="bi bi-calendar2-week me-1"></i>
                     シフト管理
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
                     <a th:href="@{/shift}">
                         <i class="bi bi-calendar3"></i>
                         月次シフト表示
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)}">
                     <a th:href="@{/shift/calc}">
                         <i class="bi bi-calendar3"></i>
                         日次シフト
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_SHIFT)}">
                     <a th:href="@{/employee-shift}">
                         <i class="bi bi-person-lines-fill"></i>
                         従業員個人シフト
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)}">
                     <a th:href="@{/employee-requests}">
                         <i class="bi bi-calendar-x"></i>
                         希望休入力
@@ -212,13 +212,13 @@
                     <i class="bi bi-people me-1"></i>
                     人員管理
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)}">
                     <a th:href="@{/employees}">
                         <i class="bi bi-person-badge"></i>
                         従業員管理
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)}">
                     <a th:href="@{/skills}">
                         <i class="bi bi-grid-3x3-gap"></i>
                         スキルマトリクス
@@ -230,13 +230,13 @@
                     <i class="bi bi-graph-up me-1"></i>
                     需要・配置分析
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)}">
                     <a th:href="@{/register-demand}">
                         <i class="bi bi-bar-chart"></i>
                         需要予測登録
                     </a>
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).STAFFING_BALANCE)}">
                     <a th:href="@{/staffing-balance}">
                         <i class="bi bi-people-fill"></i>
                         人員配置過不足
@@ -248,10 +248,16 @@
                     <i class="bi bi-gear me-1"></i>
                     システム設定
                 </li>
-                <li class="nav-item">
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)}">
                     <a th:href="@{/settings}">
                         <i class="bi bi-sliders"></i>
                         アプリケーション設定
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)}">
+                    <a th:href="@{/permissions}">
+                        <i class="bi bi-shield-lock"></i>
+                        画面権限管理
                     </a>
                 </li>
             </ul>

@@ -19,6 +19,7 @@ public class SkillMatrixController {
     private final SkillMatrixService service;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)")
     public String show(Model model) {
         var dto = service.loadMatrix();
         model.addAttribute("matrixDto", dto);
@@ -27,6 +28,7 @@ public class SkillMatrixController {
     }
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)")
     public String save(@Valid SkillMatrixForm skillForm, BindingResult result) {
         if (result.hasErrors()) {
             return "skill/matrix";

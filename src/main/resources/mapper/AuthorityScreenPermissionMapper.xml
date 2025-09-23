@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.AuthorityScreenPermissionMapper">
+  <resultMap id="BaseMap" type="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityScreenPermission">
+    <id column="authority_code" property="authorityCode" />
+    <id column="screen_code" property="screenCode" />
+    <result column="can_view" property="canView" jdbcType="BOOLEAN"/>
+    <result column="can_update" property="canUpdate" jdbcType="BOOLEAN"/>
+  </resultMap>
+
+  <select id="find" resultMap="BaseMap">
+    SELECT authority_code, screen_code, can_view, can_update
+      FROM authority_screen_permission
+     WHERE authority_code = #{authorityCode}
+       AND screen_code = #{screenCode}
+     LIMIT 1
+  </select>
+
+  <select id="findAllByAuthority" resultMap="BaseMap">
+    SELECT authority_code, screen_code, can_view, can_update
+      FROM authority_screen_permission
+     WHERE authority_code = #{authorityCode}
+     ORDER BY screen_code
+  </select>
+
+  <insert id="upsert">
+    INSERT INTO authority_screen_permission(authority_code, screen_code, can_view, can_update)
+    VALUES(#{authorityCode}, #{screenCode}, #{canView}, #{canUpdate})
+    ON CONFLICT(authority_code, screen_code)
+    DO UPDATE SET can_view = EXCLUDED.can_view, can_update = EXCLUDED.can_update
+  </insert>
+</mapper>

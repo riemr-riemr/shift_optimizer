@@ -60,6 +60,7 @@ public class EmployeeRequestController {
     private final StoreMapper storeMapper;
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
     public String index(@RequestParam(required = false) String targetMonth, 
                        @RequestParam(required = false) String employeeCode,
                        @RequestParam(required = false) String storeCode,
@@ -154,6 +155,7 @@ public class EmployeeRequestController {
     }
 
     @PostMapping("/toggle")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
     @ResponseBody
     public String toggleDayOff(@RequestParam String employeeCode,
                               @RequestParam String date) {
@@ -211,6 +213,7 @@ public class EmployeeRequestController {
     }
 
     @PostMapping("/batch-save")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
     @ResponseBody
     public String batchSave(@RequestBody BatchSaveRequest request) {
         try {
@@ -264,6 +267,7 @@ public class EmployeeRequestController {
     }
     
     @PostMapping("/bulk-save")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
     public String bulkSave(@RequestParam String employeeCode,
                           @RequestParam String targetMonth,
                           @RequestParam(required = false) List<String> selectedDates,

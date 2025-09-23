@@ -39,6 +39,7 @@ class RegisterDemandHourController {
      * 編集画面を表示 (GET)。
      */
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
     public String show(@RequestParam(name = "date", required = false)
                        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                        Model model) {
@@ -59,6 +60,7 @@ class RegisterDemandHourController {
      * 保存 (POST)。
      */
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
     public String save(@ModelAttribute("command") RegisterDemandHourForm form,
                        BindingResult br, RedirectAttributes redirect) {
         if (br.hasErrors()) {

@@ -48,11 +48,13 @@ public class ShiftCalcController {
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
     public String view() {
         return "shift/calc";
     }
 
     @PostMapping("/api/calc/start")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
     public SolveTicket start(@RequestBody SolveRequest req) {
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
@@ -133,6 +135,7 @@ public class ShiftCalcController {
     }
 
     @PostMapping("/api/calc/assignments/save")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
     public Map<String, Object> saveShiftAssignments(@RequestBody ShiftAssignmentSaveRequest request) {
         try {
@@ -152,6 +155,7 @@ public class ShiftCalcController {
     }
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     public String monthlyShift(@RequestParam(required = false) String targetMonth, 
                               @RequestParam(required = false) String storeCode, 
                               Model model) {

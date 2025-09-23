@@ -53,6 +53,59 @@ INSERT INTO authority_master(authority_code, authority_name, description) VALUES
     ('USER',    '一般ユーザ',      '閲覧・自身に関する操作')
 ON CONFLICT (authority_code) DO NOTHING;
 
+-- 2.6 authority_screen_permission : 画面権限 (参照/更新)
+CREATE TABLE IF NOT EXISTS authority_screen_permission (
+    authority_code VARCHAR(20) REFERENCES authority_master(authority_code) ON DELETE CASCADE,
+    screen_code    VARCHAR(50) NOT NULL,
+    can_view       BOOLEAN NOT NULL DEFAULT FALSE,
+    can_update     BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (authority_code, screen_code)
+);
+
+-- 既定権限付与
+-- ADMIN: 全画面 参照/更新可
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','SHIFT_MONTHLY', true, true),
+ ('ADMIN','SHIFT_DAILY',   true, true),
+ ('ADMIN','EMPLOYEE_LIST', true, true),
+ ('ADMIN','EMPLOYEE_REQUEST', true, true),
+ ('ADMIN','SKILL_MATRIX',  true, true),
+ ('ADMIN','REGISTER_DEMAND', true, true),
+ ('ADMIN','STAFFING_BALANCE', true, true),
+ ('ADMIN','SETTINGS',      true, true)
+ON CONFLICT DO NOTHING;
+
+-- MANAGER: シフト運用中心（設定は参照のみ）
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('MANAGER','SHIFT_MONTHLY', true, true),
+ ('MANAGER','SHIFT_DAILY',   true, true),
+ ('MANAGER','EMPLOYEE_LIST', true, false),
+ ('MANAGER','EMPLOYEE_REQUEST', true, true),
+ ('MANAGER','SKILL_MATRIX',  true, false),
+ ('MANAGER','REGISTER_DEMAND', true, true),
+ ('MANAGER','STAFFING_BALANCE', true, true),
+ ('MANAGER','SETTINGS',      true, false)
+ON CONFLICT DO NOTHING;
+
+-- USER: 閲覧中心
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('USER','SHIFT_MONTHLY', true, false),
+ ('USER','SHIFT_DAILY',   true, false),
+ ('USER','EMPLOYEE_LIST', false, false),
+ ('USER','EMPLOYEE_REQUEST', true, true),
+ ('USER','SKILL_MATRIX',  false, false),
+ ('USER','REGISTER_DEMAND', false, false),
+ ('USER','STAFFING_BALANCE', true, false),
+ ('USER','SETTINGS',      false, false)
+ON CONFLICT DO NOTHING;
+
+-- Screen permission admin screen
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','SCREEN_PERMISSION', true, true),
+ ('MANAGER','SCREEN_PERMISSION', false, false),
+ ('USER','SCREEN_PERMISSION', false, false)
+ON CONFLICT DO NOTHING;
+
 -- ------------------------------------------------
 -- 3. employee : 従業員マスタ
 -- ------------------------------------------------
