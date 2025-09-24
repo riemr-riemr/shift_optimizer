@@ -27,6 +27,9 @@
     where store_code = #{storeCode,jdbcType=VARCHAR}
       and register_no = #{registerNo,jdbcType=INTEGER}
   </delete>
+  <delete id="deleteAll">
+    delete from public.register
+  </delete>
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     insert into public.register (store_code, register_no, register_name, 
       short_name, open_priority, register_type, 
@@ -131,4 +134,19 @@
     <include refid="Base_Column_List" />
     FROM public.register
   </select>
+
+  <!-- custom upsert -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    INSERT INTO public.register (
+      store_code, register_no, register_name, short_name, open_priority, register_type, is_auto_open_target, max_allowance)
+    VALUES (
+      #{storeCode}, #{registerNo}, #{registerName}, #{shortName}, #{openPriority}, #{registerType}, #{isAutoOpenTarget}, #{maxAllowance})
+    ON CONFLICT (store_code, register_no) DO UPDATE SET
+      register_name       = EXCLUDED.register_name,
+      short_name          = EXCLUDED.short_name,
+      open_priority       = EXCLUDED.open_priority,
+      register_type       = EXCLUDED.register_type,
+      is_auto_open_target = EXCLUDED.is_auto_open_target,
+      max_allowance       = EXCLUDED.max_allowance
+  </insert>
 </mapper>

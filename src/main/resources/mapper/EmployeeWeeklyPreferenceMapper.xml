@@ -23,11 +23,28 @@
     delete from public.employee_weekly_preference where employee_code = #{employeeCode}
   </delete>
 
+  <delete id="deleteAll">
+    delete from public.employee_weekly_preference
+  </delete>
+
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference">
     insert into public.employee_weekly_preference (
       employee_code, day_of_week, work_style, base_start_time, base_end_time, store_code, created_at, updated_at)
     values (
       #{employeeCode}, #{dayOfWeek}, #{workStyle}, #{baseStartTime}, #{baseEndTime}, #{storeCode}, now(), now())
   </insert>
-</mapper>
 
+  <!-- custom upsert; assumes unique (employee_code, day_of_week) -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference">
+    INSERT INTO public.employee_weekly_preference (
+      employee_code, day_of_week, work_style, base_start_time, base_end_time, store_code, created_at, updated_at)
+    VALUES (
+      #{employeeCode}, #{dayOfWeek}, #{workStyle}, #{baseStartTime}, #{baseEndTime}, #{storeCode}, now(), now())
+    ON CONFLICT (employee_code, day_of_week) DO UPDATE SET
+      work_style      = EXCLUDED.work_style,
+      base_start_time = EXCLUDED.base_start_time,
+      base_end_time   = EXCLUDED.base_end_time,
+      store_code      = EXCLUDED.store_code,
+      updated_at      = now()
+  </insert>
+</mapper>

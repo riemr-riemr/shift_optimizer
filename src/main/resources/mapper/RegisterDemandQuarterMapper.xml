@@ -318,4 +318,12 @@
     ORDER BY slot_time
   </select>
 
+  <!-- custom upsert on (store_code, demand_date, slot_time) -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter">
+    INSERT INTO public.register_demand_quarter (store_code, demand_date, slot_time, required_units)
+    VALUES (#{storeCode}, #{demandDate}, #{slotTime}, #{requiredUnits})
+    ON CONFLICT (store_code, demand_date, slot_time) DO UPDATE SET
+      required_units = EXCLUDED.required_units
+  </insert>
+
 </mapper>

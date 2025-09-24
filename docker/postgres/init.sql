@@ -102,8 +102,11 @@ ON CONFLICT DO NOTHING;
 -- Screen permission admin screen
 INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
  ('ADMIN','SCREEN_PERMISSION', true, true),
+ ('ADMIN','CSV_IMPORT', true, true),
  ('MANAGER','SCREEN_PERMISSION', false, false),
+ ('MANAGER','CSV_IMPORT', false, false),
  ('USER','SCREEN_PERMISSION', false, false)
+ ,('USER','CSV_IMPORT', false, false)
 ON CONFLICT DO NOTHING;
 
 -- ------------------------------------------------

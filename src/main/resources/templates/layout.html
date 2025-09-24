@@ -254,6 +254,12 @@
                         アプリケーション設定
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)}">
+                    <a th:href="@{/csv-import}">
+                        <i class="bi bi-upload"></i>
+                        CSV取り込み
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)}">
                     <a th:href="@{/permissions}">
                         <i class="bi bi-shield-lock"></i>

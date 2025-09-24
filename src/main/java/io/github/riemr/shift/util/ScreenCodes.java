@@ -18,20 +18,22 @@ public final class ScreenCodes {
     public static final String STAFFING_BALANCE = "STAFFING_BALANCE"; // 人員配置過不足
     public static final String SETTINGS      = "SETTINGS";           // アプリ設定 (/settings)
     public static final String SCREEN_PERMISSION = "SCREEN_PERMISSION"; // 画面権限管理
+    public static final String CSV_IMPORT   = "CSV_IMPORT";         // CSV取り込み
 
     /**
      * 画面名（表示用）: code -> label
      */
-    public static final Map<String, String> NAMES = Map.of(
-            SHIFT_MONTHLY, "月次シフト",
-            SHIFT_DAILY, "日次シフト（最適化）",
-            EMPLOYEE_LIST, "従業員管理",
-            EMPLOYEE_SHIFT, "従業員個人シフト",
-            EMPLOYEE_REQUEST, "希望休入力",
-            SKILL_MATRIX, "スキルマトリクス",
-            REGISTER_DEMAND, "需要予測登録",
-            STAFFING_BALANCE, "人員配置過不足",
-            SETTINGS, "アプリケーション設定",
-            SCREEN_PERMISSION, "画面権限管理"
+    public static final Map<String, String> NAMES = Map.ofEntries(
+            Map.entry(SHIFT_MONTHLY, "月次シフト"),
+            Map.entry(SHIFT_DAILY, "日次シフト（最適化）"),
+            Map.entry(EMPLOYEE_LIST, "従業員管理"),
+            Map.entry(EMPLOYEE_SHIFT, "従業員個人シフト"),
+            Map.entry(EMPLOYEE_REQUEST, "希望休入力"),
+            Map.entry(SKILL_MATRIX, "スキルマトリクス"),
+            Map.entry(REGISTER_DEMAND, "需要予測登録"),
+            Map.entry(STAFFING_BALANCE, "人員配置過不足"),
+            Map.entry(SETTINGS, "アプリケーション設定"),
+            Map.entry(SCREEN_PERMISSION, "画面権限管理"),
+            Map.entry(CSV_IMPORT, "CSV取り込み")
     );
 }

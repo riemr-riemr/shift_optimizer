@@ -93,4 +93,7 @@ public interface StoreMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(Store row);
+
+    // custom upsert
+    int upsert(Store row);
 }

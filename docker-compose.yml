@@ -28,7 +28,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: shiftpass
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+      CSV_DIR: /csv
     restart: on-failure
+    volumes:
+      - ./docker/csv:/csv
 
   data-import:
     build: .

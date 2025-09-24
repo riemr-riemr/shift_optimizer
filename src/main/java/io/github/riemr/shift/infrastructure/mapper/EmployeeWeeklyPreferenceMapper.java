@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Param;
 public interface EmployeeWeeklyPreferenceMapper {
     List<EmployeeWeeklyPreference> selectByEmployee(@Param("employeeCode") String employeeCode);
     int deleteByEmployee(@Param("employeeCode") String employeeCode);
+    int deleteAll();
     int insert(EmployeeWeeklyPreference row);
+    int upsert(EmployeeWeeklyPreference row);
 }
-

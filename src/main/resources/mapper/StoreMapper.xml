@@ -253,4 +253,13 @@
       timezone = #{timezone,jdbcType=VARCHAR}
     where store_code = #{storeCode,jdbcType=VARCHAR}
   </update>
+
+  <!-- custom upsert -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Store">
+    INSERT INTO public.store (store_code, store_name, timezone)
+    VALUES (#{storeCode}, #{storeName}, #{timezone})
+    ON CONFLICT (store_code) DO UPDATE SET
+      store_name = EXCLUDED.store_name,
+      timezone   = EXCLUDED.timezone
+  </insert>
 </mapper>

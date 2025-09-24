@@ -106,4 +106,7 @@ public interface EmployeeMapper {
     int updateAuthFields(@Param("employeeCode") String employeeCode,
                          @Param("passwordHash") String passwordHash,
                          @Param("authorityCode") String authorityCode);
+
+    // custom upsert (does not touch auth fields)
+    int upsert(Employee row);
 }

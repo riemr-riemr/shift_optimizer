@@ -236,4 +236,12 @@
     set type_name = #{typeName,jdbcType=VARCHAR}
     where type_code = #{typeCode,jdbcType=VARCHAR}
   </update>
+
+  <!-- custom upsert -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterType">
+    INSERT INTO public.register_type (type_code, type_name)
+    VALUES (#{typeCode}, #{typeName})
+    ON CONFLICT (type_code) DO UPDATE SET
+      type_name = EXCLUDED.type_name
+  </insert>
 </mapper>

@@ -268,4 +268,14 @@
       and employee_code = #{employeeCode,jdbcType=VARCHAR}
       and register_no = #{registerNo,jdbcType=INTEGER}
   </update>
+
+  <!-- custom upsert -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill">
+    INSERT INTO public.employee_register_skill (
+      store_code, employee_code, register_no, skill_level)
+    VALUES (
+      #{storeCode}, #{employeeCode}, #{registerNo}, #{skillLevel})
+    ON CONFLICT (store_code, employee_code, register_no) DO UPDATE SET
+      skill_level = EXCLUDED.skill_level
+  </insert>
 </mapper>

@@ -94,4 +94,7 @@ public interface EmployeeRegisterSkillMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(EmployeeRegisterSkill row);
+
+    // custom upsert
+    int upsert(EmployeeRegisterSkill row);
 }

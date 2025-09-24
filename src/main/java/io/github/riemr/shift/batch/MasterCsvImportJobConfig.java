@@ -1,6 +1,7 @@
 package io.github.riemr.shift.batch;
 
 import io.github.riemr.shift.infrastructure.persistence.entity.*;
+import io.github.riemr.shift.infrastructure.mapper.*;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.launch.support.RunIdIncrementer; // run.id を自動採番 :contentReference[oaicite:2]{index=2}
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
@@ -31,7 +33,6 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
-@Profile("batch")
 @RequiredArgsConstructor
 public class MasterCsvImportJobConfig {
 
@@ -39,10 +40,17 @@ public class MasterCsvImportJobConfig {
     private final PlatformTransactionManager txManager;
     private final SqlSessionFactory sqlSessionFactory;
     private final io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
+    private final RegisterDemandQuarterMapper demandMapper;
+    private final EmployeeRegisterSkillMapper skillMapper;
+    private final EmployeeMapper employeeMapper;
+    private final RegisterMapper registerMapper;
+    private final RegisterTypeMapper registerTypeMapper;
+    private final StoreMapper storeMapper;
 
     /* === Job =========================================================== */
     @Bean
-    public Job masterImportJob(Step storeStep,
+    public Job masterImportJob(Step cleanupStep,
+            Step storeStep,
             Step registerTypeStep,
             Step registerStep,
             Step employeeStep,
@@ -52,7 +60,8 @@ public class MasterCsvImportJobConfig {
             Step registerDemandQuarterStep) {
         return new JobBuilder("masterImportJob", jobRepository)
                 .incrementer(new RunIdIncrementer()) // run.id を自動付与
-                .start(storeStep)
+                .start(cleanupStep)
+                .next(storeStep)
                 .next(registerTypeStep)
                 .next(registerStep)
                 .next(employeeStep)
@@ -60,6 +69,30 @@ public class MasterCsvImportJobConfig {
                 .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
                 .next(registerDemandQuarterStep)
+                .build();
+    }
+
+    /* === Step : cleanup (optional by job parameter 'clean') ======== */
+    @Bean
+    public Step cleanupStep() {
+        return new StepBuilder("cleanupStep", jobRepository)
+                .tasklet((contribution, chunkContext) -> {
+                    Map<String, Object> params = chunkContext.getStepContext().getJobParameters();
+                    Object cleanParam = params != null ? params.get("clean") : null;
+                    boolean doClean = cleanParam != null && Boolean.parseBoolean(cleanParam.toString());
+                    if (!doClean) {
+                        return RepeatStatus.FINISHED;
+                    }
+                    // dependents first
+                    demandMapper.deleteByExample(new RegisterDemandQuarterExample());
+                    skillMapper.deleteByExample(new EmployeeRegisterSkillExample());
+                    weeklyPrefMapper.deleteAll();
+                    employeeMapper.deleteByExample(new EmployeeExample());
+                    registerMapper.deleteAll();
+                    registerTypeMapper.deleteByExample(new RegisterTypeExample());
+                    storeMapper.deleteByExample(new StoreExample());
+                    return RepeatStatus.FINISHED;
+                }, txManager)
                 .build();
     }
 
@@ -75,7 +108,7 @@ public class MasterCsvImportJobConfig {
 
     @Bean
     public FlatFileItemReader<Store> storeReader(
-            @Value("${csv.dir}") Path csvDir) {
+            @Value("${csv.dir:/csv}") Path csvDir) {
 
         return csvReader(csvDir.resolve("store.csv"), new String[] { "storeCode", "storeName", "timezone" },
                 Store.class);
@@ -92,7 +125,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<RegisterType> registerTypeReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<RegisterType> registerTypeReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("register_type.csv"),
                 new String[] { "typeCode", "typeName" },
                 RegisterType.class);
@@ -109,7 +142,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<Register> registerReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<Register> registerReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("register.csv"),
                 new String[] { "storeCode", "registerNo", "registerName", "shortName", "openPriority", "registerType",
                         "isAutoOpenTarget", "maxAllowance" },
@@ -127,7 +160,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<Employee> employeeReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<Employee> employeeReader(@Value("${csv.dir:/csv}") Path csvDir) {
         
         // 時刻パーサ（HHmm形式 -> Date）
         SimpleDateFormat TIME_FMT = new SimpleDateFormat("HHmm");
@@ -180,7 +213,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<EmployeeAuthRecord> employeeAuthReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<EmployeeAuthRecord> employeeAuthReader(@Value("${csv.dir:/csv}") Path csvDir) {
         org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
 
         FieldSetMapper<EmployeeAuthRecord> mapper = fs -> {
@@ -231,7 +264,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<EmployeeRegisterSkill> employeeRegisterSkillReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<EmployeeRegisterSkill> employeeRegisterSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("employee_register_skill.csv"),
                 new String[] { "storeCode", "employeeCode", "registerNo", "skillLevel" },
                 EmployeeRegisterSkill.class);
@@ -248,7 +281,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<EmployeeWeeklyPreference> employeeWeeklyPreferenceReader(@Value("${csv.dir}") Path csvDir) {
+    public FlatFileItemReader<EmployeeWeeklyPreference> employeeWeeklyPreferenceReader(@Value("${csv.dir:/csv}") Path csvDir) {
         // HH:mm を java.sql.Time にするカスタムマッパ
         FieldSetMapper<EmployeeWeeklyPreference> mapper = fs -> {
             EmployeeWeeklyPreference p = new EmployeeWeeklyPreference();
@@ -293,7 +326,7 @@ public class MasterCsvImportJobConfig {
 
     @Bean
     public FlatFileItemReader<RegisterDemandQuarter> registerDemandQuarterReader(
-            @Value("${csv.dir}") Path csvDir) {
+            @Value("${csv.dir:/csv}") Path csvDir) {
     
         // --- 日付／時刻パーサ（スレッドセーフではないので 1 スレッド前提） ---
         SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");

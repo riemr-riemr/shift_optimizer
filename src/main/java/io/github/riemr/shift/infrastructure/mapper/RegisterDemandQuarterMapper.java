@@ -103,4 +103,7 @@ public interface RegisterDemandQuarterMapper {
     void batchInsert(@Param("list") List<RegisterDemandQuarter> quarters);
 
     List<RegisterDemandQuarter> selectByMonth(@Param("targetMonth") LocalDate targetMonth);
+
+    // custom upsert on natural key (store_code, demand_date, slot_time)
+    int upsert(RegisterDemandQuarter row);
 }

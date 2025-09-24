@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 public interface RegisterMapper {
 
     int deleteByPrimaryKey(RegisterKey key);
+    int deleteAll();
 
     int insert(Register row);
 
@@ -20,4 +21,7 @@ public interface RegisterMapper {
     int updateByPrimaryKey(Register row);
 
     List<Register> selectAll();
+
+    // custom upsert
+    int upsert(Register row);
 }

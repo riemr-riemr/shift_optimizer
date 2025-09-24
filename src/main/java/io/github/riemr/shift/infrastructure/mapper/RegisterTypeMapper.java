@@ -93,4 +93,7 @@ public interface RegisterTypeMapper {
      * @mbg.generated Fri Jul 11 07:14:31 JST 2025
      */
     int updateByPrimaryKey(RegisterType row);
+
+    // custom upsert
+    int upsert(RegisterType row);
 }

@@ -267,4 +267,18 @@
            authority_code = #{authorityCode}
      WHERE employee_code = #{employeeCode}
   </update>
+
+  <!-- custom upsert (excluding auth fields) -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
+    INSERT INTO public.employee (
+      employee_code, store_code, employee_name, short_follow, max_work_minutes_day, max_work_days_month)
+    VALUES (
+      #{employeeCode}, #{storeCode}, #{employeeName}, #{shortFollow}, #{maxWorkMinutesDay}, #{maxWorkDaysMonth})
+    ON CONFLICT (employee_code) DO UPDATE SET
+      store_code           = EXCLUDED.store_code,
+      employee_name        = EXCLUDED.employee_name,
+      short_follow         = EXCLUDED.short_follow,
+      max_work_minutes_day = EXCLUDED.max_work_minutes_day,
+      max_work_days_month  = EXCLUDED.max_work_days_month
+  </insert>
 </mapper>
