@@ -194,6 +194,24 @@
                         日次シフト
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASKS)}">
+                    <a th:href="@{/tasks}">
+                        <i class="bi bi-list-task"></i>
+                        店内業務タスク
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/tasks/master}">
+                        <i class="bi bi-archive"></i>
+                        作業マスタ
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_PLAN)}">
+                    <a th:href="@{/tasks/plan}">
+                        <i class="bi bi-calendar-week"></i>
+                        作業計画
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_SHIFT)}">
                     <a th:href="@{/employee-shift}">
                         <i class="bi bi-person-lines-fill"></i>

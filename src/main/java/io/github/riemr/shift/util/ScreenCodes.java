@@ -16,6 +16,9 @@ public final class ScreenCodes {
     public static final String SKILL_MATRIX  = "SKILL_MATRIX";       // スキルマトリクス
     public static final String REGISTER_DEMAND = "REGISTER_DEMAND";  // 需要予測登録
     public static final String STAFFING_BALANCE = "STAFFING_BALANCE"; // 人員配置過不足
+    public static final String TASKS = "TASKS";                      // 店内業務タスク (/tasks)
+    public static final String TASK_MASTER = "TASK_MASTER";          // 作業マスタ (/tasks/master)
+    public static final String TASK_PLAN = "TASK_PLAN";              // 作業計画（単一画面）(/tasks/plan)
     public static final String SETTINGS      = "SETTINGS";           // アプリ設定 (/settings)
     public static final String SCREEN_PERMISSION = "SCREEN_PERMISSION"; // 画面権限管理
     public static final String CSV_IMPORT   = "CSV_IMPORT";         // CSV取り込み
@@ -32,6 +35,9 @@ public final class ScreenCodes {
             Map.entry(SKILL_MATRIX, "スキルマトリクス"),
             Map.entry(REGISTER_DEMAND, "需要予測登録"),
             Map.entry(STAFFING_BALANCE, "人員配置過不足"),
+            Map.entry(TASKS, "店内業務タスク"),
+            Map.entry(TASK_MASTER, "作業マスタ"),
+            Map.entry(TASK_PLAN, "作業計画"),
             Map.entry(SETTINGS, "アプリケーション設定"),
             Map.entry(SCREEN_PERMISSION, "画面権限管理"),
             Map.entry(CSV_IMPORT, "CSV取り込み")

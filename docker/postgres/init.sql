@@ -260,7 +260,7 @@ COMMIT;
 -- ------------------------------------------------
 -- 0. app_setting : 汎用アプリ設定
 -- ------------------------------------------------
-CREATE TABLE IF NOT EXISTS app_setting (
+CREATE TABLE app_setting (
     setting_key   VARCHAR(64) PRIMARY KEY,
     setting_value VARCHAR(256) NOT NULL,
     updated_at    TIMESTAMP NOT NULL DEFAULT now()
@@ -281,3 +281,89 @@ INSERT INTO employee(
     'admin', NULL, 'Administrator', 0,
     480, 31, crypt('admin', gen_salt('bf', 10)), 'ADMIN'
 ) ON CONFLICT (employee_code) DO NOTHING;
+
+-- ------------------------------------------------
+-- 13. 権限: Task画面の初期権限
+-- ------------------------------------------------
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','TASKS', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('MANAGER','TASKS', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('USER','TASKS', false, false)
+ON CONFLICT DO NOTHING;
+
+-- ------------------------------------------------
+-- 14. Task Master / Weekly Plan / Special Day
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_master (
+    task_code                    VARCHAR(32) PRIMARY KEY,
+    name                         VARCHAR(100) NOT NULL,
+    description                  TEXT,
+    default_schedule_type        VARCHAR(10) CHECK (default_schedule_type IN ('FIXED','FLEXIBLE')),
+    default_required_duration_minutes INT,
+    priority                     INT,
+    color                        VARCHAR(16),
+    icon                         VARCHAR(64)
+);
+
+-- 統合: task_plan（曜日別/特異日を1テーブルに集約）
+CREATE TABLE IF NOT EXISTS task_plan (
+    plan_id              BIGSERIAL PRIMARY KEY,
+    store_code           VARCHAR(10) NOT NULL REFERENCES store(store_code),
+    task_code            VARCHAR(32) NOT NULL REFERENCES task_master(task_code),
+    plan_kind            VARCHAR(8) NOT NULL CHECK (plan_kind IN ('WEEKLY','SPECIAL')),
+    day_of_week          SMALLINT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+    special_date         DATE NULL,
+    schedule_type        VARCHAR(10) NULL CHECK (schedule_type IN ('FIXED','FLEXIBLE')),
+    fixed_start_time     TIME,
+    fixed_end_time       TIME,
+    window_start_time    TIME,
+    window_end_time      TIME,
+    required_duration_minutes INT,
+    required_staff_count INT,
+    must_be_contiguous   SMALLINT,
+    effective_from       DATE NULL,
+    effective_to         DATE NULL,
+    priority             INT,
+    note                 TEXT,
+    active               BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE INDEX IF NOT EXISTS idx_task_plan_store_kind ON task_plan(store_code, plan_kind);
+CREATE INDEX IF NOT EXISTS idx_task_plan_weekly ON task_plan(store_code, plan_kind, day_of_week);
+CREATE INDEX IF NOT EXISTS idx_task_plan_special ON task_plan(store_code, plan_kind, special_date);
+
+-- days_master（UIで選択する「曜日/特異日」のマスタ）
+CREATE TABLE IF NOT EXISTS days_master (
+    days_id      BIGSERIAL PRIMARY KEY,
+    store_code   VARCHAR(10) NOT NULL REFERENCES store(store_code),
+    kind         VARCHAR(8)  NOT NULL CHECK (kind IN ('WEEKLY','SPECIAL')),
+    day_of_week  SMALLINT    NULL CHECK (day_of_week BETWEEN 1 AND 7),
+    special_date DATE        NULL,
+    label        VARCHAR(64),
+    active       BOOLEAN     NOT NULL DEFAULT TRUE,
+    UNIQUE (store_code, kind, day_of_week, special_date)
+);
+
+-- 権限シード: マスタ/計画/特異日
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','TASK_MASTER', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('MANAGER','TASK_MASTER', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('USER','TASK_MASTER', false, false)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','TASK_PLAN', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('MANAGER','TASK_PLAN', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('USER','TASK_PLAN', false, false)
+ON CONFLICT DO NOTHING;

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.TaskPlanMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
+    <id column="plan_id" property="planId" />
+    <result column="store_code" property="storeCode" />
+    <result column="task_code" property="taskCode" />
+    <result column="plan_kind" property="planKind" />
+    <result column="day_of_week" property="dayOfWeek" />
+    <result column="special_date" property="specialDate" />
+    <result column="schedule_type" property="scheduleType" />
+    <result column="fixed_start_time" property="fixedStartTime" />
+    <result column="fixed_end_time" property="fixedEndTime" />
+    <result column="window_start_time" property="windowStartTime" />
+    <result column="window_end_time" property="windowEndTime" />
+    <result column="required_duration_minutes" property="requiredDurationMinutes" />
+    <result column="required_staff_count" property="requiredStaffCount" />
+    <result column="must_be_contiguous" property="mustBeContiguous" />
+    <result column="effective_from" property="effectiveFrom" />
+    <result column="effective_to" property="effectiveTo" />
+    <result column="priority" property="priority" />
+    <result column="note" property="note" />
+    <result column="active" property="active" />
+  </resultMap>
+
+  <sql id="Base_Column_List">
+    plan_id, store_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+    fixed_start_time, fixed_end_time, window_start_time, window_end_time,
+    required_duration_minutes, required_staff_count, must_be_contiguous,
+    effective_from, effective_to, priority, note, active
+  </sql>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
+    insert into public.task_plan (
+      store_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+      fixed_start_time, fixed_end_time, window_start_time, window_end_time,
+      required_duration_minutes, required_staff_count, must_be_contiguous,
+      effective_from, effective_to, priority, note, active
+    ) values (
+      #{storeCode}, #{taskCode}, #{planKind}, #{dayOfWeek}, #{specialDate}, #{scheduleType},
+      #{fixedStartTime}, #{fixedEndTime}, #{windowStartTime}, #{windowEndTime},
+      #{requiredDurationMinutes}, #{requiredStaffCount}, #{mustBeContiguous},
+      #{effectiveFrom}, #{effectiveTo}, #{priority}, #{note}, #{active}
+    )
+  </insert>
+
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
+    update public.task_plan
+    set store_code = #{storeCode},
+        task_code = #{taskCode},
+        plan_kind = #{planKind},
+        day_of_week = #{dayOfWeek},
+        special_date = #{specialDate},
+        schedule_type = #{scheduleType},
+        fixed_start_time = #{fixedStartTime},
+        fixed_end_time = #{fixedEndTime},
+        window_start_time = #{windowStartTime},
+        window_end_time = #{windowEndTime},
+        required_duration_minutes = #{requiredDurationMinutes},
+        required_staff_count = #{requiredStaffCount},
+        must_be_contiguous = #{mustBeContiguous},
+        effective_from = #{effectiveFrom},
+        effective_to = #{effectiveTo},
+        priority = #{priority},
+        note = #{note},
+        active = #{active}
+    where plan_id = #{planId}
+  </update>
+
+  <delete id="deleteByPrimaryKey" parameterType="long">
+    delete from public.task_plan where plan_id = #{planId}
+  </delete>
+
+  <select id="selectByPrimaryKey" parameterType="long" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan where plan_id = #{planId}
+  </select>
+
+  <select id="selectWeeklyByStoreAndDow" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'WEEKLY'
+      and day_of_week = #{dayOfWeek}
+    order by priority nulls last, plan_id
+  </select>
+
+  <select id="selectWeeklyEffective" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'WEEKLY'
+      and day_of_week = #{dayOfWeek}
+      and active = true
+      and (effective_from is null or effective_from &lt;= #{date})
+      and (effective_to is null or #{date} &lt;= effective_to)
+    order by priority nulls last, plan_id
+  </select>
+
+  <select id="selectSpecialByStoreAndRange" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'SPECIAL'
+      and special_date between #{from} and #{to}
+    order by special_date, priority nulls last
+  </select>
+
+  <select id="selectSpecialByStoreAndDate" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'SPECIAL'
+      and special_date = #{specialDate}
+    order by priority nulls last, plan_id
+  </select>
+
+  <select id="selectSpecialDatesByStore" resultType="java.util.Date">
+    select distinct special_date from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'SPECIAL'
+    order by special_date
+  </select>
+</mapper>

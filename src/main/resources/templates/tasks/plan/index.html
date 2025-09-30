@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業計画</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>作業計画</span>
+    </div>
+    <div class="card-body">
+      <form class="row g-2 mb-3">
+        <div class="col-auto"><input class="form-control form-control-sm" name="store" placeholder="店舗コード" th:value="${storeCode}"></div>
+        <div class="col-auto">
+          <select class="form-select form-select-sm" name="mode">
+            <option th:selected="${mode}=='weekly'" value="weekly">曜日</option>
+            <option th:selected="${mode}=='special'" value="special">特異日</option>
+          </select>
+        </div>
+        <!-- 特異日: 登録済み特異日を選択するプルダウン -->
+        <div class="col-auto" th:if="${mode}=='special'">
+          <select class="form-select form-select-sm" name="sd">
+            <option value="" th:selected="${sd==null}">特異日を選択</option>
+            <option th:each="dm : ${days}"
+                    th:value="${#dates.format(dm.specialDate,'yyyy-MM-dd')}"
+                    th:selected="${sd}==${dm.specialDate}"
+                    th:text="${#dates.format(dm.specialDate,'MM/dd')} + ' ' + ${dm.label}">
+            </option>
+          </select>
+        </div>
+        <div class="col-auto" th:if="${mode}=='weekly'">
+          <select class="form-select form-select-sm" name="day">
+            <option th:value="1" th:selected="${day==1}">月</option>
+            <option th:value="2" th:selected="${day==2}">火</option>
+            <option th:value="3" th:selected="${day==3}">水</option>
+            <option th:value="4" th:selected="${day==4}">木</option>
+            <option th:value="5" th:selected="${day==5}">金</option>
+            <option th:value="6" th:selected="${day==6}">土</option>
+            <option th:value="7" th:selected="${day==7}">日</option>
+          </select>
+        </div>
+        <!-- 特異日: タブ選択は下部に表示 -->
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">表示</button></div>
+      </form>
+
+      <!-- 追加UI: 曜日は表示のみ。特異日はダイアログで追加 -->
+      <div class="mb-3">
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#specialAddModal">特異日追加</button>
+      </div>
+
+      <!-- 適用処理は月次シフト最適化時に実行されます -->
+
+      <table class="table table-sm">
+        <thead>
+        <tr th:if="${mode}=='weekly'"><th>曜日</th><th>作業</th><th>タイプ</th><th>時間/ウィンドウ</th><th>人数/所要</th><th>期間</th><th></th></tr>
+        <tr th:if="${mode}=='special'"><th>
+          <ul class="nav nav-tabs">
+            <li class="nav-item" th:each="dm : ${days}">
+              <a class="nav-link" th:classappend="${sd}==${dm.specialDate}?' active'" th:href="@{'/tasks/plan'(store=${storeCode},mode='special',sd=${#dates.format(dm.specialDate,'yyyy-MM-dd')})}">
+                <span th:text="${#dates.format(dm.specialDate,'MM/dd')} + ' ' + ${dm.label}"></span>
+              </a>
+            </li>
+          </ul>
+        </th><th>作業</th><th>タイプ</th><th>時間/ウィンドウ</th><th>人数/所要</th><th>備考</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="p : ${list}">
+          <td th:if="${mode}=='weekly'" th:text="${p.dayOfWeek}"></td>
+          <td th:if="${mode}=='special'" th:text="${p.specialDate}"></td>
+          <td th:text="${p.taskCode}"></td>
+          <td th:text="${p.scheduleType}"></td>
+          <td>
+            <span th:if="${p.scheduleType}=='FIXED'" th:text="${p.fixedStartTime} + ' - ' + ${p.fixedEndTime}"></span>
+            <span th:if="${p.scheduleType}=='FLEXIBLE'" th:text="${p.windowStartTime} + ' - ' + ${p.windowEndTime}"></span>
+          </td>
+          <td>
+            <span th:text="${p.requiredStaffCount}"></span>
+            <span th:if="${p.requiredDurationMinutes != null}" th:text="${p.requiredDurationMinutes} + '分'"></span>
+          </td>
+          <td th:if="${mode}=='weekly'" th:text="${p.effectiveFrom} + ' ~ ' + ${p.effectiveTo}"></td>
+          <td th:if="${mode}=='special'" th:text="${p.note}"></td>
+          <td>
+            <form th:action="@{'/tasks/plan/' + ${p.planId} + '/delete'}" method="post">
+              <input type="hidden" name="store" th:value="${storeCode}">
+              <input type="hidden" name="mode" th:value="${mode}">
+              <input type="hidden" name="day" th:value="${day}">
+              <input type="hidden" name="sd" th:value="${#dates.format(sd,'yyyy-MM-dd')}">
+              <button class="btn btn-sm btn-outline-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+
+      <!-- 特異日 作業追加モーダル -->
+      <div class="modal fade" id="specialPlanAddModal" tabindex="-1" th:if="${mode}=='special' and ${sd} != null">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">作業を追加（特異日: <span th:text="${#dates.format(sd,'MM/dd')}"></span>）</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form th:action="@{/tasks/plan}" th:object="${form}" method="post">
+              <input type="hidden" name="mode" value="special">
+              <div class="modal-body">
+                <div class="row g-2 mb-2">
+                  <div class="col-3"><input class="form-control form-control-sm" th:field="*{storeCode}" placeholder="店舗" th:value="${storeCode}" required></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="date" th:field="*{specialDate}" th:value="${#dates.format(sd,'yyyy-MM-dd')}" required></div>
+                  <div class="col-6">
+                    <select class="form-select form-select-sm" th:field="*{taskCode}" required>
+                      <option value="" disabled selected>作業マスタを選択</option>
+                      <option th:each="m : ${masters}" th:value="${m.taskCode}" th:text="${m.taskCode} + ' - ' + ${m.name}"></option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-3"><select class="form-select form-select-sm" th:field="*{scheduleType}"><option value="FIXED">固定</option><option value="FLEXIBLE">可変</option></select></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="time" th:field="*{fixedStartTime}" placeholder="開始"></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="time" th:field="*{fixedEndTime}" placeholder="終了"></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="number" th:field="*{requiredStaffCount}" placeholder="人数"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-3"><input class="form-control form-control-sm" type="time" th:field="*{windowStartTime}" placeholder="Win開始"></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="time" th:field="*{windowEndTime}" placeholder="Win終了"></div>
+                  <div class="col-3"><input class="form-control form-control-sm" type="number" th:field="*{requiredDurationMinutes}" placeholder="所要(分)"></div>
+                  <div class="col-3"><input class="form-control form-control-sm" th:field="*{note}" placeholder="備考"></div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="submit" class="btn btn-primary">追加</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- 作業追加ボタン（特異日選択時のみ） -->
+      <div class="mt-2" th:if="${mode}=='special' and ${sd} != null">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#specialPlanAddModal">作業追加</button>
+      </div>
+
+      <!-- 特異日追加モーダル -->
+      <div class="modal fade" id="specialAddModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">特異日を追加</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form th:action="@{/tasks/plan/days}" method="post">
+              <div class="modal-body">
+                <div class="row g-2 mb-2">
+                  <div class="col-4"><input class="form-control form-control-sm" name="store" placeholder="店舗" th:value="${storeCode}" required></div>
+                  <div class="col-4"><input class="form-control form-control-sm" type="date" name="date" required></div>
+                  <div class="col-4"><input class="form-control form-control-sm" name="label" placeholder="特異日名" required></div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="submit" class="btn btn-primary">追加</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

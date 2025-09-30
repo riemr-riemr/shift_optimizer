@@ -39,6 +39,7 @@ import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.application.service.AppSettingService;
+import io.github.riemr.shift.application.service.TaskPlanService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -64,6 +65,7 @@ public class ShiftScheduleService {
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
     private final AppSettingService appSettingService;
+    private final TaskPlanService taskPlanService;
 
     /* === Settings === */
     @Value("${shift.solver.spent-limit:PT2M}") // ISO‑8601 Duration (default 2 minutes)
@@ -95,6 +97,18 @@ public class ShiftScheduleService {
     public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
         long problemId = toProblemId(month);
         ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, month);
+
+        // 1) 作業計画の適用（当該サイクル範囲）
+        if (storeCode != null && !storeCode.isBlank()) {
+            LocalDate cycleStart = month;
+            LocalDate cycleEndInclusive = month.plusMonths(1).minusDays(1);
+            try {
+                taskPlanService.applyReplacing(storeCode, cycleStart, cycleEndInclusive, "auto_apply");
+                log.info("Applied task plans for store {} from {} to {}", storeCode, cycleStart, cycleEndInclusive);
+            } catch (Exception e) {
+                log.warn("Failed to apply task plans before solving: {}", e.getMessage());
+            }
+        }
 
         // 既存ジョブならチケット再発行
         if (jobMap.containsKey(key)) {

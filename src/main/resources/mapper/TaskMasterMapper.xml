@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.TaskMasterMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
+    <id column="task_code" property="taskCode" />
+    <result column="name" property="name" />
+    <result column="description" property="description" />
+    <result column="default_schedule_type" property="defaultScheduleType" />
+    <result column="default_required_duration_minutes" property="defaultRequiredDurationMinutes" />
+    <result column="priority" property="priority" />
+    <result column="color" property="color" />
+    <result column="icon" property="icon" />
+  </resultMap>
+
+  <sql id="Base_Column_List">
+    task_code, name, description, default_schedule_type, default_required_duration_minutes,
+    priority, color, icon
+  </sql>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
+    insert into public.task_master (
+      task_code, name, description, default_schedule_type, default_required_duration_minutes,
+      priority, color, icon
+    ) values (
+      #{taskCode}, #{name}, #{description}, #{defaultScheduleType}, #{defaultRequiredDurationMinutes},
+      #{priority}, #{color}, #{icon}
+    )
+  </insert>
+
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
+    update public.task_master
+    set name = #{name},
+        description = #{description},
+        default_schedule_type = #{defaultScheduleType},
+        default_required_duration_minutes = #{defaultRequiredDurationMinutes},
+        priority = #{priority},
+        color = #{color},
+        icon = #{icon}
+    where task_code = #{taskCode}
+  </update>
+
+  <delete id="deleteByPrimaryKey" parameterType="string">
+    delete from public.task_master where task_code = #{taskCode}
+  </delete>
+
+  <select id="selectByPrimaryKey" parameterType="string" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_master where task_code = #{taskCode}
+  </select>
+
+  <select id="selectAll" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_master order by task_code
+  </select>
+</mapper>

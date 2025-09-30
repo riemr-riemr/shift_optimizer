@@ -263,6 +263,15 @@
       and store_code = #{storeCode}
   </delete>
 
+  <!-- Count overlaps for an employee in [startAt, endAt) (register assignments) -->
+  <select id="countOverlaps" resultType="long">
+    select count(*)
+    from public.shift_assignment a
+    where a.employee_code = #{employeeCode}
+      and a.end_at &gt; #{startAt}
+      and a.start_at &lt; #{endAt}
+  </select>
+
   <select id="selectAll" resultMap="BaseResultMap">
     SELECT
     <include refid="Base_Column_List" />

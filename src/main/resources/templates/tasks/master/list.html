@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業マスタ</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>作業マスタ</span>
+    </div>
+    <div class="card-body">
+      <form th:action="@{/tasks/master}" th:object="${form}" method="post" class="row g-2 mb-3">
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="コード" th:field="*{taskCode}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="名称" th:field="*{name}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="説明" th:field="*{description}"></div>
+        <div class="col-auto"><select class="form-select form-select-sm" th:field="*{defaultScheduleType}"><option value="">(タイプ)</option><option value="FIXED">固定</option><option value="FLEXIBLE">可変</option></select></div>
+        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="所要(分)" th:field="*{defaultRequiredDurationMinutes}"></div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">追加</button></div>
+      </form>
+
+      <table class="table table-sm">
+        <thead><tr><th>コード</th><th>名称</th><th>タイプ</th><th>所要</th><th></th></tr></thead>
+        <tbody>
+        <tr th:each="m : ${list}">
+          <td th:text="${m.taskCode}"></td>
+          <td th:text="${m.name}"></td>
+          <td th:text="${m.defaultScheduleType}"></td>
+          <td th:text="${m.defaultRequiredDurationMinutes}"></td>
+          <td>
+            <form th:action="@{'/tasks/master/' + ${m.taskCode} + '/delete'}" method="post">
+              <button class="btn btn-sm btn-outline-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+

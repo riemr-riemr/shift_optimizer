@@ -4,6 +4,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignmentExample;
 
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -127,4 +128,11 @@ public interface ShiftAssignmentMapper {
     int deleteByMonthAndStore(@Param("from") LocalDate from,
                               @Param("to") LocalDate to,
                               @Param("storeCode") String storeCode);
+
+    /**
+     * Count overlaps for an employee in [startAt, endAt) against register assignments.
+     */
+    long countOverlaps(@Param("employeeCode") String employeeCode,
+                       @Param("startAt") Date startAt,
+                       @Param("endAt") Date endAt);
 }
