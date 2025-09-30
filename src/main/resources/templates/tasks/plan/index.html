@@ -11,10 +11,10 @@
       <span>作業計画</span>
     </div>
     <div class="card-body">
-      <form class="row g-2 mb-3">
+      <form class="row g-2 mb-3" id="planForm">
         <div class="col-auto"><input class="form-control form-control-sm" name="store" placeholder="店舗コード" th:value="${storeCode}"></div>
         <div class="col-auto">
-          <select class="form-select form-select-sm" name="mode">
+          <select class="form-select form-select-sm" name="mode" id="modeSelect">
             <option th:selected="${mode}=='weekly'" value="weekly">曜日</option>
             <option th:selected="${mode}=='special'" value="special">特異日</option>
           </select>
@@ -168,6 +168,17 @@
       </div>
     </div>
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const modeSelect = document.getElementById('modeSelect');
+      const planForm = document.getElementById('planForm');
+      
+      modeSelect.addEventListener('change', function() {
+        planForm.submit();
+      });
+    });
+  </script>
 </main>
 </body>
 </html>
