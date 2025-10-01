@@ -71,8 +71,9 @@ public class EmployeeController {
     @PostMapping
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String save(@Valid @ModelAttribute("employeeForm") EmployeeForm form,
-                       BindingResult result, @RequestParam("edit") boolean edit) {
+                       BindingResult result, @RequestParam("edit") boolean edit, Model model) {
         if (result.hasErrors()) {
+            model.addAttribute("edit", edit);
             return "employee/form";
         }
         // Map weekly prefs

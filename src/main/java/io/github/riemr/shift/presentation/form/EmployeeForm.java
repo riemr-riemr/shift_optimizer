@@ -10,24 +10,28 @@ import java.util.Date;
 
 @Data
 public class EmployeeForm {
-    @NotBlank
+    @NotBlank(message = "従業員コードは必須です")
     private String employeeCode;
 
-    @NotBlank
+    @NotBlank(message = "店舗コードは必須です")
     private String storeCode;
 
-    @NotBlank
+    @NotBlank(message = "氏名は必須です")
     private String employeeName;
 
-    @NotNull
-    @Min(0)
-    @Max(4)
+    @NotNull(message = "ショートフォロー区分は必須です")
+    @Min(value = 0, message = "ショートフォロー区分は0以上である必要があります")
+    @Max(value = 4, message = "ショートフォロー区分は4以下である必要があります")
     private Short shortFollow;
 
-    @NotNull @Min(1) @Max(1440)
+    @NotNull(message = "1日上限時間は必須です")
+    @Min(value = 1, message = "1日上限時間は1分以上である必要があります")
+    @Max(value = 1440, message = "1日上限時間は1440分以下である必要があります")
     private Integer maxWorkMinutesDay;
 
-    @NotNull @Min(1) @Max(31)
+    @NotNull(message = "1ヶ月上限日数は必須です")
+    @Min(value = 1, message = "1ヶ月上限日数は1日以上である必要があります")
+    @Max(value = 31, message = "1ヶ月上限日数は31日以下である必要があります")
     private Integer maxWorkDaysMonth;
     // 曜日別設定（1=Mon .. 7=Sun）
     @lombok.Data
