@@ -37,6 +37,7 @@ public class EmployeeController {
         }
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
+        model.addAttribute("stores", service.findAllStores());
         return "employee/form";
     }
 
@@ -64,6 +65,7 @@ public class EmployeeController {
         }
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
+        model.addAttribute("stores", service.findAllStores());
         return "employee/form";
     }
 
@@ -74,6 +76,7 @@ public class EmployeeController {
                        BindingResult result, @RequestParam("edit") boolean edit, Model model) {
         if (result.hasErrors()) {
             model.addAttribute("edit", edit);
+            model.addAttribute("stores", service.findAllStores());
             return "employee/form";
         }
         // Map weekly prefs

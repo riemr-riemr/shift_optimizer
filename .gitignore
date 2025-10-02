@@ -41,4 +41,5 @@ AGENTS.md
 app.log
 
 ### CSV ###
-/docker/csv/
+docker/csv/*.csv
+

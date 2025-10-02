@@ -59,7 +59,9 @@
                           class="form-select"
                           th:classappend="${#fields.hasErrors('storeCode')} ? 'is-invalid' : ''">
                     <option value="">-- 選択してください --</option>
-                    <option value="569">569 - テスト店舗</option>
+                    <option th:each="store : ${stores}" 
+                            th:value="${store.storeCode}" 
+                            th:text="${store.storeCode} + ' - ' + ${store.storeName}"></option>
                   </select>
                   <div class="invalid-feedback" th:if="${#fields.hasErrors('storeCode')}" th:errors="*{storeCode}"></div>
                 </div>
@@ -183,11 +185,11 @@
                           </select>
                         </td>
                         <td>
-                          <input type="time" class="form-control form-control-sm start-time" step="600"
+                          <input type="time" class="form-control form-control-sm start-time" step="900"
                                  th:field="*{weeklyPreferences[__${stat.index}__].baseStartTime}"/>
                         </td>
                         <td>
-                          <input type="time" class="form-control form-control-sm end-time" step="600"
+                          <input type="time" class="form-control form-control-sm end-time" step="900"
                                  th:field="*{weeklyPreferences[__${stat.index}__].baseEndTime}"/>
                         </td>
                       </tr>
