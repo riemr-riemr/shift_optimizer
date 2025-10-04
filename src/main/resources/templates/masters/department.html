@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>部門マスタ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>.table td, .table th { vertical-align: middle; }</style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-diagram-3"></i> 部門マスタ</span>
+    </div>
+    <div class="card-body">
+      <form th:action="@{/masters/department}" th:object="${form}" method="post" class="row g-2 mb-3">
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="部門コード" th:field="*{departmentCode}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="部門名" th:field="*{departmentName}" required></div>
+        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="表示順" th:field="*{displayOrder}"></div>
+        <div class="col-auto">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" th:field="*{isActive}" id="activeCheck">
+            <label class="form-check-label" for="activeCheck">有効</label>
+          </div>
+        </div>
+        <div class="col-auto">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" th:field="*{isRegister}" id="registerCheck">
+            <label class="form-check-label" for="registerCheck">レジ部門</label>
+          </div>
+        </div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">追加</button></div>
+      </form>
+
+      <table class="table table-sm">
+        <thead><tr><th>コード</th><th>名称</th><th>順</th><th>有効</th><th>レジ部門</th><th></th></tr></thead>
+        <tbody>
+        <tr th:each="d : ${list}">
+          <td th:text="${d.departmentCode}"></td>
+          <td th:text="${d.departmentName}"></td>
+          <td th:text="${d.displayOrder}"></td>
+          <td><span th:text="${d.isActive} ? '○' : '-'"/></td>
+          <td><span th:text="${d.isRegister} ? '○' : '-'"/></td>
+          <td>
+            <form th:action="@{'/masters/department/' + ${d.departmentCode} + '/delete'}" method="post" onsubmit="return confirm('削除しますか？');">
+              <button class="btn btn-sm btn-outline-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+

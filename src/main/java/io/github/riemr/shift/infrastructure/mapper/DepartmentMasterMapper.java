@@ -11,4 +11,5 @@ public interface DepartmentMasterMapper {
     List<DepartmentMaster> selectAll();
     DepartmentMaster selectByCode(@Param("departmentCode") String departmentCode);
     int insert(DepartmentMaster row);
+    int deleteByCode(@Param("departmentCode") String departmentCode);
 }

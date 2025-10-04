@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>店舗マスタ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>
+    .table td, .table th { vertical-align: middle; }
+  </style>
+  </head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-shop"></i> 店舗マスタ</span>
+    </div>
+    <div class="card-body">
+      <form th:action="@{/masters/store}" th:object="${form}" method="post" class="row g-2 mb-3">
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="店舗コード" th:field="*{storeCode}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="店舗名" th:field="*{storeName}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="タイムゾーン" th:field="*{timezone}" value="Asia/Tokyo"></div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">追加/更新</button></div>
+      </form>
+
+      <table class="table table-sm">
+        <thead><tr><th>店舗コード</th><th>店舗名</th><th>タイムゾーン</th><th></th></tr></thead>
+        <tbody>
+        <tr th:each="s : ${list}">
+          <td th:text="${s.storeCode}"></td>
+          <td th:text="${s.storeName}"></td>
+          <td th:text="${s.timezone}"></td>
+          <td>
+            <form th:action="@{'/masters/store/' + ${s.storeCode} + '/delete'}" method="post" onsubmit="return confirm('削除しますか？');">
+              <button class="btn btn-sm btn-outline-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+

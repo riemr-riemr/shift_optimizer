@@ -51,6 +51,7 @@ public class MasterCsvImportJobConfig {
     private final StoreDepartmentMapper storeDepartmentMapper;
     private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.EmployeeTaskSkillMapper employeeTaskSkillMapper;
 
     /* === Job =========================================================== */
     @Bean
@@ -67,7 +68,8 @@ public class MasterCsvImportJobConfig {
             Step employeeDepartmentStep,
             Step employeeDepartmentSkillStep,
             Step registerDemandQuarterStep,
-            Step workDemandQuarterStep) {
+            Step workDemandQuarterStep,
+            Step employeeTaskSkillStep) {
         return new JobBuilder("masterImportJob", jobRepository)
                 .incrementer(new RunIdIncrementer()) // run.id を自動付与
                 .start(cleanupStep)
@@ -82,6 +84,7 @@ public class MasterCsvImportJobConfig {
                 .next(employeeDepartmentSkillStep)
                 .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
+                .next(employeeTaskSkillStep)
                 .next(registerDemandQuarterStep)
                 .next(workDemandQuarterStep)
                 .build();
@@ -396,6 +399,32 @@ public class MasterCsvImportJobConfig {
         return csvReader(csvDir.resolve("employee_register_skill.csv"),
                 new String[] { "storeCode", "employeeCode", "registerNo", "skillLevel" },
                 EmployeeRegisterSkill.class);
+    }
+
+    /* === Step : employee_task_skill.csv ========================================== */
+    @Bean
+    public Step employeeTaskSkillStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill> employeeTaskSkillReader) {
+        return new StepBuilder("employeeTaskSkillStep", jobRepository)
+                .<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill>chunk(1000, txManager)
+                .reader(employeeTaskSkillReader)
+                .writer(items -> {
+                    for (var r : items) {
+                        // upsert
+                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        try {
+                            session.insert("io.github.riemr.shift.infrastructure.mapper.EmployeeTaskSkillMapper.upsert", r);
+                            session.commit();
+                        } finally { session.close(); }
+                    }
+                })
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill> employeeTaskSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("employee_task_skill.csv"),
+                new String[] { "employeeCode", "taskCode", "skillLevel" },
+                io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill.class);
     }
 
     /* === Step : employee_weekly_preference.csv ========================= */

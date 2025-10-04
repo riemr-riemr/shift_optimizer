@@ -363,6 +363,17 @@ INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, 
  ('USER','TASKS', false, false)
 ON CONFLICT DO NOTHING;
 
+-- New screen: Department Skill Matrix (non-register)
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('ADMIN','DEPT_SKILL_MATRIX', true, true)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('MANAGER','DEPT_SKILL_MATRIX', true, false)
+ON CONFLICT DO NOTHING;
+INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
+ ('USER','DEPT_SKILL_MATRIX', false, false)
+ON CONFLICT DO NOTHING;
+
 -- ------------------------------------------------
 -- 14. Task Master / Weekly Plan / Special Day
 -- ------------------------------------------------
@@ -413,6 +424,14 @@ CREATE TABLE IF NOT EXISTS days_master (
     label        VARCHAR(64),
     active       BOOLEAN     NOT NULL DEFAULT TRUE,
     UNIQUE (store_code, kind, day_of_week, special_date)
+);
+
+-- Employee x Task skill levels (for non-register tasks)
+CREATE TABLE IF NOT EXISTS employee_task_skill (
+  employee_code   VARCHAR(10)  NOT NULL REFERENCES employee(employee_code),
+  task_code       VARCHAR(32)  NOT NULL REFERENCES task_master(task_code),
+  skill_level     SMALLINT     NOT NULL,
+  PRIMARY KEY (employee_code, task_code)
 );
 
 -- 権限シード: マスタ/計画/特異日

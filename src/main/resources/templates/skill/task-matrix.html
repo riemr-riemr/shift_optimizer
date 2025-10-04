@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業担当一覧</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    .table td, .table th { vertical-align: middle; }
+    .sticky-header { position: sticky; top: 0; background: #fff; z-index: 2; }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-grid"></i> 作業担当一覧</h1>
+    <p class="mb-0">縦軸: 従業員、横軸: 作業（作業マスタ）</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span>スキルレベル: 0〜4（レジと同様の基準）</span>
+    </div>
+    <div class="card-body">
+      <form method="post" th:action="@{/skills/tasks}">
+        <div class="table-responsive" style="max-height: 70vh;">
+          <table class="table table-sm table-striped">
+            <thead class="sticky-header">
+            <tr>
+              <th style="min-width: 140px;">従業員コード</th>
+              <th style="min-width: 200px;">従業員名</th>
+              <th th:each="t : ${tasks}" th:text="${t.taskCode}" style="white-space: nowrap;"></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${employees}">
+              <td th:text="${e.employeeCode}"></td>
+              <td th:text="${e.employeeName}"></td>
+              <td th:each="t : ${tasks}">
+                <select class="form-select form-select-sm"
+                        th:name="${'skill_' + e.employeeCode + '_' + t.taskCode}">
+                  <option th:each="lvl : ${#numbers.sequence(0,4)}"
+                          th:value="${lvl}"
+                          th:text="${lvl}"
+                          th:selected="${matrix[e.employeeCode] != null and matrix[e.employeeCode][t.taskCode] != null and matrix[e.employeeCode][t.taskCode] == lvl}"></option>
+                </select>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-success" type="submit"><i class="bi bi-floppy"></i> 保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</main>
+</body>
+</html>

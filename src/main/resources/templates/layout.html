@@ -200,12 +200,6 @@
                         店内業務タスク
                     </a>
                 </li>
-                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
-                    <a th:href="@{/tasks/master}">
-                        <i class="bi bi-archive"></i>
-                        作業マスタ
-                    </a>
-                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_PLAN)}">
                     <a th:href="@{/tasks/plan}">
                         <i class="bi bi-calendar-week"></i>
@@ -230,16 +224,51 @@
                     <i class="bi bi-people me-1"></i>
                     人員管理
                 </li>
+                <!-- マスタ登録 -->
+                <li class="nav-category">
+                    <i class="bi bi-gear me-1"></i>
+                    マスタ登録
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/tasks/master}">
+                        <i class="bi bi-archive"></i>
+                        作業マスタ
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)}">
                     <a th:href="@{/employees}">
                         <i class="bi bi-person-badge"></i>
                         従業員管理
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/masters/store}">
+                        <i class="bi bi-shop"></i>
+                        店舗マスタ
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/masters/department}">
+                        <i class="bi bi-diagram-3"></i>
+                        部門マスタ
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/masters/register}">
+                        <i class="bi bi-cash-register"></i>
+                        レジマスタ
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)}">
                     <a th:href="@{/skills}">
                         <i class="bi bi-grid-3x3-gap"></i>
-                        スキルマトリクス
+                        レジ担当一覧
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)}">
+                    <a th:href="@{/skills/tasks}">
+                        <i class="bi bi-grid"></i>
+                        作業担当一覧
                     </a>
                 </li>
 

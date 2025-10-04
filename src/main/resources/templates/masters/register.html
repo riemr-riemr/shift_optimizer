@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>レジマスタ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <style>.table td, .table th { vertical-align: middle; }</style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-cash-register"></i> レジマスタ</span>
+    </div>
+    <div class="card-body">
+      <form th:action="@{/masters/register}" th:object="${form}" method="post" class="row g-2 mb-3">
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="店舗コード" th:field="*{storeCode}" required></div>
+        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="レジ番号" th:field="*{registerNo}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="レジ名" th:field="*{registerName}"></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="略称" th:field="*{shortName}"></div>
+        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="開店優先" th:field="*{openPriority}"></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="タイプ(SEMI/NORMAL)" th:field="*{registerType}"></div>
+        <div class="col-auto">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" th:field="*{isAutoOpenTarget}" id="autoOpenCheck">
+            <label class="form-check-label" for="autoOpenCheck">自動開店対象</label>
+          </div>
+        </div>
+        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="最大許容(分)" th:field="*{maxAllowance}"></div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">追加/更新</button></div>
+      </form>
+
+      <table class="table table-sm">
+        <thead><tr><th>店舗</th><th>No</th><th>名称</th><th>タイプ</th><th>自動開店</th><th>優先</th><th></th></tr></thead>
+        <tbody>
+        <tr th:each="r : ${list}">
+          <td th:text="${r.storeCode}"></td>
+          <td th:text="${r.registerNo}"></td>
+          <td th:text="${r.registerName}"></td>
+          <td th:text="${r.registerType}"></td>
+          <td><span th:text="${r.isAutoOpenTarget} ? '○' : '-'"/></td>
+          <td th:text="${r.openPriority}"></td>
+          <td>
+            <form th:action="@{'/masters/register/' + ${r.storeCode} + '/' + ${r.registerNo} + '/delete'}" method="post" onsubmit="return confirm('削除しますか？');">
+              <button class="btn btn-sm btn-outline-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+

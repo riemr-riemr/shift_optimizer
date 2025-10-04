@@ -34,4 +34,8 @@
     VALUES (#{departmentCode}, #{departmentName}, #{displayOrder}, COALESCE(#{isActive}, TRUE), COALESCE(#{isRegister}, FALSE))
     ON CONFLICT (department_code) DO NOTHING
   </insert>
+  
+  <delete id="deleteByCode" parameterType="string">
+    DELETE FROM department_master WHERE department_code = #{departmentCode}
+  </delete>
 </mapper>
