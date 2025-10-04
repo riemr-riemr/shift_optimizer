@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -35,6 +36,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmen
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
@@ -62,6 +64,7 @@ public class ShiftScheduleService {
     private final ShiftScheduleRepository repository;
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
+    private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
     private final AppSettingService appSettingService;
@@ -86,7 +89,7 @@ public class ShiftScheduleService {
      */
     @Transactional
     public SolveTicket startSolveMonth(LocalDate month) {
-        return startSolveMonth(month, null);
+        return startSolveMonth(month, null, null);
     }
 
     /**
@@ -95,8 +98,17 @@ public class ShiftScheduleService {
      */
     @Transactional
     public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
+        return startSolveMonth(month, storeCode, null);
+    }
+
+    /**
+     * 月次シフト計算を非同期で開始（店舗・部門指定あり）。
+     * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
+     */
+    @Transactional
+    public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
         long problemId = toProblemId(month);
-        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, month);
+        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month);
 
         // 1) 作業計画の適用（当該サイクル範囲）
         if (storeCode != null && !storeCode.isBlank()) {
@@ -140,11 +152,12 @@ public class ShiftScheduleService {
     }
 
     /** 進捗バー用ステータス */
-    public SolveStatusDto getStatus(Long problemId, String storeCode) {
+    public SolveStatusDto getStatus(Long problemId, String storeCode, String departmentCode) {
         // jobMapから該当するProblemKeyを検索
         ProblemKey targetKey = null;
         for (ProblemKey key : jobMap.keySet()) {
-            if (key.getStoreCode().equals(storeCode) && 
+            if (Objects.equals(key.getStoreCode(), storeCode) &&
+                Objects.equals(key.getDepartmentCode(), departmentCode) &&
                 toProblemId(key.getCycleStart()) == problemId) {
                 targetKey = key;
                 break;
@@ -203,9 +216,17 @@ public class ShiftScheduleService {
     }
 
     /** 計算終了後の最終解をフロント用 DTO に変換して返す */
-    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode) {
-        ProblemKey key = new ProblemKey(java.time.YearMonth.of((int)(problemId/100), (int)(problemId%100)), storeCode);
-        SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(key);
+    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode, String departmentCode) {
+        ProblemKey targetKey = null;
+        for (ProblemKey k : jobMap.keySet()) {
+            if (Objects.equals(k.getStoreCode(), storeCode) &&
+                Objects.equals(k.getDepartmentCode(), departmentCode) &&
+                toProblemId(k.getCycleStart()) == problemId) {
+                targetKey = k; break;
+            }
+        }
+        if (targetKey == null) return List.of();
+        SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(targetKey);
         if (job == null) return List.of();
 
         try {
@@ -215,6 +236,9 @@ public class ShiftScheduleService {
                             a.getOrigin().getStartAt().toString(),
                             a.getOrigin().getEndAt().toString(),
                             a.getOrigin().getRegisterNo(),
+                            a.getDepartmentCode(),
+                            a.getWorkKind() != null ? a.getWorkKind().name() : null,
+                            a.getTaskCode(),
                             Optional.ofNullable(a.getAssignedEmployee())
                                     .map(emp -> emp.getEmployeeCode())
                                     .orElse("-"),
@@ -231,38 +255,57 @@ public class ShiftScheduleService {
     }
 
     /** 月別シフト取得 - レジアサインメント表示 */
-    public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth, String storeCode) {
+    public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth, String storeCode, String departmentCode) {
         LocalDate from = computeCycleStart(anyDayInMonth);
         LocalDate to   = from.plusMonths(1);  // 半開区間
-
-        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByMonth(from, to)
-                .stream()
-                .filter(a -> storeCode == null || storeCode.equals(a.getStoreCode()))
-                .toList();
 
         // 事前に従業員名を一括取得
         Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
                 .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
 
-        return assignments.stream()
-                .map(a -> new ShiftAssignmentMonthlyView(
-                        toLocalDateTime(a.getStartAt()),
-                        toLocalDateTime(a.getEndAt()),
-                        a.getRegisterNo(),
-                        a.getEmployeeCode(),
-                        Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
-                ))
-                .toList();
+        if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
+            // Department task assignments monthly
+            var taskList = departmentTaskAssignmentMapper.selectByMonth(from, to, storeCode, departmentCode);
+            return taskList.stream()
+                    .map(t -> new ShiftAssignmentMonthlyView(
+                            toLocalDateTime(t.getStartAt()),
+                            toLocalDateTime(t.getEndAt()),
+                            null,
+                            t.getEmployeeCode(),
+                            Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                    ))
+                    .toList();
+        } else {
+            // Register assignments monthly
+            List<RegisterAssignment> assignments = registerAssignmentMapper.selectByMonth(from, to)
+                    .stream()
+                    .filter(a -> (storeCode == null || storeCode.equals(a.getStoreCode())))
+                    .toList();
+            return assignments.stream()
+                    .map(a -> new ShiftAssignmentMonthlyView(
+                            toLocalDateTime(a.getStartAt()),
+                            toLocalDateTime(a.getEndAt()),
+                            a.getRegisterNo(),
+                            a.getEmployeeCode(),
+                            Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                    ))
+                    .toList();
+        }
+    }
+
+    // Backward-compatible overloads (internally delegate with departmentCode = null)
+    public List<ShiftAssignmentMonthlyView> fetchAssignmentsByMonth(LocalDate anyDayInMonth, String storeCode) {
+        return fetchAssignmentsByMonth(anyDayInMonth, storeCode, null);
     }
 
     /** 月別出勤時間取得 - シフトアサインメント表示 */
-    public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode) {
+    public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode, String departmentCode) {
         LocalDate from = computeCycleStart(anyDayInMonth);
         LocalDate to   = from.plusMonths(1);  // 半開区間
 
         List<ShiftAssignment> shifts = shiftAssignmentMapper.selectByMonth(from, to)
                 .stream()
-                .filter(s -> storeCode == null || storeCode.equals(s.getStoreCode()))
+                .filter(s -> (storeCode == null || storeCode.equals(s.getStoreCode())))
                 .toList();
 
         Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
@@ -279,26 +322,57 @@ public class ShiftScheduleService {
                 .toList();
     }
 
-    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date, String storeCode) {
-        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date, date.plusDays(1))
-                .stream()
-                .filter(a -> storeCode == null || storeCode.equals(a.getStoreCode()))
-                .toList();
+    public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode) {
+        return fetchShiftsByMonth(anyDayInMonth, storeCode, null);
+    }
+
+    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date, String storeCode, String departmentCode) {
         Map<String, String> nameMap = (storeCode != null ? employeeMapper.selectByStoreCode(storeCode) : employeeMapper.selectAll())
                 .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
-        return assignments.stream()
-                .map(a -> new ShiftAssignmentView(
-                        Optional.ofNullable(a.getStartAt())
-                                .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
-                                .orElse(""),
-                        Optional.ofNullable(a.getEndAt())
-                                .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
-                                .orElse(""),
-                        a.getRegisterNo(),
-                        Optional.ofNullable(a.getEmployeeCode()).orElse(""),
-                        Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
-                ))
-                .toList();
+
+        if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
+            // Department task assignments
+            var from = date;
+            var to = date.plusDays(1);
+            var taskMapper = this.departmentTaskAssignmentMapper; // injected
+            var tasks = taskMapper.selectByMonth(from, to, storeCode, departmentCode);
+            return tasks.stream().map(t -> new ShiftAssignmentView(
+                    Optional.ofNullable(t.getStartAt()).map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()).orElse(""),
+                    Optional.ofNullable(t.getEndAt()).map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()).orElse(""),
+                    null,
+                    departmentCode,
+                    "DEPARTMENT_TASK",
+                    t.getTaskCode(),
+                    Optional.ofNullable(t.getEmployeeCode()).orElse(""),
+                    Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+            )).toList();
+        } else {
+            // Register assignments
+            List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date, date.plusDays(1))
+                    .stream()
+                    .filter(a -> (storeCode == null || storeCode.equals(a.getStoreCode())))
+                    .toList();
+            return assignments.stream()
+                    .map(a -> new ShiftAssignmentView(
+                            Optional.ofNullable(a.getStartAt())
+                                    .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                    .orElse(""),
+                            Optional.ofNullable(a.getEndAt())
+                                    .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                                    .orElse(""),
+                            a.getRegisterNo(),
+                            departmentCode,
+                            "REGISTER_OP",
+                            null,
+                            Optional.ofNullable(a.getEmployeeCode()).orElse(""),
+                            Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                    ))
+                    .toList();
+        }
+    }
+
+    public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date, String storeCode) {
+        return fetchAssignmentsByDate(date, storeCode, null);
     }
 
     @Transactional
@@ -360,7 +434,7 @@ public class ShiftScheduleService {
         LocalDate cycleStart = key.getCycleStart() != null 
             ? key.getCycleStart() 
             : LocalDate.of(key.getMonth().getYear(), key.getMonth().getMonthValue(), 1);
-        ShiftSchedule unsolved = repository.fetchShiftSchedule(cycleStart, key.getStoreCode());
+        ShiftSchedule unsolved = repository.fetchShiftSchedule(cycleStart, key.getStoreCode(), key.getDepartmentCode());
         unsolved.setEmployeeRegisterSkillList(employeeRegisterSkillMapper.selectByExample(null));
         // Repository 側で必要なフィールドをセット済みだが、問題 ID だけはここで上書きしておく
         unsolved.setProblemId(toProblemId(cycleStart));
@@ -703,12 +777,47 @@ public class ShiftScheduleService {
             }
         }
 
+        // Department task assignments (DEPARTMENT_TASK) – merge by employee/date/department/task
+        List<io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment> deptTaskAssignments = new ArrayList<>();
+        if (best.getDepartmentCode() != null) {
+            Map<String, List<ShiftAssignmentPlanningEntity>> deptTaskGroups = best.getAssignmentList().stream()
+                    .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK)
+                    .collect(Collectors.groupingBy(a -> String.join("@",
+                            a.getAssignedEmployee().getEmployeeCode(),
+                            a.getShiftDate().toString(),
+                            best.getDepartmentCode(),
+                            a.getTaskCode() == null ? "" : a.getTaskCode())));
+
+            for (List<ShiftAssignmentPlanningEntity> group : deptTaskGroups.values()) {
+                group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
+                Date startAt = group.get(0).getOrigin().getStartAt();
+                Date endAt = group.get(group.size() - 1).getOrigin().getEndAt();
+                String employeeCode = group.get(0).getAssignedEmployee().getEmployeeCode();
+                String storeCode = group.get(0).getOrigin().getStoreCode();
+                String taskCode = group.get(0).getTaskCode();
+
+                var ta = new io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment();
+                ta.setStoreCode(storeCode);
+                ta.setDepartmentCode(best.getDepartmentCode());
+                ta.setTaskCode(taskCode);
+                ta.setEmployeeCode(employeeCode);
+                ta.setStartAt(startAt);
+                ta.setEndAt(endAt);
+                ta.setCreatedBy("auto");
+                deptTaskAssignments.add(ta);
+            }
+        }
+
         // -- DB に保存 --
         shiftAssignments.forEach(shiftAssignmentMapper::insert);
         mergedRegisterAssignments.forEach(registerAssignmentMapper::insert);
-        
-        log.info("Persisted best solution – {} shift assignments and {} register assignments saved (score = {})", 
-                shiftAssignments.size(), mergedRegisterAssignments.size(), best.getScore());
+        if (best.getDepartmentCode() != null) {
+            departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, store, best.getDepartmentCode());
+            deptTaskAssignments.forEach(departmentTaskAssignmentMapper::insert);
+        }
+
+        log.info("Persisted best solution – shifts={}, registers={}, deptTasks={} (score={})", 
+                shiftAssignments.size(), mergedRegisterAssignments.size(), deptTaskAssignments.size(), best.getScore());
     }
 
     private static LocalDateTime toLocalDateTime(Date date) {

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper">
+  <resultMap id="EmployeeDepartmentMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment">
+    <id     column="employee_code"   property="employeeCode"/>
+    <id     column="department_code" property="departmentCode"/>
+  </resultMap>
+
+  <select id="selectByEmployee" parameterType="string" resultMap="EmployeeDepartmentMap">
+    SELECT employee_code, department_code
+    FROM employee_department
+    WHERE employee_code = #{employeeCode}
+  </select>
+
+  <select id="selectByDepartment" parameterType="string" resultMap="EmployeeDepartmentMap">
+    SELECT employee_code, department_code
+    FROM employee_department
+    WHERE department_code = #{departmentCode}
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment">
+    INSERT INTO employee_department (employee_code, department_code)
+    VALUES (#{employeeCode}, #{departmentCode})
+    ON CONFLICT (employee_code, department_code) DO NOTHING
+  </insert>
+</mapper>

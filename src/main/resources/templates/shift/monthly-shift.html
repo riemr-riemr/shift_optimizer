@@ -228,12 +228,12 @@
         <div class="card-body">
             <form th:action="@{/shift}" method="get">
                 <div class="row align-items-end">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="targetMonth" class="form-label">対象月</label>
                         <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
                                th:value="${year + '-' + (#numbers.formatInteger(month, 2))}" required />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="storeCode" class="form-label">店舗</label>
                         <select id="storeCode" name="storeCode" class="form-select">
                             <option value="">すべての店舗</option>
@@ -243,7 +243,14 @@
                                     th:selected="${store.storeCode == selectedStoreCode}">店舗名</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label for="departmentCode" class="form-label">部門</label>
+                        <select id="departmentCode" name="departmentCode" class="form-select">
+                            <option value="" th:selected="${selectedDepartmentCode == null}">部門を選択</option>
+                            <!-- 部門一覧は後段のJSで店舗選択に応じてロード -->
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary" style="flex: 1;">
                                 <i class="bi bi-search"></i> 表示更新
@@ -288,6 +295,10 @@
                 <div class="text-muted small" th:if="${selectedStoreCode}">
                     <i class="bi bi-shop"></i> 
                     店舗: <span th:text="${selectedStoreCode}">STORE001</span>
+                </div>
+                <div class="text-muted small" th:if="${selectedDepartmentCode}">
+                    <i class="bi bi-diagram-3"></i>
+                    部門: <span th:text="${selectedDepartmentCode}">DEPT</span>
                 </div>
                 <div class="text-muted small">
                     <i class="bi bi-people"></i> 従業員数: <span th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名
@@ -512,14 +523,30 @@
         // 店舗選択が変更されたときの処理（自動送信は無効化）
         document.addEventListener('DOMContentLoaded', function() {
             const storeSelect = document.getElementById('storeCode');
+            const deptSelect = document.getElementById('departmentCode');
             if (storeSelect) {
-                storeSelect.addEventListener('change', function() {
+                storeSelect.addEventListener('change', async function() {
                     // 最適化ボタンの有効/無効を更新
                     const optimizeBtn = document.getElementById('optimizeBtn');
                     if (optimizeBtn) {
                         optimizeBtn.disabled = !this.value;
                     }
+                    // 部門一覧をロード
+                    if (deptSelect) {
+                        deptSelect.innerHTML = '<option value="">部門を選択</option>';
+                        if (this.value) {
+                            try {
+                                const list = await fetch(`/shift/api/departments/${encodeURIComponent(this.value)}`).then(r=>r.json());
+                                deptSelect.innerHTML = '<option value="">部門を選択</option>' +
+                                  list.map(d => `<option value="${d.departmentCode}">${d.departmentCode} - ${d.departmentName||''}</option>`).join('');
+                            } catch (e) { console.error('部門取得失敗', e); }
+                        }
+                    }
                 });
+                // 初期ロード
+                if (storeSelect.value && deptSelect) {
+                    storeSelect.dispatchEvent(new Event('change'));
+                }
             }
             
             // 最適化ボタンのイベント
@@ -531,6 +558,7 @@
         
         function startOptimization() {
             const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
             const targetMonth = document.getElementById('targetMonth').value;
             
             if (!storeCode) {
@@ -555,7 +583,8 @@
                 },
                 body: JSON.stringify({
                     month: targetMonth,
-                    storeCode: storeCode
+                    storeCode: storeCode,
+                    departmentCode: departmentCode
                 })
             })
             .then(response => {
@@ -594,7 +623,8 @@
             console.log('Checking status for ticket ID:', optimizationTicket.problemId);
             
             const storeCode = document.getElementById('storeCode').value;
-            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}`)
+            const departmentCode = document.getElementById('departmentCode').value;
+            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

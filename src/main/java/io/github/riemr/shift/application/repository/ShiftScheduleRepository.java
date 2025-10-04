@@ -8,5 +8,5 @@ public interface ShiftScheduleRepository {
      * 指定月のシフト計算用データをすべて取得し、ドメインモデルへ変換する。
      * @param month 例: 2025‑07‑01 (日付は 1 日で固定)
      */
-    ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode);
+    ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode, String departmentCode);
 }

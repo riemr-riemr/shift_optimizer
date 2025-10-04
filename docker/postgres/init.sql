@@ -258,6 +258,74 @@ COMMIT;
 
 -- end of init.sql
 -- ------------------------------------------------
+-- 11. department_master / store_department / employee_department / skills
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS department_master (
+  department_code   VARCHAR(32) PRIMARY KEY,
+  department_name   TEXT        NOT NULL,
+  display_order     INTEGER,
+  is_active         BOOLEAN     NOT NULL DEFAULT TRUE,
+  is_register       BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS store_department (
+  store_code        VARCHAR(10) NOT NULL REFERENCES store(store_code),
+  department_code   VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
+  display_order     INTEGER,
+  is_active         BOOLEAN     NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (store_code, department_code)
+);
+
+CREATE TABLE IF NOT EXISTS employee_department (
+  employee_code     VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
+  department_code   VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
+  PRIMARY KEY (employee_code, department_code)
+);
+
+CREATE TABLE IF NOT EXISTS employee_department_skill (
+  employee_code     VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
+  department_code   VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
+  skill_level       SMALLINT    NOT NULL,
+  PRIMARY KEY (employee_code, department_code)
+);
+
+-- ------------------------------------------------
+-- 12. work_demand_quarter (non-register demand)
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS work_demand_quarter (
+  demand_id         BIGSERIAL   PRIMARY KEY,
+  store_code        VARCHAR(10) NOT NULL REFERENCES store(store_code),
+  department_code   VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
+  demand_date       DATE        NOT NULL,
+  slot_time         TIME        NOT NULL,
+  task_code         VARCHAR(32),
+  required_units    INTEGER     NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_work_demand_sddt
+  ON work_demand_quarter (store_code, department_code, demand_date);
+
+-- ------------------------------------------------
+-- 12a. department_task_assignment (non-register assignments)
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS department_task_assignment (
+  assignment_id    BIGSERIAL PRIMARY KEY,
+  store_code       VARCHAR(10) NOT NULL REFERENCES store(store_code),
+  department_code  VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
+  task_code        VARCHAR(32),
+  employee_code    VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
+  start_at         TIMESTAMP   NOT NULL,
+  end_at           TIMESTAMP   NOT NULL,
+  created_by       VARCHAR(64)
+);
+CREATE INDEX IF NOT EXISTS idx_dept_task_assign_sdd ON department_task_assignment (store_code, department_code, start_at);
+
+-- Optional: register_assignment department tagging
+-- ALTER TABLE register_assignment ADD COLUMN department_code VARCHAR(32);
+-- UPDATE register_assignment SET department_code = 'REGISTER' WHERE department_code IS NULL;
+-- ALTER TABLE register_assignment ALTER COLUMN department_code SET NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_register_assignment_sdd ON register_assignment (store_code, department_code, start_at);
+
+-- ------------------------------------------------
 -- 0. app_setting : 汎用アプリ設定
 -- ------------------------------------------------
 CREATE TABLE app_setting (
@@ -367,3 +435,29 @@ ON CONFLICT DO NOTHING;
 INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
  ('USER','TASK_PLAN', false, false)
 ON CONFLICT DO NOTHING;
+
+-- ------------------------------------------------
+-- 15. task: 生成された部門タスク（作業）リクエスト
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS task (
+    task_id                    BIGSERIAL PRIMARY KEY,
+    store_code                 VARCHAR(10) NOT NULL REFERENCES store(store_code),
+    work_date                  DATE        NOT NULL,
+    name                       VARCHAR(100),
+    description                TEXT,
+    schedule_type              VARCHAR(10) CHECK (schedule_type IN ('FIXED','FLEXIBLE')),
+    fixed_start_at             TIMESTAMP,
+    fixed_end_at               TIMESTAMP,
+    window_start_at            TIMESTAMP,
+    window_end_at              TIMESTAMP,
+    required_duration_minutes  INTEGER,
+    required_skill_code        VARCHAR(32),
+    required_staff_count       INTEGER,
+    priority                   INTEGER,
+    must_be_contiguous         SMALLINT,
+    created_by                 VARCHAR(64),
+    created_at                 TIMESTAMP DEFAULT now(),
+    updated_by                 VARCHAR(64),
+    updated_at                 TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date);

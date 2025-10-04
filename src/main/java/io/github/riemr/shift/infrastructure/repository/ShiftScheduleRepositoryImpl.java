@@ -2,7 +2,9 @@ package io.github.riemr.shift.infrastructure.repository;
 
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.infrastructure.persistence.entity.*;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.mapper.*;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,10 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final ConstraintSettingMapper     constraintSettingMapper;
     private final StoreMapper                 storeMapper;
     private final RegisterAssignmentMapper    assignmentMapper; // 前回結果 (warm‑start) 用
+    private final WorkDemandQuarterMapper     workDemandQuarterMapper;
+    private final EmployeeDepartmentMapper    employeeDepartmentMapper;
+    private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
+    private final DepartmentMasterMapper departmentMasterMapper;
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -46,7 +52,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     // ============================================================================
 
     @Override
-    public ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode) {
+    public ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode, String departmentCode) {
         // 呼び出し側は「サイクル開始日」を渡してくる前提
         LocalDate cycleStart = month;
         LocalDate cycleEnd   = cycleStart.plusMonths(1); // 半開区間 [start, end)
@@ -91,6 +97,9 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<EmployeeRequest> requests = requestMapper.selectByDateRange(cycleStart, cycleEnd);
 
         List<ConstraintMaster> settings = constraintMasterMapper.selectAll();
+        List<EmployeeDepartmentSkill> deptSkills = departmentCode != null
+                ? employeeDepartmentSkillMapper.selectByDepartment(departmentCode)
+                : java.util.Collections.emptyList();
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -98,7 +107,42 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 cycleStart);
 
         // 2. 未割当 Assignment 生成
-        List<ShiftAssignmentPlanningEntity> emptyAssignments = buildEmptyAssignments(demands, registers);
+        List<ShiftAssignmentPlanningEntity> emptyAssignments = new ArrayList<>();
+        // 部門のレジフラグに応じてレジ需要を含めるか決定
+        boolean isRegisterDepartment = false;
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            // Treat department "520" as the Register department (legacy convention)
+            if ("520".equalsIgnoreCase(departmentCode)) {
+                isRegisterDepartment = true;
+            } else {
+                var dept = departmentMasterMapper.selectByCode(departmentCode);
+                isRegisterDepartment = (dept != null && Boolean.TRUE.equals(dept.getIsRegister()));
+            }
+        }
+
+        // Filter employees by department only when it's NOT a register department
+        if (departmentCode != null && !departmentCode.isBlank() && !isRegisterDepartment) {
+            var edList = employeeDepartmentMapper.selectByDepartment(departmentCode);
+            java.util.Set<String> allowed = edList.stream().map(EmployeeDepartment::getEmployeeCode).collect(Collectors.toSet());
+            employees = employees.stream().filter(e -> allowed.contains(e.getEmployeeCode())).toList();
+        }
+
+        // 後方互換: 部門未指定の場合はレジ需要を含める（従来の挙動）
+        if (departmentCode == null || departmentCode.isBlank()) {
+            isRegisterDepartment = true;
+        }
+
+        // レジ部門ならレジ需要も含める
+        if (isRegisterDepartment) {
+            emptyAssignments.addAll(buildEmptyAssignments(demands, registers, departmentCode));
+        }
+
+        // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
+        List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> workDemands = List.of();
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            workDemands = workDemandQuarterMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
+            emptyAssignments.addAll(buildEmptyWorkAssignments(workDemands, departmentCode));
+        }
 
         // 3. ドメインモデル組み立て
         ShiftSchedule schedule = new ShiftSchedule();
@@ -111,6 +155,9 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setAssignmentList(emptyAssignments);
         schedule.setMonth(cycleStart);
         schedule.setStoreCode(storeCode);
+        schedule.setDepartmentCode(departmentCode);
+        schedule.setWorkDemandList(workDemands);
+        schedule.setEmployeeDepartmentSkillList(deptSkills);
         return schedule;
     }
 
@@ -128,7 +175,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
      * </ul>
      */
     private List<ShiftAssignmentPlanningEntity> buildEmptyAssignments(List<RegisterDemandQuarter> demandList,
-                                                                     List<Register> registerList) {
+                                                                     List<Register> registerList,
+                                                                     String departmentCode) {
         // 店舗毎のレジを [SEMI 優先] & [register_no 昇順] ソートで保持
         Map<String, List<Register>> registerMap = registerList.stream()
                 .collect(Collectors.groupingBy(Register::getStoreCode, Collectors.collectingAndThen(Collectors.toList(), list -> {
@@ -167,10 +215,42 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
                 ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
                 ent.setShiftId(sa.getAssignmentId());
+                ent.setDepartmentCode(departmentCode);
+                ent.setWorkKind(io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP);
                 result.add(ent);
             }
         }
         
+        return result;
+    }
+
+    private List<ShiftAssignmentPlanningEntity> buildEmptyWorkAssignments(
+            List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> demandList,
+            String departmentCode) {
+        List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
+        for (var d : demandList) {
+            LocalDate demandDate = d.getDemandDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
+            LocalDateTime end = start.plusMinutes(15);
+            for (int i = 0; i < d.getRequiredUnits(); i++) {
+                // Reuse RegisterAssignment as time container with null registerNo
+                RegisterAssignment sa = new RegisterAssignment();
+                sa.setAssignmentId(TEMP_ID_SEQ.getAndDecrement());
+                sa.setStoreCode(d.getStoreCode());
+                sa.setEmployeeCode(null);
+                sa.setRegisterNo(null);
+                sa.setStartAt(Date.from(start.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setEndAt(Date.from(end.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setCreatedBy("system");
+
+                ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
+                ent.setShiftId(sa.getAssignmentId());
+                ent.setDepartmentCode(departmentCode);
+                ent.setWorkKind(io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK);
+                ent.setTaskCode(d.getTaskCode());
+                result.add(ent);
+            }
+        }
         return result;
     }
 }

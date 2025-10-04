@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
+import io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import lombok.RequiredArgsConstructor;
@@ -24,15 +26,28 @@ import lombok.RequiredArgsConstructor;
 public class StaffingBalanceService {
     
     private final RegisterDemandQuarterMapper demandMapper;
+    private final WorkDemandQuarterMapper workDemandMapper;
     private final ShiftAssignmentMapper shiftMapper;
+    private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
 
     public List<StaffingBalanceDto> getStaffingBalance(String storeCode, LocalDate targetDate) {
         return getHourlyStaffingBalance(storeCode, targetDate);
     }
 
     public List<StaffingBalanceDto> getHourlyStaffingBalance(String storeCode, LocalDate targetDate) {
-        List<RegisterDemandQuarter> demands = demandMapper.selectByStoreAndDate(storeCode, targetDate);
-        List<ShiftAssignment> assignments = shiftMapper.selectByDate(targetDate, targetDate.plusDays(1));
+        return getHourlyStaffingBalance(storeCode, targetDate, null);
+    }
+
+    public List<StaffingBalanceDto> getHourlyStaffingBalance(String storeCode, LocalDate targetDate, String departmentCode) {
+        boolean isRegister = (departmentCode == null || departmentCode.isBlank() || "520".equalsIgnoreCase(departmentCode));
+
+        List<RegisterDemandQuarter> demands = new ArrayList<>();
+        List<ShiftAssignment> assignments = new ArrayList<>();
+
+        if (isRegister) {
+            demands = demandMapper.selectByStoreAndDate(storeCode, targetDate);
+            assignments = shiftMapper.selectByDate(targetDate, targetDate.plusDays(1));
+        }
 
         Map<LocalTime, StaffingBalanceDto> balanceMap = new LinkedHashMap<>();
 
@@ -60,30 +75,52 @@ public class StaffingBalanceService {
             }
         }
 
-        for (ShiftAssignment assignment : assignments) {
-            if (!storeCode.equals(assignment.getStoreCode())) {
-                continue;
-            }
+        if (isRegister) {
+            // Register assignments count as assigned staff
+            for (ShiftAssignment assignment : assignments) {
+                if (!storeCode.equals(assignment.getStoreCode())) continue;
 
-            LocalDateTime startDateTime = assignment.getStartAt().toInstant()
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-            LocalDateTime endDateTime = assignment.getEndAt().toInstant()
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-            
-            if (!startDateTime.toLocalDate().equals(targetDate) && !endDateTime.toLocalDate().equals(targetDate)) {
-                continue;
-            }
+                LocalDateTime startDateTime = assignment.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime endDateTime = assignment.getEndAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                if (!startDateTime.toLocalDate().equals(targetDate) && !endDateTime.toLocalDate().equals(targetDate)) continue;
 
-            LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
-            while (!slotDateTime.isAfter(LocalDateTime.of(targetDate, endTime))) {
-                if (!slotDateTime.isBefore(startDateTime) && slotDateTime.isBefore(endDateTime)) {
-                    LocalTime slotTime = slotDateTime.toLocalTime();
-                    StaffingBalanceDto balance = balanceMap.get(slotTime);
-                    if (balance != null) {
-                        balance.setAssignedStaff(balance.getAssignedStaff() + 1);
+                LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
+                while (!slotDateTime.isAfter(LocalDateTime.of(targetDate, endTime))) {
+                    if (!slotDateTime.isBefore(startDateTime) && slotDateTime.isBefore(endDateTime)) {
+                        LocalTime slotTime = slotDateTime.toLocalTime();
+                        StaffingBalanceDto balance = balanceMap.get(slotTime);
+                        if (balance != null) balance.setAssignedStaff(balance.getAssignedStaff() + 1);
                     }
+                    slotDateTime = slotDateTime.plusMinutes(15);
                 }
-                slotDateTime = slotDateTime.plusMinutes(15);
+            }
+        } else {
+            // Department workload path: required from work_demand_quarter; assigned from department_task_assignment
+            var workDemands = workDemandMapper.selectByDate(storeCode, departmentCode, targetDate);
+            for (var d : workDemands) {
+                LocalTime slotTime = d.getSlotTime();
+                StaffingBalanceDto balance = balanceMap.get(slotTime);
+                if (balance != null) {
+                    balance.setRequiredStaff(d.getRequiredUnits());
+                }
+            }
+
+            var fromTs = Timestamp.valueOf(LocalDateTime.of(targetDate, startTime));
+            var toTs = Timestamp.valueOf(LocalDateTime.of(targetDate, endTime));
+            // Use month range-like query by date boundaries via selectByMonth or add a date method; we will scan by month proxy
+            var dayAssignments = departmentTaskAssignmentMapper.selectByMonth(targetDate, targetDate.plusDays(1), storeCode, departmentCode);
+            for (var a : dayAssignments) {
+                LocalDateTime startDateTime = a.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime endDateTime = a.getEndAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
+                while (!slotDateTime.isAfter(LocalDateTime.of(targetDate, endTime))) {
+                    if (!slotDateTime.isBefore(startDateTime) && slotDateTime.isBefore(endDateTime)) {
+                        LocalTime slotTime = slotDateTime.toLocalTime();
+                        StaffingBalanceDto balance = balanceMap.get(slotTime);
+                        if (balance != null) balance.setAssignedStaff(balance.getAssignedStaff() + 1);
+                    }
+                    slotDateTime = slotDateTime.plusMinutes(15);
+                }
             }
         }
 
@@ -139,6 +176,43 @@ public class StaffingBalanceService {
             current = current.plusDays(1);
         }
         
+        return summaryMap;
+    }
+
+    public Map<LocalDate, DailyStaffingSummary> getDailyStaffingSummaryForMonth(String storeCode, LocalDate startOfMonth, String departmentCode) {
+        Map<LocalDate, DailyStaffingSummary> summaryMap = new LinkedHashMap<>();
+
+        LocalDate endOfMonth = startOfMonth.withDayOfMonth(startOfMonth.lengthOfMonth());
+        LocalDate current = startOfMonth;
+
+        while (!current.isAfter(endOfMonth)) {
+            List<StaffingBalanceDto> dailyBalance = getHourlyStaffingBalance(storeCode, current, departmentCode);
+
+            int totalRequired = dailyBalance.stream().mapToInt(StaffingBalanceDto::getRequiredStaff).sum();
+            int totalAssigned = dailyBalance.stream().mapToInt(StaffingBalanceDto::getAssignedStaff).sum();
+            int shortageSlots = (int) dailyBalance.stream()
+                    .mapToInt(b -> b.getAssignedStaff() - b.getRequiredStaff())
+                    .filter(balance -> balance < 0).count();
+            int overstaffSlots = (int) dailyBalance.stream()
+                    .mapToInt(b -> b.getAssignedStaff() - b.getRequiredStaff())
+                    .filter(balance -> balance > 0).count();
+            int totalShortage = dailyBalance.stream()
+                    .mapToInt(b -> Math.max(0, b.getRequiredStaff() - b.getAssignedStaff()))
+                    .sum();
+
+            DailyStaffingSummary summary = DailyStaffingSummary.builder()
+                    .date(current)
+                    .totalRequired(totalRequired)
+                    .totalAssigned(totalAssigned)
+                    .shortageSlots(shortageSlots)
+                    .overstaffSlots(overstaffSlots)
+                    .totalShortage(totalShortage)
+                    .build();
+
+            summaryMap.put(current, summary);
+            current = current.plusDays(1);
+        }
+
         return summaryMap;
     }
 

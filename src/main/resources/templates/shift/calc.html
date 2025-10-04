@@ -32,7 +32,16 @@
               <i class="bi bi-shop me-1"></i>店舗
             </label>
             <select id="storeCode" class="form-select form-select-lg">
-              <option value="569">569 - テスト店舗</option>
+              <option value="">店舗を選択</option>
+              <option value="348">348 - テスト店舗</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-diagram-3 me-1"></i>部門
+            </label>
+            <select id="departmentCode" class="form-select form-select-lg">
+              <option value="">部門を選択</option>
             </select>
           </div>
           <div class="col-md-3">
@@ -207,6 +216,14 @@
   .grid-cell.assigned.color-2 { background: linear-gradient(135deg, #ffc107, #fd7e14); }
   .grid-cell.assigned.color-3 { background: linear-gradient(135deg, #dc3545, #e83e8c); }
   .grid-cell.assigned.color-4 { background: linear-gradient(135deg, #6c757d, #495057); }
+  
+  /* 部門タスクの表示 */
+  .grid-cell.task-assigned {
+    background: linear-gradient(135deg, #17a2b8, #6f42c1);
+    color: white;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
   
   /* 勤務時間（レジ未割当も含む）の背景色 */
   .work-hours-cell.working {
@@ -499,6 +516,29 @@ function handleAssignmentDragEnd(event) {
   
   hideContextMenu();
 }
+
+// 店舗変更で部門一覧をロード
+document.addEventListener('DOMContentLoaded', () => {
+  const storeSelect = $('storeCode');
+  const deptSelect = $('departmentCode');
+  async function loadDepartments() {
+    const storeCode = storeSelect.value;
+    if (!storeCode) { deptSelect.innerHTML = '<option value="">部門を選択</option>'; return; }
+    try {
+      const list = await fetch(`/shift/api/departments/${encodeURIComponent(storeCode)}`).then(r=>r.json());
+      deptSelect.innerHTML = '<option value="">部門を選択</option>' +
+        list.map(d => `<option value="${d.departmentCode}">${d.departmentCode} - ${d.departmentName||''}</option>`).join('');
+    } catch (e) {
+      console.error('部門取得に失敗', e);
+      deptSelect.innerHTML = '<option value="">部門を選択</option>';
+    }
+  }
+  if (storeSelect) {
+    storeSelect.addEventListener('change', loadDepartments);
+    // 初期状態（未選択）では部門はプレースホルダのみにする
+    loadDepartments();
+  }
+});
 
 function handleDragOver(event) {
   if (!draggedAssignment) return;
@@ -1134,13 +1174,14 @@ async function loadResult(dateString){
     $('displayDate').textContent = formattedDate;
     
     const storeCode = $('storeCode').value;
+    const departmentCode = $('departmentCode').value || '';
     
     // 並行してデータを取得
     const [shiftData, employeeData, workTimeMonthlyResp] = await Promise.all([
-      fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r=>r.json()),
-      fetch(`/shift/api/calc/employees/${storeCode}`).then(r=>r.json()),
+      fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
+      fetch(`/shift/api/calc/employees/${storeCode}${departmentCode?`?departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
       // 月次の勤務時間（シフト）を取得し、当日分にフィルタして利用
-      fetch(`/shift/api/calc/shifts/monthly/${dateString.substring(0,7)}?storeCode=${encodeURIComponent(storeCode)}`).then(r=>r.json())
+      fetch(`/shift/api/calc/shifts/monthly/${dateString.substring(0,7)}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json())
     ]);
     
     data = shiftData;
@@ -1301,33 +1342,42 @@ async function loadResult(dateString){
 
         const cell = shiftGrid.querySelector(`.employee-shift-cell[data-employee="${assignment.employeeCode}"][data-time="${targetTime}"]`);
         if (cell) {
-          cell.classList.add('assigned');
-          
-          const registerValue = assignment.registerNo;
-          if (registerValue === 'break' || assignment.registerNo === 0) {
+          const workKind = assignment.workKind || 'REGISTER_OP';
+          if (workKind === 'DEPARTMENT_TASK') {
+            // 部門タスク割当（レジ番号無し）
+            cell.classList.add('task-assigned');
+            cell.textContent = assignment.taskCode ? assignment.taskCode : 'TASK';
+            cell.dataset.originalRegister = '';
+            cell.dataset.currentRegister = '';
+            cell.draggable = false; // タスクはドラッグ移動不可（必要なら拡張）
+          } else {
+            cell.classList.add('assigned');
+            const registerValue = assignment.registerNo;
+            if (registerValue === 'break' || assignment.registerNo === 0) {
             // 休憩の場合
             cell.classList.add('break-assigned');
             cell.textContent = '';
             cell.dataset.originalRegister = 'break';
             cell.dataset.currentRegister = 'break';
-          } else {
+            } else {
             // レジ割り当ての場合
             cell.classList.add(colorClass);
             cell.textContent = `R${assignment.registerNo}`;
             cell.dataset.originalRegister = assignment.registerNo;
             cell.dataset.currentRegister = assignment.registerNo;
+            }
+            
+            // 割り当てセルをドラッグ可能にする（重複イベント防止）
+            cell.draggable = true;
+            cell.removeEventListener('dragstart', handleAssignmentDragStart);
+            cell.removeEventListener('dragend', handleAssignmentDragEnd);
+            cell.addEventListener('dragstart', handleAssignmentDragStart);
+            cell.addEventListener('dragend', handleAssignmentDragEnd);
           }
           
           // 従業員名を正しく設定（APIからの名前またはセルの従業員名を使用）
           const employeeName = assignment.employeeName || cell.dataset.employeeName;
           cell.dataset.assignedEmployeeName = employeeName;
-          
-          // 割り当てセルをドラッグ可能にする（重複イベント防止）
-          cell.draggable = true;
-          cell.removeEventListener('dragstart', handleAssignmentDragStart);
-          cell.removeEventListener('dragend', handleAssignmentDragEnd);
-          cell.addEventListener('dragstart', handleAssignmentDragStart);
-          cell.addEventListener('dragend', handleAssignmentDragEnd);
         }
         currentTime.setMinutes(currentTime.getMinutes() + 15);
       }
@@ -1344,7 +1394,8 @@ async function loadResult(dateString){
 async function loadStaffingBalance(dateString) {
   try {
     const storeCode = $('storeCode').value;
-    const staffingData = await fetch(`/shift/api/calc/staffing-balance/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+    const departmentCode = $('departmentCode').value || '';
+    const staffingData = await fetch(`/shift/api/calc/staffing-balance/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r => r.json());
     const staffingGrid = $('staffingBalanceGrid');
     const staffingCard = $('staffingBalanceCard');
     
@@ -1437,7 +1488,13 @@ async function loadStaffingBalance(dateString) {
 async function loadWorkModel(dateString, shiftData) {
   try {
     const storeCode = $('storeCode').value;
-    const workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+    const departmentCode = $('departmentCode').value || '';
+    let workModelData = [];
+    if (departmentCode && departmentCode !== '520') {
+      workModelData = await fetch(`/shift/api/calc/work-demand-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`).then(r=>r.json());
+    } else {
+      workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+    }
     const workModelGrid = $('workModelGrid');
     const workModelCard = $('workModelCard');
     

@@ -41,11 +41,16 @@ public class MasterCsvImportJobConfig {
     private final SqlSessionFactory sqlSessionFactory;
     private final io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
     private final RegisterDemandQuarterMapper demandMapper;
+    private final WorkDemandQuarterMapper workDemandQuarterMapper;
     private final EmployeeRegisterSkillMapper skillMapper;
     private final EmployeeMapper employeeMapper;
     private final RegisterMapper registerMapper;
     private final RegisterTypeMapper registerTypeMapper;
     private final StoreMapper storeMapper;
+    private final DepartmentMasterMapper departmentMasterMapper;
+    private final StoreDepartmentMapper storeDepartmentMapper;
+    private final EmployeeDepartmentMapper employeeDepartmentMapper;
+    private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
 
     /* === Job =========================================================== */
     @Bean
@@ -57,18 +62,28 @@ public class MasterCsvImportJobConfig {
             Step employeeAuthStep,
             Step employeeWeeklyPreferenceStep,
             Step employeeRegisterSkillStep,
-            Step registerDemandQuarterStep) {
+            Step departmentMasterStep,
+            Step storeDepartmentStep,
+            Step employeeDepartmentStep,
+            Step employeeDepartmentSkillStep,
+            Step registerDemandQuarterStep,
+            Step workDemandQuarterStep) {
         return new JobBuilder("masterImportJob", jobRepository)
                 .incrementer(new RunIdIncrementer()) // run.id を自動付与
                 .start(cleanupStep)
                 .next(storeStep)
                 .next(registerTypeStep)
                 .next(registerStep)
+                .next(departmentMasterStep)
+                .next(storeDepartmentStep)
                 .next(employeeStep)
                 .next(employeeAuthStep)
+                .next(employeeDepartmentStep)
+                .next(employeeDepartmentSkillStep)
                 .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
                 .next(registerDemandQuarterStep)
+                .next(workDemandQuarterStep)
                 .build();
     }
 
@@ -96,6 +111,119 @@ public class MasterCsvImportJobConfig {
                 .build();
     }
 
+    /* === Step : department_master.csv ============================================= */
+    @Bean
+    public Step departmentMasterStep(FlatFileItemReader<DepartmentMaster> departmentMasterReader) {
+        return new StepBuilder("departmentMasterStep", jobRepository)
+                .<DepartmentMaster, DepartmentMaster>chunk(1000, txManager)
+                .reader(departmentMasterReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.DepartmentMasterMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<DepartmentMaster> departmentMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("department_master.csv"),
+                new String[] { "departmentCode", "departmentName", "displayOrder", "isActive", "isRegister" },
+                DepartmentMaster.class);
+    }
+
+    /* === Step : store_department.csv ============================================= */
+    @Bean
+    public Step storeDepartmentStep(FlatFileItemReader<StoreDepartment> storeDepartmentReader) {
+        return new StepBuilder("storeDepartmentStep", jobRepository)
+                .<StoreDepartment, StoreDepartment>chunk(1000, txManager)
+                .reader(storeDepartmentReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<StoreDepartment> storeDepartmentReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("store_department.csv"),
+                new String[] { "storeCode", "departmentCode", "displayOrder", "isActive" },
+                StoreDepartment.class);
+    }
+
+    /* === Step : employee_department.csv ============================================= */
+    @Bean
+    public Step employeeDepartmentStep(FlatFileItemReader<EmployeeDepartment> employeeDepartmentReader) {
+        return new StepBuilder("employeeDepartmentStep", jobRepository)
+                .<EmployeeDepartment, EmployeeDepartment>chunk(1000, txManager)
+                .reader(employeeDepartmentReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<EmployeeDepartment> employeeDepartmentReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("employee_department.csv"),
+                new String[] { "employeeCode", "departmentCode" },
+                EmployeeDepartment.class);
+    }
+
+    /* === Step : employee_department_skill.csv ====================================== */
+    @Bean
+    public Step employeeDepartmentSkillStep(FlatFileItemReader<EmployeeDepartmentSkill> employeeDepartmentSkillReader) {
+        return new StepBuilder("employeeDepartmentSkillStep", jobRepository)
+                .<EmployeeDepartmentSkill, EmployeeDepartmentSkill>chunk(1000, txManager)
+                .reader(employeeDepartmentSkillReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentSkillMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<EmployeeDepartmentSkill> employeeDepartmentSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("employee_department_skill.csv"),
+                new String[] { "employeeCode", "departmentCode", "skillLevel" },
+                EmployeeDepartmentSkill.class);
+    }
+
+    /* === Step : work_demand_quarter.csv ========================================== */
+    @Bean
+    public Step workDemandQuarterStep(FlatFileItemReader<WorkDemandQuarter> workDemandQuarterReader) {
+        return new StepBuilder("workDemandQuarterStep", jobRepository)
+                .<WorkDemandQuarter, WorkDemandQuarter>chunk(1000, txManager)
+                .reader(workDemandQuarterReader)
+                .writer(myBatisWriter(
+                        "io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper.insert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<WorkDemandQuarter> workDemandQuarterReader(
+            @Value("${csv.dir:/csv}") Path csvDir) {
+
+        // パーサ
+        SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");
+        DATE_FMT.setLenient(false);
+        SimpleDateFormat TIME_FMT = new SimpleDateFormat("HH:mm");
+        TIME_FMT.setLenient(false);
+
+        FieldSetMapper<WorkDemandQuarter> mapper = fs -> {
+            try {
+                var e = new WorkDemandQuarter();
+                e.setStoreCode(fs.readString("storeCode"));
+                e.setDepartmentCode(fs.readString("departmentCode"));
+                e.setDemandDate(DATE_FMT.parse(fs.readString("demandDate")));
+                e.setSlotTime(TIME_FMT.parse(fs.readString("slotTime")).toInstant().atZone(ZoneId.systemDefault()).toLocalTime());
+                try { e.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
+                e.setRequiredUnits(fs.readInt("requiredUnits"));
+                return e;
+            } catch (ParseException ex) {
+                throw new FlatFileParseException("work_demand_quarter parse error", "");
+            }
+        };
+
+        return new FlatFileItemReaderBuilder<WorkDemandQuarter>()
+                .name("workDemandQuarterReader")
+                .resource(new FileSystemResource(csvDir.resolve("work_demand_quarter.csv")))
+                .linesToSkip(1)
+                .delimited()
+                .names("storeCode","departmentCode","demandDate","slotTime","taskCode","requiredUnits")
+                .fieldSetMapper(mapper)
+                .build();
+    }
     /* === Step : store.csv ============================================= */
     @Bean
     public Step storeStep(FlatFileItemReader<Store> storeReader) {

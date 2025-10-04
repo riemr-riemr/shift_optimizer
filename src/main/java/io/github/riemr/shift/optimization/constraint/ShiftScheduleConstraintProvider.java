@@ -3,7 +3,10 @@ package io.github.riemr.shift.optimization.constraint;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.WorkKind;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
 import org.optaplanner.core.api.score.stream.ConstraintCollectors;
@@ -27,6 +30,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return new Constraint[] {
             // Hard constraints
             forbidZeroSkill(factory),
+            forbidDepartmentLowSkill(factory),
             employeeNotDoubleBooked(factory),
             maxWorkMinutesPerDay(factory),
             maxWorkDaysPerMonth(factory),
@@ -38,7 +42,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
 
             // Soft constraints
             satisfyRegisterDemand(factory),
+            satisfyWorkDemand(factory),
             preferHigherSkillLevel(factory),
+            preferDepartmentHigherSkill(factory),
             
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
@@ -49,11 +55,33 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         };
     }
 
+    private Constraint forbidDepartmentLowSkill(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK)
+                .join(EmployeeDepartmentSkill.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeDepartmentSkill::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getDepartmentCode, EmployeeDepartmentSkill::getDepartmentCode))
+                .filter((sa, skill) -> skill.getSkillLevel() != null && (skill.getSkillLevel() == 0 || skill.getSkillLevel() == 1))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Forbidden department assignment (skill 0/1)");
+    }
+
+    private Constraint preferDepartmentHigherSkill(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK)
+                .join(EmployeeDepartmentSkill.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeDepartmentSkill::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getDepartmentCode, EmployeeDepartmentSkill::getDepartmentCode))
+                .filter((sa, skill) -> skill.getSkillLevel() != null && skill.getSkillLevel() >= 2)
+                .reward(HardSoftScore.ofSoft(180), (sa, skill) -> (skill.getSkillLevel() - 1) * 180)
+                .asConstraint("Prefer higher department skill");
+    }
+
     private Constraint satisfyRegisterDemand(ConstraintFactory f) {
         return f.forEach(RegisterDemandQuarter.class)
                 .join(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
-                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null))
+                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.REGISTER_OP))
                 .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
                 .penalize(HardSoftScore.ofSoft(1000), // 高い重みでソフト制約に変更
                           (demand, assigned) -> {
@@ -68,6 +96,25 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                               }
                           })
                 .asConstraint("Register demand balance");
+    }
+
+    private Constraint satisfyWorkDemand(ConstraintFactory f) {
+        return f.forEach(WorkDemandQuarter.class)
+                .join(ShiftAssignmentPlanningEntity.class,
+                    Joiners.equal(WorkDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                    Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
+                        && d.getDepartmentCode().equals(sa.getDepartmentCode())
+                        && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
+                    ))
+                .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
+                .penalize(HardSoftScore.ofSoft(900), (d, assigned) -> {
+                    int shortage = d.getRequiredUnits() - assigned;
+                    if (shortage > 0) return shortage * 100;
+                    int over = assigned - d.getRequiredUnits();
+                    return over * 50;
+                })
+                .asConstraint("Work demand balance");
     }
 
     private Constraint forbidZeroSkill(ConstraintFactory f) {

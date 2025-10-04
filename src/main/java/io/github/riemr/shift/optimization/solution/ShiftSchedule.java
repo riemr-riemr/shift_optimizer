@@ -8,6 +8,8 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -40,6 +42,8 @@ public class ShiftSchedule {
 
     /** 店舗コード */
     private String storeCode;
+    /** 部門コード */
+    private String departmentCode;
 
     /* === Value range / Problem facts === */
 
@@ -54,6 +58,10 @@ public class ShiftSchedule {
     /** 15 分需要 (参照のみ) */
     @ProblemFactCollectionProperty
     private List<RegisterDemandQuarter> demandList;
+
+    /** 非レジ作業の 15 分需要 (参照のみ) */
+    @ProblemFactCollectionProperty
+    private List<WorkDemandQuarter> workDemandList;
 
     /** 希望休日 */
     @ProblemFactCollectionProperty
@@ -70,6 +78,10 @@ public class ShiftSchedule {
     /** 従業員スキル */
     @ProblemFactCollectionProperty
     private List<EmployeeRegisterSkill> employeeRegisterSkillList = new java.util.ArrayList<>();
+
+    /** 従業員部門スキル */
+    @ProblemFactCollectionProperty
+    private List<EmployeeDepartmentSkill> employeeDepartmentSkillList = new java.util.ArrayList<>();
 
     /* === Planning entities === */
 
@@ -90,24 +102,30 @@ public class ShiftSchedule {
     public ShiftSchedule(Long problemId,
                          LocalDate month,
                          String storeCode,
+                         String departmentCode,
                          List<Employee> employeeList,
                          List<Register> registerList,
                          List<RegisterDemandQuarter> demandList,
+                         List<WorkDemandQuarter> workDemandList,
                          List<EmployeeRequest> employeeRequestList,
                          List<ConstraintMaster> constraintMasterList,
                          List<RegisterAssignment> previousAssignmentList,
                          List<EmployeeRegisterSkill> employeeRegisterSkillList,
+                         List<EmployeeDepartmentSkill> employeeDepartmentSkillList,
                          List<ShiftAssignmentPlanningEntity> assignmentList) {
         this.problemId = problemId;
         this.month = month;
         this.storeCode = storeCode;
+        this.departmentCode = departmentCode;
         this.employeeList = employeeList;
         this.registerList = registerList;
         this.demandList = demandList;
+        this.workDemandList = workDemandList;
         this.employeeRequestList = employeeRequestList;
         this.constraintMasterList = constraintMasterList;
         this.previousAssignmentList = previousAssignmentList;
         this.employeeRegisterSkillList = employeeRegisterSkillList;
+        this.employeeDepartmentSkillList = employeeDepartmentSkillList;
         this.assignmentList = assignmentList;
     }
 }

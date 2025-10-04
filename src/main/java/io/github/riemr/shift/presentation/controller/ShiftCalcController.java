@@ -13,8 +13,13 @@ import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
+import io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster;
+import io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
@@ -43,7 +48,10 @@ public class ShiftCalcController {
     private final StoreMapper storeMapper;
     private final RegisterDemandHourService registerDemandHourService;
     private final RegisterDemandQuarterMapper registerDemandQuarterMapper;
+    private final WorkDemandQuarterMapper workDemandQuarterMapper;
     private final EmployeeMapper employeeMapper;
+    private final EmployeeDepartmentMapper employeeDepartmentMapper;
+    private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
@@ -60,7 +68,7 @@ public class ShiftCalcController {
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
-        return service.startSolveMonth(cycleStart, req.storeCode());
+        return service.startSolveMonth(cycleStart, req.storeCode(), req.departmentCode());
     }
 
     private LocalDate computeCycleStart(LocalDate anyDate, int startDay) {
@@ -78,31 +86,35 @@ public class ShiftCalcController {
     @GetMapping("/api/calc/status/{id}")
     @ResponseBody
     public SolveStatusDto status(@PathVariable("id") Long id,
-                                 @RequestParam("storeCode") String storeCode) {
-        return service.getStatus(id, storeCode);
+                                 @RequestParam("storeCode") String storeCode,
+                                 @RequestParam("departmentCode") String departmentCode) {
+        return service.getStatus(id, storeCode, departmentCode);
     }
 
     @GetMapping("/api/calc/result/{id}")
     @ResponseBody
     public List<ShiftAssignmentView> result(@PathVariable("id") Long id,
-                                            @RequestParam("storeCode") String storeCode) {
-        return service.fetchResult(id, storeCode);
+                                            @RequestParam("storeCode") String storeCode,
+                                            @RequestParam("departmentCode") String departmentCode) {
+        return service.fetchResult(id, storeCode, departmentCode);
     }
 
     @GetMapping("/api/calc/assignments/daily/{date}")
     @ResponseBody
     public List<ShiftAssignmentView> getAssignmentsByDate(@PathVariable("date") String dateString,
-                                                          @RequestParam("storeCode") String storeCode) {
+                                                          @RequestParam("storeCode") String storeCode,
+                                                          @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        return service.fetchAssignmentsByDate(date, storeCode);
+        return service.fetchAssignmentsByDate(date, storeCode, departmentCode);
     }
 
     @GetMapping("/api/calc/shifts/monthly/{month}")
     @ResponseBody
     public List<ShiftAssignmentMonthlyView> getShiftsByMonth(@PathVariable("month") String monthString,
-                                                             @RequestParam("storeCode") String storeCode) {
+                                                             @RequestParam("storeCode") String storeCode,
+                                                             @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         LocalDate month = LocalDate.parse(monthString + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return service.fetchShiftsByMonth(month, storeCode);
+        return service.fetchShiftsByMonth(month, storeCode, departmentCode);
     }
 
     @GetMapping("/api/calc/work-model/{date}")
@@ -128,10 +140,30 @@ public class ShiftCalcController {
         return registerDemandQuarterMapper.selectByExample(example);
     }
 
+    @GetMapping("/api/calc/work-demand-quarter/{date}")
+    @ResponseBody
+    public List<WorkDemandQuarter> getWorkDemandQuarterByDate(@PathVariable("date") String dateString,
+                                                               @RequestParam("storeCode") String storeCode,
+                                                               @RequestParam("departmentCode") String departmentCode) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        return workDemandQuarterMapper.selectByDate(storeCode, departmentCode, date);
+    }
+
     @GetMapping("/api/calc/employees/{storeCode}")
     @ResponseBody
-    public List<Employee> getEmployeesByStore(@PathVariable("storeCode") String storeCode) {
-        return employeeMapper.selectByStoreCode(storeCode);
+    public List<Employee> getEmployeesByStore(@PathVariable("storeCode") String storeCode,
+                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        var list = employeeMapper.selectByStoreCode(storeCode);
+        if (departmentCode == null || departmentCode.isBlank()) return list;
+        var edList = employeeDepartmentMapper.selectByDepartment(departmentCode);
+        var allowed = edList.stream().map(ed -> ed.getEmployeeCode()).collect(java.util.stream.Collectors.toSet());
+        return list.stream().filter(e -> allowed.contains(e.getEmployeeCode())).toList();
+    }
+
+    @GetMapping("/api/departments/{storeCode}")
+    @ResponseBody
+    public List<DepartmentMaster> getDepartmentsByStore(@PathVariable("storeCode") String storeCode) {
+        return storeDepartmentMapper.findDepartmentsByStore(storeCode);
     }
 
     @PostMapping("/api/calc/assignments/save")
@@ -149,16 +181,18 @@ public class ShiftCalcController {
     @GetMapping("/api/calc/staffing-balance/{date}")
     @ResponseBody
     public List<StaffingBalanceDto> getStaffingBalance(@PathVariable("date") String dateString,
-                                                       @RequestParam("storeCode") String storeCode) {
+                                                       @RequestParam("storeCode") String storeCode,
+                                                       @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        return staffingBalanceService.getHourlyStaffingBalance(storeCode, date);
+        return staffingBalanceService.getHourlyStaffingBalance(storeCode, date, departmentCode);
     }
 
     @GetMapping
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
-    public String monthlyShift(@RequestParam(required = false) String targetMonth, 
-                              @RequestParam(required = false) String storeCode, 
-                              Model model) {
+    public String monthlyShift(@RequestParam(required = false) String targetMonth,
+                               @RequestParam(required = false) String storeCode,
+                               @RequestParam(required = false) String departmentCode,
+                               Model model) {
         try {
             YearMonth yearMonth;
             if (targetMonth == null) {
@@ -175,8 +209,8 @@ public class ShiftCalcController {
             List<Store> stores = storeMapper.selectByExample(null);
             stores.sort(Comparator.comparing(Store::getStoreCode));
             
-            // 月次シフトデータ取得
-            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(cycleStart, storeCode);
+            // 月次シフトデータ取得（部門指定）
+            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(cycleStart, storeCode, departmentCode);
             
             // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();
@@ -236,7 +270,7 @@ public class ShiftCalcController {
 
             // 日別人員配置サマリーを取得
             Map<LocalDate, StaffingBalanceService.DailyStaffingSummary> staffingSummaries = 
-                staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, cycleStart);
+                staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, cycleStart, storeCode == null ? null : (departmentCode == null || departmentCode.isEmpty() ? "520" : departmentCode));
             
             // 日別人時サマリーを作成
             int daysInMonth = (int) java.time.temporal.ChronoUnit.DAYS.between(cycleStart, cycleEnd);
@@ -272,6 +306,7 @@ public class ShiftCalcController {
             model.addAttribute("stores", stores);
             model.addAttribute("dateList", cycleDateList);
             model.addAttribute("selectedStoreCode", storeCode);
+            model.addAttribute("selectedDepartmentCode", departmentCode);
             model.addAttribute("employees", employees);
             model.addAttribute("employeeShifts", employeeShifts);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
@@ -288,6 +323,7 @@ public class ShiftCalcController {
             model.addAttribute("daysInMonth", currentMonth.lengthOfMonth());
             model.addAttribute("stores", stores);
             model.addAttribute("selectedStoreCode", storeCode);
+            model.addAttribute("selectedDepartmentCode", departmentCode);
             model.addAttribute("employees", List.of());
             model.addAttribute("employeeShifts", Map.of());
             model.addAttribute("dailyStaffingInfo", Map.of());

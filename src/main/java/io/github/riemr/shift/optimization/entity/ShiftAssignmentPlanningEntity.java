@@ -24,6 +24,11 @@ public class ShiftAssignmentPlanningEntity {
 
     private RegisterAssignment origin;
 
+    // department-aware fields (for future extension)
+    private String departmentCode; // e.g., REGISTER or other department
+    private WorkKind workKind;     // REGISTER_OP or DEPARTMENT_TASK
+    private String taskCode;       // used when workKind == DEPARTMENT_TASK
+
     @PlanningVariable(valueRangeProviderRefs = {"employeeRange"})
     private Employee assignedEmployee;
 
@@ -33,6 +38,7 @@ public class ShiftAssignmentPlanningEntity {
     public ShiftAssignmentPlanningEntity(RegisterAssignment origin) {
         this.origin = origin;
         this.assignedEmployee = null;
+        this.workKind = WorkKind.REGISTER_OP;
     }
 
     public LocalDate getShiftDate() {
@@ -60,4 +66,3 @@ public class ShiftAssignmentPlanningEntity {
         return (int) (diff / (1000 * 60));
     }
 }
-
