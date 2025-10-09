@@ -2,6 +2,9 @@ package io.github.riemr.shift.infrastructure.repository;
 
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.infrastructure.persistence.entity.*;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
+import io.github.riemr.shift.application.dto.QuarterSlot;
+import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.mapper.*;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment;
@@ -30,13 +33,13 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final EmployeeRegisterSkillMapper skillMapper;
     private final RegisterMapper              registerMapper;
     private final RegisterTypeMapper          registerTypeMapper;
-    private final RegisterDemandQuarterMapper demandMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final EmployeeRequestMapper       requestMapper;
     private final ConstraintMasterMapper      constraintMasterMapper;
     private final ConstraintSettingMapper     constraintSettingMapper;
     private final StoreMapper                 storeMapper;
     private final RegisterAssignmentMapper    assignmentMapper; // 前回結果 (warm‑start) 用
-    private final WorkDemandQuarterMapper     workDemandQuarterMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeDepartmentMapper    employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
     private final DepartmentMasterMapper departmentMasterMapper;
@@ -64,34 +67,19 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         List<Register> registers = registerMapper.selectAll();
 
-        // 需要は「サイクル開始日〜+1ヶ月」で取得（店舗指定があれば絞り込み）
-        var demandEx = new RegisterDemandQuarterExample();
-        var dc = demandEx.createCriteria();
-        dc.andDemandDateGreaterThanOrEqualTo(java.sql.Date.valueOf(cycleStart));
-        dc.andDemandDateLessThan(java.sql.Date.valueOf(cycleEnd));
-        if (storeCode != null) {
-            dc.andStoreCodeEqualTo(storeCode);
+        // Register demand: read interval rows for the month, then split to quarters
+        String ym = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM").format(cycleStart);
+        List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByStoreAndMonth(storeCode, ym);
+        List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows);
+        List<RegisterDemandQuarter> demands = new ArrayList<>(quarterSlots.size());
+        for (QuarterSlot qs : quarterSlots) {
+            RegisterDemandQuarter ent = new RegisterDemandQuarter();
+            ent.setStoreCode(qs.getStoreCode());
+            ent.setDemandDate(java.sql.Date.valueOf(qs.getDate()));
+            ent.setSlotTime(qs.getStart());
+            ent.setRequiredUnits(qs.getDemand());
+            demands.add(ent);
         }
-        demandEx.setOrderByClause("store_code, demand_date, slot_time");
-        List<RegisterDemandQuarter> demandsRaw = demandMapper.selectByExample(demandEx);
-        
-        // 重複行（同一 store/date/slot）が存在する場合があるため集約（最大値採用）
-        Map<String, RegisterDemandQuarter> dedup = new LinkedHashMap<>();
-        for (RegisterDemandQuarter d : demandsRaw) {
-            String key = d.getStoreCode() + "|" + d.getDemandDate() + "|" + d.getSlotTime();
-            RegisterDemandQuarter prev = dedup.get(key);
-            if (prev == null) {
-                dedup.put(key, d);
-            } else {
-                // requiredUnits は大きい方を優先（誤重複の合算を避ける）
-                if (d.getRequiredUnits() != null && prev.getRequiredUnits() != null) {
-                    if (d.getRequiredUnits() > prev.getRequiredUnits()) {
-                        dedup.put(key, d);
-                    }
-                }
-            }
-        }
-        List<RegisterDemandQuarter> demands = new ArrayList<>(dedup.values());
 
         // 希望は日付範囲APIを利用
         List<EmployeeRequest> requests = requestMapper.selectByDateRange(cycleStart, cycleEnd);
@@ -140,7 +128,27 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
         List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> workDemands = List.of();
         if (departmentCode != null && !departmentCode.isBlank()) {
-            workDemands = workDemandQuarterMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
+            var workIntervals = workDemandIntervalMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
+            // Expand intervals to quarter rows
+            Map<java.time.LocalDate, List<DemandIntervalDto>> byDate = workIntervals.stream().collect(java.util.stream.Collectors.groupingBy(DemandIntervalDto::getTargetDate));
+            List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> tmp = new ArrayList<>();
+            for (var entry : byDate.entrySet()) {
+                for (DemandIntervalDto di : entry.getValue()) {
+                    java.time.LocalTime t = di.getFrom();
+                    while (t.isBefore(di.getTo())) {
+                        var wq = new io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter();
+                        wq.setStoreCode(di.getStoreCode());
+                        wq.setDepartmentCode(di.getDepartmentCode());
+                        wq.setDemandDate(java.sql.Date.valueOf(di.getTargetDate()));
+                        wq.setSlotTime(t);
+                        wq.setTaskCode(di.getTaskCode());
+                        wq.setRequiredUnits(di.getDemand());
+                        tmp.add(wq);
+                        t = t.plusMinutes(15);
+                    }
+                }
+            }
+            workDemands = tmp;
             emptyAssignments.addAll(buildEmptyWorkAssignments(workDemands, departmentCode));
         }
 
@@ -189,8 +197,13 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
 
         for (RegisterDemandQuarter d : demandList) {
-            LocalDate demandDate = d.getDemandDate().toInstant()
-                    .atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate demandDate;
+            Date dd = d.getDemandDate();
+            if (dd instanceof java.sql.Date sqlDate) {
+                demandDate = sqlDate.toLocalDate();
+            } else {
+                demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            }
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
             LocalDateTime end   = start.plusMinutes(15);
 
@@ -229,7 +242,13 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
             String departmentCode) {
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
         for (var d : demandList) {
-            LocalDate demandDate = d.getDemandDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate demandDate;
+            Date dd = d.getDemandDate();
+            if (dd instanceof java.sql.Date sqlDate) {
+                demandDate = sqlDate.toLocalDate();
+            } else {
+                demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            }
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
             LocalDateTime end = start.plusMinutes(15);
             for (int i = 0; i < d.getRequiredUnits(); i++) {

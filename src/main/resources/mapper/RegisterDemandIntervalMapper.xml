@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper">
+
+  <resultMap id="DemandIntervalMap" type="io.github.riemr.shift.application.dto.DemandIntervalDto">
+    <result column="store_code" property="storeCode"/>
+    <result column="target_date" property="targetDate"/>
+    <result column="from_time" property="from"/>
+    <result column="to_time" property="to"/>
+    <result column="demand" property="demand"/>
+    <result column="task_code" property="taskCode"/>
+  </resultMap>
+
+  <select id="selectByStoreAndDate" resultMap="DemandIntervalMap">
+    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    FROM register_demand_interval
+    WHERE store_code = #{storeCode}
+      AND target_date = #{targetDate}
+    ORDER BY from_time
+  </select>
+
+  <select id="selectByStoreAndMonth" resultMap="DemandIntervalMap">
+    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    FROM register_demand_interval
+    WHERE to_char(target_date, 'YYYY-MM') = #{targetMonth}
+    <if test="storeCode != null and storeCode != ''">
+      AND store_code = #{storeCode}
+    </if>
+    ORDER BY target_date, from_time
+  </select>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.application.dto.DemandIntervalDto">
+    INSERT INTO register_demand_interval (store_code, target_date, from_time, to_time, demand, task_code)
+    VALUES (#{storeCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{taskCode})
+    ON CONFLICT (store_code, target_date, from_time, to_time, COALESCE(task_code, '')) DO UPDATE SET
+      demand = EXCLUDED.demand
+  </insert>
+
+  <delete id="deleteById">
+    DELETE FROM register_demand_interval WHERE id = #{id}
+  </delete>
+
+  <delete id="deleteByStoreAndDate">
+    DELETE FROM register_demand_interval
+    WHERE store_code = #{storeCode}
+      AND target_date = #{targetDate}
+  </delete>
+
+  <delete id="deleteAll">
+    DELETE FROM register_demand_interval
+  </delete>
+
+</mapper>

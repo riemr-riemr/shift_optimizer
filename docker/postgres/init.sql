@@ -153,17 +153,20 @@ CREATE TABLE employee_register_skill (
         REFERENCES employee(employee_code)
 );
 
--- ------------------------------------------------
--- 6. register_demand_quarter : 15分単位需要
--- ------------------------------------------------
-CREATE TABLE register_demand_quarter (
-    demand_id      BIGSERIAL PRIMARY KEY,
-    store_code     VARCHAR(10) REFERENCES store(store_code),
-    demand_date    DATE NOT NULL,
-    slot_time      TIME NOT NULL,
-    required_units INT  NOT NULL
+-- 6. register_demand_interval : 区間需要 [from, to)
+CREATE TABLE IF NOT EXISTS register_demand_interval (
+    id            BIGSERIAL PRIMARY KEY,
+    store_code    VARCHAR(10) NOT NULL REFERENCES store(store_code),
+    target_date   DATE        NOT NULL,
+    from_time     TIME        NOT NULL,
+    to_time       TIME        NOT NULL,
+    demand        INTEGER     NOT NULL,
+    task_code     VARCHAR(32)
 );
-CREATE UNIQUE INDEX uq_demand ON register_demand_quarter(store_code, demand_date, slot_time);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_register_demand_interval
+  ON register_demand_interval (store_code, target_date, from_time, to_time, COALESCE(task_code, ''));
+CREATE INDEX IF NOT EXISTS idx_register_demand_interval_date
+  ON register_demand_interval (store_code, target_date);
 
 -- ------------------------------------------------
 -- 7. shift_assignment : 生成済みシフト
@@ -289,20 +292,19 @@ CREATE TABLE IF NOT EXISTS employee_department_skill (
   PRIMARY KEY (employee_code, department_code)
 );
 
--- ------------------------------------------------
--- 12. work_demand_quarter (non-register demand)
--- ------------------------------------------------
-CREATE TABLE IF NOT EXISTS work_demand_quarter (
-  demand_id         BIGSERIAL   PRIMARY KEY,
+-- 12. work_demand_interval (non-register demand)
+CREATE TABLE IF NOT EXISTS work_demand_interval (
+  id               BIGSERIAL   PRIMARY KEY,
   store_code        VARCHAR(10) NOT NULL REFERENCES store(store_code),
   department_code   VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
-  demand_date       DATE        NOT NULL,
-  slot_time         TIME        NOT NULL,
-  task_code         VARCHAR(32),
-  required_units    INTEGER     NOT NULL
+  target_date       DATE        NOT NULL,
+  from_time         TIME        NOT NULL,
+  to_time           TIME        NOT NULL,
+  demand            INTEGER     NOT NULL,
+  task_code         VARCHAR(32)
 );
-CREATE INDEX IF NOT EXISTS idx_work_demand_sddt
-  ON work_demand_quarter (store_code, department_code, demand_date);
+CREATE INDEX IF NOT EXISTS idx_work_demand_interval_date
+  ON work_demand_interval (store_code, department_code, target_date);
 
 -- ------------------------------------------------
 -- 12a. department_task_assignment (non-register assignments)

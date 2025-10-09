@@ -86,7 +86,8 @@ public class TaskPlanController {
     public String create(@RequestParam("mode") String mode,
                          @ModelAttribute("form") TaskPlan form) {
         if ("weekly".equalsIgnoreCase(mode)) {
-            // 仕様：曜日は表示のみ。登録は無効化。
+            form.setPlanKind("WEEKLY");
+            planRepository.save(form);
             return "redirect:/tasks/plan?store=" + form.getStoreCode() + "&mode=weekly&day=" + (form.getDayOfWeek() == null ? 1 : form.getDayOfWeek());
         } else {
             form.setPlanKind("SPECIAL");

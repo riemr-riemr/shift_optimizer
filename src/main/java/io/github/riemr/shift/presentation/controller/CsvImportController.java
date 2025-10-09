@@ -134,15 +134,15 @@ public class CsvImportController {
         return "csv/import";
     }
 
-    @PostMapping("/register-demand-quarter")
+    @PostMapping({"/register-demand-quarter", "/register-demand-interval"})
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadDemandQuarter(@RequestParam("file") MultipartFile file, Model model) {
         try {
-            int cnt = csvImportService.upsertRegisterDemandQuarterCsv(file.getInputStream());
-            model.addAttribute("message", "需要(15分)CSVを取り込みました: " + cnt + "件");
+            int cnt = csvImportService.upsertRegisterDemandIntervalCsv(file.getInputStream());
+            model.addAttribute("message", "需要(区間[from,to])CSVを取り込みました: " + cnt + "件");
             model.addAttribute("success", true);
         } catch (Exception e) {
-            model.addAttribute("message", "需要(15分)CSV取り込みに失敗しました: " + e.getMessage());
+            model.addAttribute("message", "需要(区間)CSV取り込みに失敗しました: " + e.getMessage());
             model.addAttribute("success", false);
         }
         return "csv/import";

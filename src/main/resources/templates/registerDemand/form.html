@@ -75,12 +75,17 @@
                    required/>
           </div>
           <div class="col-md-4">
-            <label class="form-label">
+            <label for="storeCode" class="form-label">
               <i class="bi bi-shop"></i> 店舗
             </label>
-            <div class="form-control-plaintext">
-              <span class="badge bg-info">569 - テスト店舗</span>
-            </div>
+            <select id="storeCode" name="storeCode" class="form-select">
+              <option th:each="s : ${stores}"
+                      th:value="${s.storeCode}"
+                      th:selected="${s.storeCode} == ${selectedStoreCode}"
+                      th:text="${s.storeCode} + ' - ' + ${s.storeName}">
+                STORE - NAME
+              </option>
+            </select>
           </div>
           <div class="col-md-4">
             <button class="btn btn-primary" type="submit">
@@ -109,75 +114,30 @@
               </small>
             </h5>
             <div class="quick-fill-buttons">
-              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="fillAll(0)">
-                <i class="bi bi-x-circle"></i> 全て0
-              </button>
-              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="fillAll(1)">
-                <i class="bi bi-1-square"></i> 全て1
-              </button>
-              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="fillAll(2)">
-                <i class="bi bi-2-square"></i> 全て2
-              </button>
-              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="fillWorkingHours()">
-                <i class="bi bi-clock-history"></i> 営業時間
-              </button>
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setAllColumns(0)"><i class="bi bi-x-circle"></i> 全列0</button>
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setAllColumns(1)"><i class="bi bi-1-square"></i> 全列1</button>
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setWorkingHours()"><i class="bi bi-clock-history"></i> 営業時間</button>
             </div>
           </div>
           <div class="card-body p-0">
             <form th:action="@{/register-demand}" th:object="${command}" method="post">
               <input type="hidden" th:field="*{storeCode}"/>
               <input type="hidden" th:field="*{targetDate}"/>
+              <input type="hidden" id="demandsCsv" name="demandsCsv" value=""/>
 
-              <div class="table-responsive">
-                <table class="table time-input-table mb-0">
+              <div class="table-responsive" style="overflow-x:auto;">
+                <table class="table table-sm mb-0">
                   <thead>
                     <tr>
-                      <th scope="col" style="width: 120px;">
-                        <i class="bi bi-clock"></i> 時間帯
-                      </th>
-                      <th scope="col" style="width: 150px;">
-                        <i class="bi bi-calculator"></i> 必要台数
-                      </th>
-                      <th scope="col">
-                        <i class="bi bi-info-circle"></i> 備考
-                      </th>
+                      <th class="sticky-start bg-white" style="position: sticky; left: 0; z-index:2;">レジ\\時間</th>
+                      <th th:each="i: ${#numbers.sequence(0,95)}" th:text="${(i/4)} + ':' + ${(i%4)*15}"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr th:each="hour,stat : *{hours}">
-                      <td class="time-cell text-center">
-                        <strong th:text="${#numbers.formatInteger(hour.hour.hour,2)} + ':00 - ' + ${#numbers.formatInteger(hour.hour.hour + 1,2)} + ':00'"></strong>
-                      </td>
-
-                      <input type="hidden"
-                             th:field="*{hours[__${stat.index}__].hour}"
-                             th:value="${#temporals.format(hour.hour,'HH:mm')}" />
-
-                      <td class="text-center">
-                        <div class="input-group input-group-sm justify-content-center">
-                          <button type="button" class="btn btn-outline-secondary" onclick="changeValue(this, -1)">
-                            <i class="bi bi-dash"></i>
-                          </button>
-                          <input type="number" 
-                                 min="0" 
-                                 max="10" 
-                                 step="1" 
-                                 class="form-control demand-input"
-                                 th:field="*{hours[__${stat.index}__].requiredUnits}"
-                                 th:value="${hour.requiredUnits}"
-                                 onchange="updateSummary()"/>
-                          <button type="button" class="btn btn-outline-secondary" onclick="changeValue(this, 1)">
-                            <i class="bi bi-plus"></i>
-                          </button>
-                        </div>
-                      </td>
-                      <td class="small text-muted">
-                        <span th:if="${hour.hour.hour >= 8 && hour.hour.hour < 22}" class="text-primary">
-                          <i class="bi bi-shop"></i> 営業時間
-                        </span>
-                        <span th:if="${hour.hour.hour < 8 || hour.hour.hour >= 22}" class="text-secondary">
-                          <i class="bi bi-moon"></i> 営業時間外
-                        </span>
+                    <tr th:each="reg,ri: ${registers}">
+                      <th class="sticky-start bg-white" style="position: sticky; left: 0; z-index:1;" th:text="${reg.registerNo}"></th>
+                      <td th:each="i: ${#numbers.sequence(0,95)}" class="text-center">
+                        <input type="checkbox" class="form-check-input slotCheck" th:data-index="${i}">
                       </td>
                     </tr>
                   </tbody>
@@ -187,9 +147,9 @@
               <div class="p-3 border-top bg-light d-flex justify-content-between align-items-center">
                 <div class="text-muted small">
                   <i class="bi bi-lightbulb"></i>
-                  ヒント: +/-ボタンまたは直接入力で台数を設定できます
+                  セルをチェックすると該当時間帯に必要レジ数としてカウントされます
                 </div>
-                <button class="btn btn-success" type="submit">
+                <button class="btn btn-success" type="submit" onclick="beforeSubmit()">
                   <i class="bi bi-check-lg"></i> 需要予測を保存
                 </button>
               </div>
@@ -268,82 +228,54 @@
     </div>
   </div>
 
-  <script>
-    function changeValue(button, change) {
-      const input = button.parentElement.querySelector('input[type="number"]');
-      const currentValue = parseInt(input.value) || 0;
-      const newValue = Math.max(0, Math.min(10, currentValue + change));
-      input.value = newValue;
-      updateSummary();
-    }
-
-    function fillAll(value) {
-      const inputs = document.querySelectorAll('.demand-input');
-      inputs.forEach(input => {
-        input.value = value;
+  <script th:inline="javascript">
+    function computeQuarterDemands() {
+      const checks = document.querySelectorAll('.slotCheck');
+      const perColumn = {};
+      checks.forEach(chk => {
+        const idx = parseInt(chk.getAttribute('data-index'));
+        if (!perColumn[idx]) perColumn[idx] = 0;
+        if (chk.checked) perColumn[idx]++;
       });
-      updateSummary();
+      const arr = Array.from({length:96}, (_,i)=> perColumn[i] || 0);
+      return arr;
     }
 
-    function fillWorkingHours() {
-      const inputs = document.querySelectorAll('.demand-input');
-      inputs.forEach((input, index) => {
-        // 8:00-22:00 (index 8-21) に1を設定、それ以外は0
-        input.value = (index >= 8 && index < 22) ? 1 : 0;
-      });
-      updateSummary();
+    function beforeSubmit() {
+      const arr = computeQuarterDemands();
+      document.getElementById('demandsCsv').value = arr.join(',');
     }
 
-    function updateSummary() {
-      const inputs = document.querySelectorAll('.demand-input');
-      let total = 0;
-      let peak = 0;
-      const values = [];
-
-      inputs.forEach(input => {
-        const value = parseInt(input.value) || 0;
-        values.push(value);
-        total += value;
-        peak = Math.max(peak, value);
-      });
-
-      const average = values.length > 0 ? (total / values.length).toFixed(1) : '0.0';
-
-      document.getElementById('totalDemand').textContent = total;
-      document.getElementById('peakDemand').textContent = peak;
-      document.getElementById('averageDemand').textContent = average;
-
-      // 簡易チャート更新
-      updateChart(values);
+    function setAllColumns(val) {
+      const checks = document.querySelectorAll('.slotCheck');
+      // First, clear all
+      checks.forEach(ch => ch.checked = false);
+      if (val <= 0) return;
+      // Check top N rows for each column
+      for (let i=0; i<96; i++) {
+        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
+        for (let r=0; r<Math.min(val, colChecks.length); r++) colChecks[r].checked = true;
+      }
     }
 
-    function updateChart(values) {
-      const chartBars = document.getElementById('chartBars');
-      chartBars.innerHTML = '';
-      const maxValue = Math.max(...values, 1);
-
-      values.forEach((value, index) => {
-        const bar = document.createElement('div');
-        const height = (value / maxValue) * 80; // 最大80px
-        bar.style.cssText = `
-          width: 3px;
-          height: ${height}px;
-          background: linear-gradient(to top, #667eea, #764ba2);
-          border-radius: 2px;
-          position: relative;
-        `;
-        
-        if (value > 0) {
-          bar.title = `${index}:00 - ${value}台`;
-        }
-        
-        chartBars.appendChild(bar);
-      });
+    function setWorkingHours() {
+      setAllColumns(0);
+      for (let i=8*4; i<22*4; i++) {
+        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
+        if (colChecks.length>0) colChecks[0].checked = true; // 1台
+      }
     }
 
-    // ページ読み込み時にサマリーを初期化
+    // 初期状態の適用: quarterDemandsに基づき上からN台オン
     document.addEventListener('DOMContentLoaded', function() {
-      updateSummary();
+      const quarterDemands = /*[[${quarterDemands}]]*/ [];
+      for (let i=0; i<Math.min(96, quarterDemands.length); i++) {
+        const need = parseInt(quarterDemands[i]||0);
+        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
+        for (let r=0; r<Math.min(need, colChecks.length); r++) {
+          colChecks[r].checked = true;
+        }
+      }
     });
   </script>
 </div>

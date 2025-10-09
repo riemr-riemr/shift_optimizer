@@ -21,6 +21,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
 import io.github.riemr.shift.presentation.form.RegisterDemandHourForm;
+import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.Store;
+import io.github.riemr.shift.infrastructure.mapper.RegisterMapper;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -32,8 +35,8 @@ import lombok.RequiredArgsConstructor;
 class RegisterDemandHourController {
 
     private final RegisterDemandHourService service;
-    // TODO ひとまず固定店舗。将来的にはログイン情報から取得
-    private static final String STORE_CODE = "569";
+    private final StoreMapper storeMapper;
+    private final RegisterMapper registerMapper;
 
     /**
      * 編集画面を表示 (GET)。
@@ -42,17 +45,27 @@ class RegisterDemandHourController {
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
     public String show(@RequestParam(name = "date", required = false)
                        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+                       @RequestParam(name = "storeCode", required = false) String storeCode,
                        Model model) {
         LocalDate target = (date == null ? LocalDate.now() : date);
-        List<RegisterDemandHourDto> hours = service.findHourlyDemands(STORE_CODE, target);
-        if (hours.isEmpty()) {
-            hours = IntStream.range(0, 24)
-                         .mapToObj(h -> new RegisterDemandHourDto(STORE_CODE, target, LocalTime.of(h,0), 0))
-                         .toList();
 
-        }
-        RegisterDemandHourForm form = new RegisterDemandHourForm(STORE_CODE, target, hours);
+        List<Store> stores = storeMapper.selectByExample(null);
+        stores.sort(java.util.Comparator.comparing(Store::getStoreCode));
+        String effectiveStore = (storeCode != null && !storeCode.isBlank())
+                ? storeCode
+                : (stores.isEmpty() ? null : stores.get(0).getStoreCode());
+
+        int[] quarterDemands = effectiveStore == null ? new int[96] : service.getQuarterDemands(effectiveStore, target);
+        var registers = (effectiveStore == null) ? java.util.List.<io.github.riemr.shift.infrastructure.persistence.entity.Register>of()
+                : registerMapper.selectByStoreCode(effectiveStore);
+        registers.sort(java.util.Comparator.comparing(io.github.riemr.shift.infrastructure.persistence.entity.Register::getRegisterNo));
+
+        RegisterDemandHourForm form = new RegisterDemandHourForm(effectiveStore, target, java.util.Collections.emptyList());
         model.addAttribute("command", form);
+        model.addAttribute("stores", stores);
+        model.addAttribute("selectedStoreCode", effectiveStore);
+        model.addAttribute("registers", registers);
+        model.addAttribute("quarterDemands", java.util.Arrays.stream(quarterDemands).boxed().toList());
         return "registerDemand/form";
     }
 
@@ -66,9 +79,26 @@ class RegisterDemandHourController {
         if (br.hasErrors()) {
             return "registerDemand/form";
         }
-        service.saveHourlyDemands(form.getStoreCode(), form.getTargetDate(), form.getHours());
+        // Accept interval grid via demandsCsv
+        String demandsCsv = null;
+        try {
+            demandsCsv = (String) ((org.springframework.web.context.request.ServletRequestAttributes)
+                    org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes())
+                    .getRequest().getParameter("demandsCsv");
+        } catch (Exception ignore) {}
+        if (demandsCsv != null && !demandsCsv.isBlank()) {
+            java.util.List<Integer> slots = java.util.Arrays.stream(demandsCsv.split(","))
+                    .filter(s -> !s.isBlank())
+                    .map(Integer::parseInt)
+                    .toList();
+            service.saveQuarterDemands(form.getStoreCode(), form.getTargetDate(), slots);
+        } else {
+            // legacy hourly form
+            service.saveHourlyDemands(form.getStoreCode(), form.getTargetDate(), form.getHours());
+        }
 
         redirect.addAttribute("date", form.getTargetDate().format(DateTimeFormatter.ISO_DATE));
+        redirect.addAttribute("storeCode", form.getStoreCode());
         return "redirect:/register-demand";
     }
 }

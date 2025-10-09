@@ -26,10 +26,41 @@ public class SchemaInitializer {
                     "skill_level SMALLINT NOT NULL," +
                     "PRIMARY KEY (employee_code, task_code))");
 
+            // Create interval tables if missing (transition from quarter tables)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS register_demand_interval (" +
+                    "id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "target_date DATE NOT NULL, " +
+                    "from_time TIME NOT NULL, " +
+                    "to_time TIME NOT NULL, " +
+                    "demand INTEGER NOT NULL, " +
+                    "task_code VARCHAR(32), " +
+                    "created_at TIMESTAMPTZ DEFAULT now(), " +
+                    "updated_at TIMESTAMPTZ DEFAULT now(), " +
+                    "CONSTRAINT chk_register_from_lt_to CHECK (to_time > from_time)" +
+                    ")");
+            jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_register_demand_interval ON register_demand_interval (store_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_register_demand_interval_date ON register_demand_interval (store_code, target_date)");
+
+            jdbc.execute("CREATE TABLE IF NOT EXISTS work_demand_interval (" +
+                    "id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "department_code VARCHAR(10) NOT NULL REFERENCES department_master(department_code), " +
+                    "target_date DATE NOT NULL, " +
+                    "from_time TIME NOT NULL, " +
+                    "to_time TIME NOT NULL, " +
+                    "demand INTEGER NOT NULL, " +
+                    "task_code VARCHAR(32), " +
+                    "created_at TIMESTAMPTZ DEFAULT now(), " +
+                    "updated_at TIMESTAMPTZ DEFAULT now(), " +
+                    "CONSTRAINT chk_work_from_lt_to CHECK (to_time > from_time)" +
+                    ")");
+            jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_work_demand_interval ON work_demand_interval (store_code, department_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_work_demand_interval_date ON work_demand_interval (store_code, department_code, target_date)");
+
             log.info("Schema checked/initialized: is_register column and employee_task_skill table ensured.");
         } catch (Exception e) {
             log.warn("Schema initialization failed: {}", e.getMessage());
         }
     }
 }
-

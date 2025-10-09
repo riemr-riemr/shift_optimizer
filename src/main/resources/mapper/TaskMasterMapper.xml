@@ -5,7 +5,6 @@
     <id column="task_code" property="taskCode" />
     <result column="name" property="name" />
     <result column="description" property="description" />
-    <result column="default_schedule_type" property="defaultScheduleType" />
     <result column="default_required_duration_minutes" property="defaultRequiredDurationMinutes" />
     <result column="priority" property="priority" />
     <result column="color" property="color" />
@@ -13,16 +12,16 @@
   </resultMap>
 
   <sql id="Base_Column_List">
-    task_code, name, description, default_schedule_type, default_required_duration_minutes,
+    task_code, name, description, default_required_duration_minutes,
     priority, color, icon
   </sql>
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
     insert into public.task_master (
-      task_code, name, description, default_schedule_type, default_required_duration_minutes,
+      task_code, name, description, default_required_duration_minutes,
       priority, color, icon
     ) values (
-      #{taskCode}, #{name}, #{description}, #{defaultScheduleType}, #{defaultRequiredDurationMinutes},
+      #{taskCode}, #{name}, #{description}, #{defaultRequiredDurationMinutes},
       #{priority}, #{color}, #{icon}
     )
   </insert>
@@ -31,7 +30,6 @@
     update public.task_master
     set name = #{name},
         description = #{description},
-        default_schedule_type = #{defaultScheduleType},
         default_required_duration_minutes = #{defaultRequiredDurationMinutes},
         priority = #{priority},
         color = #{color},

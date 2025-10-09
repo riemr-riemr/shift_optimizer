@@ -9,10 +9,11 @@
     <result column="slot_time"       property="slotTime"/>
     <result column="task_code"       property="taskCode"/>
     <result column="required_units"  property="requiredUnits"/>
+    <result column="group_id"        property="groupId"/>
   </resultMap>
 
   <select id="selectByDate" resultMap="WorkDemandQuarterMap">
-    SELECT demand_id, store_code, department_code, demand_date, slot_time, task_code, required_units
+    SELECT demand_id, store_code, department_code, demand_date, slot_time, task_code, required_units, group_id
     FROM work_demand_quarter
     WHERE store_code = #{storeCode}
       AND department_code = #{departmentCode}
@@ -21,7 +22,7 @@
   </select>
 
   <select id="selectByMonth" resultMap="WorkDemandQuarterMap">
-    SELECT demand_id, store_code, department_code, demand_date, slot_time, task_code, required_units
+    SELECT demand_id, store_code, department_code, demand_date, slot_time, task_code, required_units, group_id
     FROM work_demand_quarter
     WHERE store_code = #{storeCode}
       AND department_code = #{departmentCode}
@@ -31,7 +32,7 @@
   </select>
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter">
-    INSERT INTO work_demand_quarter (store_code, department_code, demand_date, slot_time, task_code, required_units)
-    VALUES (#{storeCode}, #{departmentCode}, #{demandDate}, #{slotTime}, #{taskCode}, #{requiredUnits})
+    INSERT INTO work_demand_quarter (store_code, department_code, demand_date, slot_time, task_code, required_units, group_id)
+    VALUES (#{storeCode}, #{departmentCode}, #{demandDate}, #{slotTime}, #{taskCode}, #{requiredUnits}, #{groupId})
   </insert>
 </mapper>

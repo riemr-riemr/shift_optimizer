@@ -13,11 +13,11 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
-import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
-import io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper;
+import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
+import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
+import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import lombok.RequiredArgsConstructor;
 
@@ -25,8 +25,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class StaffingBalanceService {
     
-    private final RegisterDemandQuarterMapper demandMapper;
-    private final WorkDemandQuarterMapper workDemandMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
+    private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final ShiftAssignmentMapper shiftMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
 
@@ -41,11 +41,8 @@ public class StaffingBalanceService {
     public List<StaffingBalanceDto> getHourlyStaffingBalance(String storeCode, LocalDate targetDate, String departmentCode) {
         boolean isRegister = (departmentCode == null || departmentCode.isBlank() || "520".equalsIgnoreCase(departmentCode));
 
-        List<RegisterDemandQuarter> demands = new ArrayList<>();
         List<ShiftAssignment> assignments = new ArrayList<>();
-
         if (isRegister) {
-            demands = demandMapper.selectByStoreAndDate(storeCode, targetDate);
             assignments = shiftMapper.selectByDate(targetDate, targetDate.plusDays(1));
         }
 
@@ -67,11 +64,12 @@ public class StaffingBalanceService {
             current = current.plusMinutes(15);
         }
 
-        for (RegisterDemandQuarter demand : demands) {
-            LocalTime slotTime = demand.getSlotTime();
-            StaffingBalanceDto balance = balanceMap.get(slotTime);
-            if (balance != null) {
-                balance.setRequiredStaff(demand.getRequiredUnits());
+        if (isRegister) {
+            var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, targetDate);
+            var quarters = TimeIntervalQuarterUtils.splitAll(intervals);
+            for (var qs : quarters) {
+                var b = balanceMap.get(qs.getStart());
+                if (b != null) b.setRequiredStaff(qs.getDemand());
             }
         }
 
@@ -95,14 +93,17 @@ public class StaffingBalanceService {
                 }
             }
         } else {
-            // Department workload path: required from work_demand_quarter; assigned from department_task_assignment
-            var workDemands = workDemandMapper.selectByDate(storeCode, departmentCode, targetDate);
-            for (var d : workDemands) {
-                LocalTime slotTime = d.getSlotTime();
-                StaffingBalanceDto balance = balanceMap.get(slotTime);
-                if (balance != null) {
-                    balance.setRequiredStaff(d.getRequiredUnits());
-                }
+            // Department workload path: required from work_demand_interval (sum across tasks)
+            var workIntervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, targetDate);
+            var quarterSlots = TimeIntervalQuarterUtils.splitAll(workIntervals);
+            // Sum across tasks for same quarter
+            java.util.Map<LocalTime, Integer> reqBySlot = new java.util.HashMap<>();
+            for (var qs : quarterSlots) {
+                reqBySlot.merge(qs.getStart(), java.util.Objects.requireNonNullElse(qs.getDemand(), 0), Integer::sum);
+            }
+            for (var e : reqBySlot.entrySet()) {
+                var b = balanceMap.get(e.getKey());
+                if (b != null) b.setRequiredStaff(e.getValue());
             }
 
             var fromTs = Timestamp.valueOf(LocalDateTime.of(targetDate, startTime));

@@ -2,6 +2,7 @@ package io.github.riemr.shift.application.service;
 
 import io.github.riemr.shift.infrastructure.mapper.*;
 import io.github.riemr.shift.infrastructure.persistence.entity.*;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +36,7 @@ public class CsvImportService {
     private final EmployeeMapper employeeMapper;
     private final EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
     private final EmployeeRegisterSkillMapper skillMapper;
-    private final RegisterDemandQuarterMapper demandMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -51,14 +52,13 @@ public class CsvImportService {
         importEmployees();
         importWeeklyPreferences();
         importEmployeeSkills();
-        importRegisterDemandQuarter();
+        importRegisterDemandInterval();
         log.info("CSV import completed.");
     }
 
     private void cleanupAll() {
         // Delete order: dependents first
-        // register_demand_quarter
-        demandMapper.deleteByExample(new RegisterDemandQuarterExample());
+        // demand tables: handled by batch cleanup; skip here
         // skills, weekly prefs
         EmployeeRegisterSkillExample se = new EmployeeRegisterSkillExample();
         skillMapper.deleteByExample(se);
@@ -217,26 +217,27 @@ public class CsvImportService {
         }
     }
 
-    private void importRegisterDemandQuarter() throws IOException {
-        Path p = csvDir.resolve("register_demand_quarter.csv");
+    private void importRegisterDemandInterval() throws IOException {
+        Path p = csvDir.resolve("register_demand_interval.csv");
         try (BufferedReader br = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
             String line = br.readLine();
-            List<RegisterDemandQuarter> list = new ArrayList<>();
+            int cnt = 0;
             while ((line = br.readLine()) != null) {
                 String[] a = line.split(",");
-                if (a.length < 4) continue;
-                RegisterDemandQuarter d = new RegisterDemandQuarter();
-                d.setStoreCode(a[0]);
-                d.setDemandDate(java.sql.Date.valueOf(LocalDate.parse(a[1])));
-                d.setSlotTime(LocalTime.parse(a[2]));
-                d.setRequiredUnits(Integer.parseInt(a[3]));
-                list.add(d);
+                if (a.length < 5) continue;
+                DemandIntervalDto dto = DemandIntervalDto.builder()
+                        .storeCode(a[0])
+                        .targetDate(LocalDate.parse(a[1]))
+                        .from(LocalTime.parse(a[2]))
+                        .to(LocalTime.parse(a[3]))
+                        .demand(Integer.parseInt(a[4]))
+                        .taskCode(a.length > 5 && !a[5].isBlank() ? a[5] : null)
+                        .groupId(a.length > 6 && !a[6].isBlank() ? a[6] : null)
+                        .build();
+                registerDemandIntervalMapper.upsert(dto);
+                cnt++;
             }
-            // bulk insert
-            if (!list.isEmpty()) {
-                demandMapper.batchInsert(list);
-            }
-            log.info("Imported register_demand_quarter: {}", list.size());
+            log.info("Imported register_demand_interval: {}", cnt);
         }
     }
 
@@ -409,7 +410,7 @@ public class CsvImportService {
     }
 
     @Transactional
-    public int upsertRegisterDemandQuarterCsv(InputStream in) throws IOException {
+    public int upsertRegisterDemandIntervalCsv(InputStream in) throws IOException {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             String line = br.readLine();
             int cnt = 0;
@@ -419,13 +420,17 @@ public class CsvImportService {
                 if (line.isBlank()) continue;
                 try {
                     String[] a = line.split(",");
-                    if (a.length < 4) continue;
-                    RegisterDemandQuarter d = new RegisterDemandQuarter();
-                    d.setStoreCode(a[0]);
-                    d.setDemandDate(java.sql.Date.valueOf(LocalDate.parse(a[1])));
-                    d.setSlotTime(LocalTime.parse(a[2]));
-                    d.setRequiredUnits(Integer.parseInt(a[3]));
-                    demandMapper.upsert(d);
+                    if (a.length < 5) continue;
+                    DemandIntervalDto dto = DemandIntervalDto.builder()
+                            .storeCode(a[0])
+                            .targetDate(LocalDate.parse(a[1]))
+                            .from(LocalTime.parse(a[2]))
+                            .to(LocalTime.parse(a[3]))
+                            .demand(Integer.parseInt(a[4]))
+                            .taskCode(a.length > 5 && !a[5].isBlank() ? a[5] : null)
+                            .groupId(a.length > 6 && !a[6].isBlank() ? a[6] : null)
+                            .build();
+                    registerDemandIntervalMapper.upsert(dto);
                     cnt++;
                 } catch (Exception ex) {
                     throw new IllegalArgumentException("CSV parse error at line " + lineNo + ": " + ex.getMessage(), ex);

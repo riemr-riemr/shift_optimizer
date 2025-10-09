@@ -21,6 +21,7 @@ public interface RegisterMapper {
     int updateByPrimaryKey(Register row);
 
     List<Register> selectAll();
+    List<Register> selectByStoreCode(@Param("storeCode") String storeCode);
 
     // custom upsert
     int upsert(Register row);

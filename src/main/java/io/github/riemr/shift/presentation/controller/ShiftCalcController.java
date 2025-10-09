@@ -12,9 +12,12 @@ import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
-import io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
-import io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper;
+import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
+import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
+import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
+import io.github.riemr.shift.application.dto.QuarterSlot;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper;
@@ -47,8 +50,8 @@ public class ShiftCalcController {
     private final StaffingBalanceService staffingBalanceService;
     private final StoreMapper storeMapper;
     private final RegisterDemandHourService registerDemandHourService;
-    private final RegisterDemandQuarterMapper registerDemandQuarterMapper;
-    private final WorkDemandQuarterMapper workDemandQuarterMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
+    private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeMapper employeeMapper;
     private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final StoreDepartmentMapper storeDepartmentMapper;
@@ -130,14 +133,18 @@ public class ShiftCalcController {
     public List<RegisterDemandQuarter> getWorkModelQuarterByDate(@PathVariable("date") String dateString,
                                                                  @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        
-        // RegisterDemandQuarterExampleを使用してクエリ条件を設定
-        var example = new io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarterExample();
-        example.createCriteria()
-            .andStoreCodeEqualTo(storeCode)
-            .andDemandDateEqualTo(java.sql.Date.valueOf(date));
-        
-        return registerDemandQuarterMapper.selectByExample(example);
+        var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, date);
+        var quarters = TimeIntervalQuarterUtils.splitAll(intervals);
+        List<RegisterDemandQuarter> result = new ArrayList<>(quarters.size());
+        for (QuarterSlot qs : quarters) {
+            RegisterDemandQuarter ent = new RegisterDemandQuarter();
+            ent.setStoreCode(qs.getStoreCode());
+            ent.setDemandDate(java.sql.Date.valueOf(qs.getDate()));
+            ent.setSlotTime(qs.getStart());
+            ent.setRequiredUnits(qs.getDemand());
+            result.add(ent);
+        }
+        return result;
     }
 
     @GetMapping("/api/calc/work-demand-quarter/{date}")
@@ -146,7 +153,26 @@ public class ShiftCalcController {
                                                                @RequestParam("storeCode") String storeCode,
                                                                @RequestParam("departmentCode") String departmentCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-        return workDemandQuarterMapper.selectByDate(storeCode, departmentCode, date);
+        var intervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, date);
+        List<WorkDemandQuarter> result = new ArrayList<>();
+        for (DemandIntervalDto di : intervals) {
+            var t = di.getFrom();
+            while (t.isBefore(di.getTo())) {
+                WorkDemandQuarter wq = new WorkDemandQuarter();
+                wq.setStoreCode(di.getStoreCode());
+                wq.setDepartmentCode(di.getDepartmentCode());
+                wq.setDemandDate(java.sql.Date.valueOf(di.getTargetDate()));
+                wq.setSlotTime(t);
+                wq.setTaskCode(di.getTaskCode());
+                wq.setRequiredUnits(di.getDemand());
+                result.add(wq);
+                t = t.plusMinutes(15);
+            }
+        }
+        // sort by time and task for stable output
+        result.sort(Comparator.comparing(WorkDemandQuarter::getSlotTime)
+                .thenComparing(w -> java.util.Objects.toString(w.getTaskCode(), "")));
+        return result;
     }
 
     @GetMapping("/api/calc/employees/{storeCode}")

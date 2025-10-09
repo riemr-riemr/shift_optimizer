@@ -135,6 +135,14 @@
     FROM public.register
   </select>
 
+  <select id="selectByStoreCode" resultMap="BaseResultMap">
+    SELECT
+    <include refid="Base_Column_List" />
+    FROM public.register
+    WHERE store_code = #{storeCode}
+    ORDER BY register_no
+  </select>
+
   <!-- custom upsert -->
   <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
     INSERT INTO public.register (

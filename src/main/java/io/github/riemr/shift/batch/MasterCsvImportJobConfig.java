@@ -40,8 +40,8 @@ public class MasterCsvImportJobConfig {
     private final PlatformTransactionManager txManager;
     private final SqlSessionFactory sqlSessionFactory;
     private final io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
-    private final RegisterDemandQuarterMapper demandMapper;
-    private final WorkDemandQuarterMapper workDemandQuarterMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
+    private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeRegisterSkillMapper skillMapper;
     private final EmployeeMapper employeeMapper;
     private final RegisterMapper registerMapper;
@@ -67,8 +67,8 @@ public class MasterCsvImportJobConfig {
             Step storeDepartmentStep,
             Step employeeDepartmentStep,
             Step employeeDepartmentSkillStep,
-            Step registerDemandQuarterStep,
-            Step workDemandQuarterStep,
+            Step registerDemandIntervalStep,
+            Step workDemandIntervalStep,
             Step employeeTaskSkillStep) {
         return new JobBuilder("masterImportJob", jobRepository)
                 .incrementer(new RunIdIncrementer()) // run.id を自動付与
@@ -85,8 +85,8 @@ public class MasterCsvImportJobConfig {
                 .next(employeeWeeklyPreferenceStep)
                 .next(employeeRegisterSkillStep)
                 .next(employeeTaskSkillStep)
-                .next(registerDemandQuarterStep)
-                .next(workDemandQuarterStep)
+                .next(registerDemandIntervalStep)
+                .next(workDemandIntervalStep)
                 .build();
     }
 
@@ -102,7 +102,8 @@ public class MasterCsvImportJobConfig {
                         return RepeatStatus.FINISHED;
                     }
                     // dependents first
-                    demandMapper.deleteByExample(new RegisterDemandQuarterExample());
+                    try { registerDemandIntervalMapper.deleteAll(); } catch (Exception ignore) {}
+                    try { workDemandIntervalMapper.deleteAll(); } catch (Exception ignore) {}
                     skillMapper.deleteByExample(new EmployeeRegisterSkillExample());
                     weeklyPrefMapper.deleteAll();
                     employeeMapper.deleteByExample(new EmployeeExample());
@@ -182,49 +183,54 @@ public class MasterCsvImportJobConfig {
                 EmployeeDepartmentSkill.class);
     }
 
-    /* === Step : work_demand_quarter.csv ========================================== */
+    /* === Step : work_demand_interval.csv ========================================== */
     @Bean
-    public Step workDemandQuarterStep(FlatFileItemReader<WorkDemandQuarter> workDemandQuarterReader) {
-        return new StepBuilder("workDemandQuarterStep", jobRepository)
-                .<WorkDemandQuarter, WorkDemandQuarter>chunk(1000, txManager)
-                .reader(workDemandQuarterReader)
-                .writer(myBatisWriter(
-                        "io.github.riemr.shift.infrastructure.mapper.WorkDemandQuarterMapper.insert"))
+    public Step workDemandIntervalStep(FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> workDemandIntervalReader) {
+        return new StepBuilder("workDemandIntervalStep", jobRepository)
+                .<io.github.riemr.shift.application.dto.DemandIntervalDto, io.github.riemr.shift.application.dto.DemandIntervalDto>chunk(1000, txManager)
+                .reader(workDemandIntervalReader)
+                .writer(items -> {
+                    for (var r : items) {
+                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        try {
+                            session.insert("io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper.insert", r);
+                            session.commit();
+                        } finally { session.close(); }
+                    }
+                })
                 .build();
     }
 
     @Bean
-    public FlatFileItemReader<WorkDemandQuarter> workDemandQuarterReader(
+    public FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> workDemandIntervalReader(
             @Value("${csv.dir:/csv}") Path csvDir) {
+        // Tokenizer that tolerates missing optional trailing fields (e.g., taskCode)
+        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+        tokenizer.setDelimiter(",");
+        tokenizer.setNames("storeCode","departmentCode","targetDate","fromTime","toTime","demand","taskCode");
+        tokenizer.setStrict(false);
 
-        // パーサ
-        SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");
-        DATE_FMT.setLenient(false);
-        SimpleDateFormat TIME_FMT = new SimpleDateFormat("HH:mm");
-        TIME_FMT.setLenient(false);
-
-        FieldSetMapper<WorkDemandQuarter> mapper = fs -> {
-            try {
-                var e = new WorkDemandQuarter();
-                e.setStoreCode(fs.readString("storeCode"));
-                e.setDepartmentCode(fs.readString("departmentCode"));
-                e.setDemandDate(DATE_FMT.parse(fs.readString("demandDate")));
-                e.setSlotTime(TIME_FMT.parse(fs.readString("slotTime")).toInstant().atZone(ZoneId.systemDefault()).toLocalTime());
-                try { e.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
-                e.setRequiredUnits(fs.readInt("requiredUnits"));
-                return e;
-            } catch (ParseException ex) {
-                throw new FlatFileParseException("work_demand_quarter parse error", "");
-            }
+        FieldSetMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> mapper = fs -> {
+            io.github.riemr.shift.application.dto.DemandIntervalDto d = new io.github.riemr.shift.application.dto.DemandIntervalDto();
+            d.setStoreCode(fs.readString("storeCode"));
+            d.setDepartmentCode(fs.readString("departmentCode"));
+            d.setTargetDate(java.time.LocalDate.parse(fs.readString("targetDate")));
+            d.setFrom(java.time.LocalTime.parse(fs.readString("fromTime")));
+            d.setTo(java.time.LocalTime.parse(fs.readString("toTime")));
+            d.setDemand(fs.readInt("demand"));
+            try { d.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
+            return d;
         };
 
-        return new FlatFileItemReaderBuilder<WorkDemandQuarter>()
-                .name("workDemandQuarterReader")
-                .resource(new FileSystemResource(csvDir.resolve("work_demand_quarter.csv")))
+        DefaultLineMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> lm = new DefaultLineMapper<>();
+        lm.setLineTokenizer(tokenizer);
+        lm.setFieldSetMapper(mapper);
+
+        return new FlatFileItemReaderBuilder<io.github.riemr.shift.application.dto.DemandIntervalDto>()
+                .name("workDemandIntervalReader")
+                .resource(new FileSystemResource(csvDir.resolve("work_demand_interval.csv")))
                 .linesToSkip(1)
-                .delimited()
-                .names("storeCode","departmentCode","demandDate","slotTime","taskCode","requiredUnits")
-                .fieldSetMapper(mapper)
+                .lineMapper(lm)
                 .build();
     }
     /* === Step : store.csv ============================================= */
@@ -470,52 +476,53 @@ public class MasterCsvImportJobConfig {
                 .build();
     }
 
-    /* === Step : register_demand_quarter.csv ========================================== */
+    /* === Step : register_demand_interval.csv ========================================== */
     @Bean
-    public Step registerDemandQuarterStep(FlatFileItemReader<RegisterDemandQuarter> registerDemandQuarterReader) {
-        return new StepBuilder("registerDemandQuarterStep", jobRepository)
-                .<RegisterDemandQuarter, RegisterDemandQuarter>chunk(1000, txManager)
-                .reader(registerDemandQuarterReader)
-                .writer(myBatisWriter(
-                        "io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterMapper.insertSelective"))
+    public Step registerDemandIntervalStep(FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> registerDemandIntervalReader) {
+        return new StepBuilder("registerDemandIntervalStep", jobRepository)
+                .<io.github.riemr.shift.application.dto.DemandIntervalDto, io.github.riemr.shift.application.dto.DemandIntervalDto>chunk(1000, txManager)
+                .reader(registerDemandIntervalReader)
+                .writer(items -> {
+                    for (var r : items) {
+                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        try {
+                            session.insert("io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper.upsert", r);
+                            session.commit();
+                        } finally { session.close(); }
+                    }
+                })
                 .build();
     }
 
     @Bean
-    public FlatFileItemReader<RegisterDemandQuarter> registerDemandQuarterReader(
+    public FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> registerDemandIntervalReader(
             @Value("${csv.dir:/csv}") Path csvDir) {
-    
-        // --- 日付／時刻パーサ（スレッドセーフではないので 1 スレッド前提） ---
-        SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");
-        DATE_FMT.setLenient(false);
-        SimpleDateFormat TIME_FMT = new SimpleDateFormat("HH:mm");  // 秒は不要
-        TIME_FMT.setLenient(false);
-    
-        // --- FieldSetMapper ---
-        FieldSetMapper<RegisterDemandQuarter> mapper = fs -> {
-            try {
-                var e = new RegisterDemandQuarter();
-                e.setStoreCode(fs.readString("storeCode"));
-                e.setDemandDate(DATE_FMT.parse(fs.readString("demandDate")));
-                e.setSlotTime (TIME_FMT.parse(fs.readString("slotTime")).toInstant().atZone(ZoneId.systemDefault()).toLocalTime());
-                e.setRequiredUnits(fs.readInt("requiredUnits"));
-                return e;
-            } catch (ParseException ex) {
-                // CSV の該当行情報も含めて Spring-Batch 流に包み直す
-                throw new FlatFileParseException("日付／時刻のパースに失敗しました", "");
-                // もしくは単に new IllegalStateException(ex) でも OK
-            }
+        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+        tokenizer.setDelimiter(",");
+        tokenizer.setNames("storeCode","targetDate","fromTime","toTime","demand","taskCode");
+        tokenizer.setStrict(false);
+
+        FieldSetMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> mapper = fs -> {
+            io.github.riemr.shift.application.dto.DemandIntervalDto d = new io.github.riemr.shift.application.dto.DemandIntervalDto();
+            d.setStoreCode(fs.readString("storeCode"));
+            d.setTargetDate(java.time.LocalDate.parse(fs.readString("targetDate")));
+            d.setFrom(java.time.LocalTime.parse(fs.readString("fromTime")));
+            d.setTo(java.time.LocalTime.parse(fs.readString("toTime")));
+            d.setDemand(fs.readInt("demand"));
+            try { d.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
+            return d;
         };
-    
-        // --- reader を組み立て ---
-        return new FlatFileItemReaderBuilder<RegisterDemandQuarter>()
-                .name("registerDemandQuarterReader")
+
+        DefaultLineMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> lm = new DefaultLineMapper<>();
+        lm.setLineTokenizer(tokenizer);
+        lm.setFieldSetMapper(mapper);
+
+        return new FlatFileItemReaderBuilder<io.github.riemr.shift.application.dto.DemandIntervalDto>()
+                .name("registerDemandIntervalReader")
                 .resource(new FileSystemResource(
-                        csvDir.resolve("register_demand_quarter.csv")))
-                .linesToSkip(1)                               // ヘッダー 1 行なら
-                .delimited()
-                .names("storeCode","demandDate","slotTime","requiredUnits")
-                .fieldSetMapper(mapper)                       // ← ここがポイント
+                        csvDir.resolve("register_demand_interval.csv")))
+                .linesToSkip(1)
+                .lineMapper(lm)
                 .build();
     }
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.RegisterDemandQuarterCustomMapper">
+  <insert id="upsertWithGroup">
+    INSERT INTO register_demand_quarter (store_code, demand_date, slot_time, required_units, group_id)
+    VALUES (#{storeCode}, #{demandDate}, #{slotTime}, #{requiredUnits}, #{groupId})
+    ON CONFLICT (store_code, demand_date, slot_time)
+    DO UPDATE SET required_units = EXCLUDED.required_units,
+                  group_id = EXCLUDED.group_id
+  </insert>
+</mapper>
+

@@ -11,6 +11,7 @@ public class WorkDemandQuarter implements Serializable {
     private java.time.LocalTime slotTime;
     private String taskCode; // nullable
     private Integer requiredUnits;
+    private String groupId;
 
     public Long getDemandId() { return demandId; }
     public void setDemandId(Long demandId) { this.demandId = demandId; }
@@ -32,5 +33,6 @@ public class WorkDemandQuarter implements Serializable {
 
     public Integer getRequiredUnits() { return requiredUnits; }
     public void setRequiredUnits(Integer requiredUnits) { this.requiredUnits = requiredUnits; }
+    public String getGroupId() { return groupId; }
+    public void setGroupId(String groupId) { this.groupId = groupId; }
 }
-
