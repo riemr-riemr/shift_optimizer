@@ -29,6 +29,18 @@
     ORDER BY target_date, from_time
   </select>
 
+  <!-- 半開区間 [fromDate, toDate) での範囲取得 -->
+  <select id="selectByDateRange" resultMap="DemandIntervalMap">
+    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    FROM register_demand_interval
+    WHERE target_date &gt;= #{fromDate}
+      AND target_date &lt; #{toDate}
+    <if test="storeCode != null and storeCode != ''">
+      AND store_code = #{storeCode}
+    </if>
+    ORDER BY target_date, from_time
+  </select>
+
   <insert id="upsert" parameterType="io.github.riemr.shift.application.dto.DemandIntervalDto">
     INSERT INTO register_demand_interval (store_code, target_date, from_time, to_time, demand, task_code)
     VALUES (#{storeCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{taskCode})

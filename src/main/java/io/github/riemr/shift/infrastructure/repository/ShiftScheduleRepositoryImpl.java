@@ -67,9 +67,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         List<Register> registers = registerMapper.selectAll();
 
-        // Register demand: read interval rows for the month, then split to quarters
-        String ym = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM").format(cycleStart);
-        List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByStoreAndMonth(storeCode, ym);
+        // Register demand: read interval rows for the cycle range [start, end), then split to quarters
+        List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
         List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows);
         List<RegisterDemandQuarter> demands = new ArrayList<>(quarterSlots.size());
         for (QuarterSlot qs : quarterSlots) {

@@ -13,6 +13,13 @@ public interface RegisterDemandIntervalMapper {
     List<DemandIntervalDto> selectByStoreAndMonth(@Param("storeCode") String storeCode,
                                                   @Param("targetMonth") String targetMonth);
 
+    /**
+     * 半開区間 [fromDate, toDate) の日付範囲で取得。
+     */
+    List<DemandIntervalDto> selectByDateRange(@Param("storeCode") String storeCode,
+                                              @Param("fromDate") LocalDate fromDate,
+                                              @Param("toDate") LocalDate toDate);
+
     int upsert(DemandIntervalDto dto);
 
     int deleteById(@Param("id") Long id);
