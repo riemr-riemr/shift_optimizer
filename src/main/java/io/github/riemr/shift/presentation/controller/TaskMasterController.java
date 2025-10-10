@@ -27,9 +27,9 @@ public class TaskMasterController {
     }
 
     @PostMapping("/{taskCode}/delete")
-    public String delete(@PathVariable("taskCode") @NotBlank String taskCode) {
-        service.delete(taskCode);
+    public String delete(@PathVariable("taskCode") @NotBlank String taskCode,
+                         @RequestParam(name = "departmentCode", required = false) String departmentCode) {
+        service.delete(taskCode, departmentCode);
         return "redirect:/tasks/master";
     }
 }
-

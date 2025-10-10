@@ -10,8 +10,8 @@ import java.util.List;
 public interface TaskMasterMapper {
     int insert(TaskMaster row);
     int updateByPrimaryKey(TaskMaster row);
-    int deleteByPrimaryKey(@Param("taskCode") String taskCode);
-    TaskMaster selectByPrimaryKey(@Param("taskCode") String taskCode);
+    int upsert(TaskMaster row);
+    int deleteByPrimaryKey(@Param("taskCode") String taskCode, @Param("departmentCode") String departmentCode);
+    TaskMaster selectByPrimaryKey(@Param("taskCode") String taskCode, @Param("departmentCode") String departmentCode);
     List<TaskMaster> selectAll();
 }
-

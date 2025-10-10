@@ -6,8 +6,7 @@ import java.util.List;
 public interface TaskMasterRepository {
     void save(TaskMaster m);
     void update(TaskMaster m);
-    void delete(String taskCode);
-    TaskMaster find(String taskCode);
+    void delete(String taskCode, String departmentCode);
+    TaskMaster find(String taskCode, String departmentCode);
     List<TaskMaster> findAll();
 }
-

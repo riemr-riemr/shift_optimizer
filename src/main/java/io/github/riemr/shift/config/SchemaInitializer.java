@@ -15,16 +15,54 @@ public class SchemaInitializer {
     @PostConstruct
     public void ensureTables() {
         try {
+            // Ensure department_master has register department '520' (legacy)
+            jdbc.execute("INSERT INTO department_master(department_code, department_name, is_register) VALUES ('520','Register', TRUE) ON CONFLICT (department_code) DO NOTHING");
+
+            // task_master: add department_code for task categorization
+            jdbc.execute("ALTER TABLE IF EXISTS task_master ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)");
+            // backfill nulls prior to switching PK
+            jdbc.execute("UPDATE task_master SET department_code = '520' WHERE department_code IS NULL");
+            // Switch primary key to (task_code, department_code)
+            try {
+                jdbc.execute("ALTER TABLE task_master DROP CONSTRAINT IF EXISTS task_master_pkey");
+            } catch (Exception ignore) {}
+            jdbc.execute("ALTER TABLE task_master ADD CONSTRAINT task_master_pkey PRIMARY KEY (task_code, department_code)");
+            // Optional FK: keep nullable for backward compatibility (uncomment if needed)
+            // jdbc.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_task_master_department') THEN \n" +
+            //         "ALTER TABLE task_master ADD CONSTRAINT fk_task_master_department FOREIGN KEY (department_code) REFERENCES department_master(department_code); END IF; END $$;");
+
             // Ensure department_master.is_register exists
             jdbc.execute("ALTER TABLE IF EXISTS department_master ADD COLUMN IF NOT EXISTS is_register BOOLEAN NOT NULL DEFAULT FALSE");
             jdbc.execute("UPDATE department_master SET is_register = TRUE WHERE department_code = '520'");
 
+            // task_plan: add department_code for per-department plans and ensure composite FK to task_master
+            jdbc.execute("ALTER TABLE IF EXISTS task_plan ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)");
+            try {
+                jdbc.execute("ALTER TABLE task_plan DROP CONSTRAINT IF EXISTS task_plan_task_code_fkey");
+                jdbc.execute("ALTER TABLE task_plan DROP CONSTRAINT IF EXISTS fk_task_plan_task_master");
+            } catch (Exception ignore) {}
+            jdbc.execute("ALTER TABLE task_plan ADD CONSTRAINT fk_task_plan_task_master FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code)");
+            // Optional FK to department_master (kept nullable for compatibility)
+            // jdbc.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_task_plan_department') THEN \n" +
+            //         "ALTER TABLE task_plan ADD CONSTRAINT fk_task_plan_department FOREIGN KEY (department_code) REFERENCES department_master(department_code); END IF; END $$;");
+
             // Create employee_task_skill table if missing
             jdbc.execute("CREATE TABLE IF NOT EXISTS employee_task_skill (" +
                     "employee_code VARCHAR(10) NOT NULL REFERENCES employee(employee_code)," +
-                    "task_code VARCHAR(32) NOT NULL REFERENCES task_master(task_code)," +
+                    "store_code VARCHAR(10)," +
+                    "department_code VARCHAR(32)," +
+                    "task_code VARCHAR(32) NOT NULL," +
                     "skill_level SMALLINT NOT NULL," +
                     "PRIMARY KEY (employee_code, task_code))");
+            // Add new columns if migrating
+            jdbc.execute("ALTER TABLE IF EXISTS employee_task_skill ADD COLUMN IF NOT EXISTS store_code VARCHAR(10)");
+            jdbc.execute("ALTER TABLE IF EXISTS employee_task_skill ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)");
+            // Backfill department_code to legacy '520' where null
+            jdbc.execute("UPDATE employee_task_skill SET department_code = '520' WHERE department_code IS NULL");
+            // Drop legacy FK if exists and add composite FK
+            try { jdbc.execute("ALTER TABLE employee_task_skill DROP CONSTRAINT IF EXISTS employee_task_skill_task_code_fkey"); } catch (Exception ignore) {}
+            try { jdbc.execute("ALTER TABLE employee_task_skill DROP CONSTRAINT IF EXISTS fk_emp_task_skill_master"); } catch (Exception ignore) {}
+            jdbc.execute("ALTER TABLE employee_task_skill ADD CONSTRAINT fk_emp_task_skill_master FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code)");
 
             // Create interval tables if missing (transition from quarter tables)
             jdbc.execute("CREATE TABLE IF NOT EXISTS register_demand_interval (" +

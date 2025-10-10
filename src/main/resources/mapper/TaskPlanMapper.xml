@@ -4,6 +4,7 @@
   <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
     <id column="plan_id" property="planId" />
     <result column="store_code" property="storeCode" />
+    <result column="department_code" property="departmentCode" />
     <result column="task_code" property="taskCode" />
     <result column="plan_kind" property="planKind" />
     <result column="day_of_week" property="dayOfWeek" />
@@ -24,7 +25,7 @@
   </resultMap>
 
   <sql id="Base_Column_List">
-    plan_id, store_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+    plan_id, store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
     fixed_start_time, fixed_end_time, window_start_time, window_end_time,
     required_duration_minutes, required_staff_count, must_be_contiguous,
     effective_from, effective_to, priority, note, active
@@ -32,12 +33,12 @@
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
     insert into public.task_plan (
-      store_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+      store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
       fixed_start_time, fixed_end_time, window_start_time, window_end_time,
       required_duration_minutes, required_staff_count, must_be_contiguous,
       effective_from, effective_to, priority, note, active
     ) values (
-      #{storeCode}, #{taskCode}, #{planKind}, #{dayOfWeek}, #{specialDate}, #{scheduleType},
+      #{storeCode}, #{departmentCode}, #{taskCode}, #{planKind}, #{dayOfWeek}, #{specialDate}, #{scheduleType},
       #{fixedStartTime}, #{fixedEndTime}, #{windowStartTime}, #{windowEndTime},
       #{requiredDurationMinutes}, #{requiredStaffCount}, #{mustBeContiguous},
       #{effectiveFrom}, #{effectiveTo}, #{priority}, #{note}, #{active}
@@ -47,6 +48,7 @@
   <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
     update public.task_plan
     set store_code = #{storeCode},
+        department_code = #{departmentCode},
         task_code = #{taskCode},
         plan_kind = #{planKind},
         day_of_week = #{dayOfWeek},

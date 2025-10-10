@@ -13,6 +13,7 @@
     <div class="card-body">
       <form th:action="@{/tasks/master}" th:object="${form}" method="post" class="row g-2 mb-3">
         <div class="col-auto"><input class="form-control form-control-sm" placeholder="コード" th:field="*{taskCode}" required></div>
+        <div class="col-auto"><input class="form-control form-control-sm" placeholder="部門コード" th:field="*{departmentCode}"></div>
         <div class="col-auto"><input class="form-control form-control-sm" placeholder="名称" th:field="*{name}" required></div>
         <div class="col-auto"><input class="form-control form-control-sm" placeholder="説明" th:field="*{description}"></div>
         <!-- 作業タイプは計画登録時に設定するためマスタからは除外 -->
@@ -21,14 +22,16 @@
       </form>
 
       <table class="table table-sm">
-        <thead><tr><th>コード</th><th>名称</th><th>所要</th><th></th></tr></thead>
+        <thead><tr><th>コード</th><th>部門コード</th><th>名称</th><th>所要</th><th></th></tr></thead>
         <tbody>
         <tr th:each="m : ${list}">
           <td th:text="${m.taskCode}"></td>
+          <td th:text="${m.departmentCode}"></td>
           <td th:text="${m.name}"></td>
           <td th:text="${m.defaultRequiredDurationMinutes}"></td>
           <td>
             <form th:action="@{'/tasks/master/' + ${m.taskCode} + '/delete'}" method="post">
+              <input type="hidden" name="departmentCode" th:value="${m.departmentCode}">
               <button class="btn btn-sm btn-outline-danger">削除</button>
             </form>
           </td>

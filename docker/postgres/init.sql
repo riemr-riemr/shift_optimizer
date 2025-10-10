@@ -380,21 +380,24 @@ ON CONFLICT DO NOTHING;
 -- 14. Task Master / Weekly Plan / Special Day
 -- ------------------------------------------------
 CREATE TABLE IF NOT EXISTS task_master (
-    task_code                    VARCHAR(32) PRIMARY KEY,
+    task_code                    VARCHAR(32),
+    department_code              VARCHAR(32),
     name                         VARCHAR(100) NOT NULL,
     description                  TEXT,
     default_schedule_type        VARCHAR(10) CHECK (default_schedule_type IN ('FIXED','FLEXIBLE')),
     default_required_duration_minutes INT,
     priority                     INT,
     color                        VARCHAR(16),
-    icon                         VARCHAR(64)
+    icon                         VARCHAR(64),
+    PRIMARY KEY (task_code, department_code)
 );
 
 -- 統合: task_plan（曜日別/特異日を1テーブルに集約）
 CREATE TABLE IF NOT EXISTS task_plan (
     plan_id              BIGSERIAL PRIMARY KEY,
     store_code           VARCHAR(10) NOT NULL REFERENCES store(store_code),
-    task_code            VARCHAR(32) NOT NULL REFERENCES task_master(task_code),
+    department_code      VARCHAR(32) NULL REFERENCES department_master(department_code),
+    task_code            VARCHAR(32) NOT NULL,
     plan_kind            VARCHAR(8) NOT NULL CHECK (plan_kind IN ('WEEKLY','SPECIAL')),
     day_of_week          SMALLINT NULL CHECK (day_of_week BETWEEN 1 AND 7),
     special_date         DATE NULL,
@@ -431,10 +434,17 @@ CREATE TABLE IF NOT EXISTS days_master (
 -- Employee x Task skill levels (for non-register tasks)
 CREATE TABLE IF NOT EXISTS employee_task_skill (
   employee_code   VARCHAR(10)  NOT NULL REFERENCES employee(employee_code),
-  task_code       VARCHAR(32)  NOT NULL REFERENCES task_master(task_code),
+  store_code      VARCHAR(10),
+  department_code VARCHAR(32),
+  task_code       VARCHAR(32)  NOT NULL,
   skill_level     SMALLINT     NOT NULL,
   PRIMARY KEY (employee_code, task_code)
 );
+
+-- Composite FK to task_master(task_code, department_code)
+ALTER TABLE IF EXISTS employee_task_skill
+  ADD CONSTRAINT IF NOT EXISTS fk_emp_task_skill_master
+  FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code);
 
 -- 権限シード: マスタ/計画/特異日
 INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
@@ -482,3 +492,6 @@ CREATE TABLE IF NOT EXISTS task (
     updated_at                 TIMESTAMP DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date);
+ALTER TABLE IF EXISTS task_plan
+  ADD CONSTRAINT IF NOT EXISTS fk_task_plan_task_master
+  FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code);

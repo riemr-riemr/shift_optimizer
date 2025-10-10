@@ -3,6 +3,7 @@
 <mapper namespace="io.github.riemr.shift.infrastructure.mapper.TaskMasterMapper">
   <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
     <id column="task_code" property="taskCode" />
+    <result column="department_code" property="departmentCode" />
     <result column="name" property="name" />
     <result column="description" property="description" />
     <result column="default_required_duration_minutes" property="defaultRequiredDurationMinutes" />
@@ -12,18 +13,35 @@
   </resultMap>
 
   <sql id="Base_Column_List">
-    task_code, name, description, default_required_duration_minutes,
+    task_code, department_code, name, description, default_required_duration_minutes,
     priority, color, icon
   </sql>
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
     insert into public.task_master (
-      task_code, name, description, default_required_duration_minutes,
+      task_code, department_code, name, description, default_required_duration_minutes,
       priority, color, icon
     ) values (
-      #{taskCode}, #{name}, #{description}, #{defaultRequiredDurationMinutes},
+      #{taskCode}, #{departmentCode}, #{name}, #{description}, #{defaultRequiredDurationMinutes},
       #{priority}, #{color}, #{icon}
     )
+  </insert>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
+    insert into public.task_master (
+      task_code, department_code, name, description, default_required_duration_minutes,
+      priority, color, icon
+    ) values (
+      #{taskCode}, #{departmentCode}, #{name}, #{description}, #{defaultRequiredDurationMinutes},
+      #{priority}, #{color}, #{icon}
+    )
+    on conflict (task_code, department_code) do update set
+      name = excluded.name,
+      description = excluded.description,
+      default_required_duration_minutes = excluded.default_required_duration_minutes,
+      priority = excluded.priority,
+      color = excluded.color,
+      icon = excluded.icon
   </insert>
 
   <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster">
@@ -31,18 +49,19 @@
     set name = #{name},
         description = #{description},
         default_required_duration_minutes = #{defaultRequiredDurationMinutes},
+        department_code = #{departmentCode},
         priority = #{priority},
         color = #{color},
         icon = #{icon}
     where task_code = #{taskCode}
   </update>
 
-  <delete id="deleteByPrimaryKey" parameterType="string">
-    delete from public.task_master where task_code = #{taskCode}
+  <delete id="deleteByPrimaryKey">
+    delete from public.task_master where task_code = #{taskCode} and department_code = #{departmentCode}
   </delete>
 
-  <select id="selectByPrimaryKey" parameterType="string" resultMap="BaseResultMap">
-    select <include refid="Base_Column_List" /> from public.task_master where task_code = #{taskCode}
+  <select id="selectByPrimaryKey" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_master where task_code = #{taskCode} and department_code = #{departmentCode}
   </select>
 
   <select id="selectAll" resultMap="BaseResultMap">

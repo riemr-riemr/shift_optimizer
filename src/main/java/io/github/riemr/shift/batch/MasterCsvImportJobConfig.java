@@ -59,6 +59,7 @@ public class MasterCsvImportJobConfig {
             Step storeStep,
             Step registerTypeStep,
             Step registerStep,
+            Step taskMasterStep,
             Step employeeStep,
             Step employeeAuthStep,
             Step employeeWeeklyPreferenceStep,
@@ -77,6 +78,7 @@ public class MasterCsvImportJobConfig {
                 .next(registerTypeStep)
                 .next(registerStep)
                 .next(departmentMasterStep)
+                .next(taskMasterStep)
                 .next(storeDepartmentStep)
                 .next(employeeStep)
                 .next(employeeAuthStep)
@@ -88,6 +90,24 @@ public class MasterCsvImportJobConfig {
                 .next(registerDemandIntervalStep)
                 .next(workDemandIntervalStep)
                 .build();
+    }
+
+    /* === Step : task_master.csv ====================================== */
+    @Bean
+    public Step taskMasterStep(FlatFileItemReader<TaskMaster> taskMasterReader) {
+        return new StepBuilder("taskMasterStep", jobRepository)
+                .<TaskMaster, TaskMaster>chunk(1000, txManager)
+                .reader(taskMasterReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.TaskMasterMapper.upsert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<TaskMaster> taskMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("task_master.csv"),
+                new String[] { "taskCode", "departmentCode", "name", "description",
+                        "defaultRequiredDurationMinutes", "priority", "color", "icon" },
+                TaskMaster.class);
     }
 
     /* === Step : cleanup (optional by job parameter 'clean') ======== */
@@ -429,7 +449,7 @@ public class MasterCsvImportJobConfig {
     @Bean
     public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill> employeeTaskSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("employee_task_skill.csv"),
-                new String[] { "employeeCode", "taskCode", "skillLevel" },
+                new String[] { "employeeCode", "storeCode", "departmentCode", "taskCode", "skillLevel" },
                 io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill.class);
     }
 

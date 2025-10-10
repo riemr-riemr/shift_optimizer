@@ -6,6 +6,7 @@ import java.util.Date;
 public class TaskPlan implements Serializable {
     private Long planId;
     private String storeCode;
+    private String departmentCode; // 追加: 部門コード (任意)
     private String taskCode;
     private String planKind; // WEEKLY or SPECIAL
     private Short dayOfWeek;
@@ -28,6 +29,8 @@ public class TaskPlan implements Serializable {
     public void setPlanId(Long planId) { this.planId = planId; }
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
+    public String getDepartmentCode() { return departmentCode; }
+    public void setDepartmentCode(String departmentCode) { this.departmentCode = departmentCode; }
     public String getTaskCode() { return taskCode; }
     public void setTaskCode(String taskCode) { this.taskCode = taskCode; }
     public String getPlanKind() { return planKind; }
@@ -63,4 +66,3 @@ public class TaskPlan implements Serializable {
     public Boolean getActive() { return active; }
     public void setActive(Boolean active) { this.active = active; }
 }
-

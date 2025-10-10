@@ -15,7 +15,7 @@ public class TaskMasterService {
 
     public List<TaskMaster> list() { return repository.findAll(); }
 
-    public TaskMaster get(String taskCode) { return repository.find(taskCode); }
+    public TaskMaster get(String taskCode, String departmentCode) { return repository.find(taskCode, departmentCode); }
 
     @Transactional
     public void create(TaskMaster m) { repository.save(m); }
@@ -24,6 +24,5 @@ public class TaskMasterService {
     public void update(TaskMaster m) { repository.update(m); }
 
     @Transactional
-    public void delete(String taskCode) { repository.delete(taskCode); }
+    public void delete(String taskCode, String departmentCode) { repository.delete(taskCode, departmentCode); }
 }
-

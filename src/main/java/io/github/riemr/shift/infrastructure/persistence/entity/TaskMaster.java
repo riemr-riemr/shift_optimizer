@@ -4,6 +4,7 @@ import java.io.Serializable;
 
 public class TaskMaster implements Serializable {
     private String taskCode;
+    private String departmentCode; // 追加: 部門コード
     private String name;
     private String description;
     private String defaultScheduleType;
@@ -16,6 +17,8 @@ public class TaskMaster implements Serializable {
 
     public String getTaskCode() { return taskCode; }
     public void setTaskCode(String taskCode) { this.taskCode = taskCode == null ? null : taskCode.trim(); }
+    public String getDepartmentCode() { return departmentCode; }
+    public void setDepartmentCode(String departmentCode) { this.departmentCode = departmentCode == null ? null : departmentCode.trim(); }
     public String getName() { return name; }
     public void setName(String name) { this.name = name == null ? null : name.trim(); }
     public String getDescription() { return description; }

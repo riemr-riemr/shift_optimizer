@@ -28,7 +28,9 @@
             <tr>
               <th style="min-width: 140px;">従業員コード</th>
               <th style="min-width: 200px;">従業員名</th>
-              <th th:each="t : ${tasks}" th:text="${t.taskCode}" style="white-space: nowrap;"></th>
+              <th th:each="t : ${tasks}"
+                  th:text="${t.taskCode + ' ' + (t.name != null ? t.name : '')}"
+                  style="white-space: nowrap;"></th>
             </tr>
             </thead>
             <tbody>

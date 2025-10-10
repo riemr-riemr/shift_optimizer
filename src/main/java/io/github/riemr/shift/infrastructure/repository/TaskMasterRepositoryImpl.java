@@ -15,8 +15,7 @@ public class TaskMasterRepositoryImpl implements TaskMasterRepository {
 
     @Override public void save(TaskMaster m) { mapper.insert(m); }
     @Override public void update(TaskMaster m) { mapper.updateByPrimaryKey(m); }
-    @Override public void delete(String taskCode) { mapper.deleteByPrimaryKey(taskCode); }
-    @Override public TaskMaster find(String taskCode) { return mapper.selectByPrimaryKey(taskCode); }
+    @Override public void delete(String taskCode, String departmentCode) { mapper.deleteByPrimaryKey(taskCode, departmentCode); }
+    @Override public TaskMaster find(String taskCode, String departmentCode) { return mapper.selectByPrimaryKey(taskCode, departmentCode); }
     @Override public List<TaskMaster> findAll() { return mapper.selectAll(); }
 }
-
