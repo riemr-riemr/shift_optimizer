@@ -379,9 +379,20 @@ ON CONFLICT DO NOTHING;
 -- ------------------------------------------------
 -- 14. Task Master / Weekly Plan / Special Day
 -- ------------------------------------------------
+-- 14-0. task_category_master : 作業カテゴリマスタ
+CREATE TABLE IF NOT EXISTS task_category_master (
+    category_code   VARCHAR(32) PRIMARY KEY,
+    category_name   VARCHAR(100) NOT NULL,
+    display_order   INTEGER,
+    color           VARCHAR(16),
+    icon            VARCHAR(64),
+    active          BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 CREATE TABLE IF NOT EXISTS task_master (
     task_code                    VARCHAR(32),
     department_code              VARCHAR(32),
+    category_code                VARCHAR(32) NULL REFERENCES task_category_master(category_code),
     name                         VARCHAR(100) NOT NULL,
     description                  TEXT,
     default_schedule_type        VARCHAR(10) CHECK (default_schedule_type IN ('FIXED','FLEXIBLE')),
@@ -391,6 +402,7 @@ CREATE TABLE IF NOT EXISTS task_master (
     icon                         VARCHAR(64),
     PRIMARY KEY (task_code, department_code)
 );
+CREATE INDEX IF NOT EXISTS idx_task_master_category ON task_master(category_code);
 
 -- 統合: task_plan（曜日別/特異日を1テーブルに集約）
 CREATE TABLE IF NOT EXISTS task_plan (
@@ -408,6 +420,7 @@ CREATE TABLE IF NOT EXISTS task_plan (
     window_end_time      TIME,
     required_duration_minutes INT,
     required_staff_count INT,
+    lane                 INT NULL,
     must_be_contiguous   SMALLINT,
     effective_from       DATE NULL,
     effective_to         DATE NULL,

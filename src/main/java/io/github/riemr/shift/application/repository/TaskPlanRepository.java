@@ -11,10 +11,12 @@ public interface TaskPlanRepository {
     void delete(Long planId);
     TaskPlan find(Long planId);
     List<TaskPlan> listWeeklyByStoreAndDow(String storeCode, short dayOfWeek);
+    List<TaskPlan> listWeeklyByStoreAndDowAndDept(String storeCode, short dayOfWeek, String departmentCode);
     List<TaskPlan> listWeeklyEffective(String storeCode, short dayOfWeek, Date date);
     List<TaskPlan> listSpecialByStoreAndRange(String storeCode, Date from, Date to);
 
     List<TaskPlan> selectSpecialByStoreAndDate(String storeCode, Date specialDate);
+    List<TaskPlan> selectSpecialByStoreAndDateAndDept(String storeCode, Date specialDate, String departmentCode);
 
     List<Date> listSpecialDatesByStore(String storeCode);
 }

@@ -59,6 +59,7 @@ public class MasterCsvImportJobConfig {
             Step storeStep,
             Step registerTypeStep,
             Step registerStep,
+            Step taskCategoryMasterStep,
             Step taskMasterStep,
             Step employeeStep,
             Step employeeAuthStep,
@@ -78,6 +79,7 @@ public class MasterCsvImportJobConfig {
                 .next(registerTypeStep)
                 .next(registerStep)
                 .next(departmentMasterStep)
+                .next(taskCategoryMasterStep)
                 .next(taskMasterStep)
                 .next(storeDepartmentStep)
                 .next(employeeStep)
@@ -105,9 +107,26 @@ public class MasterCsvImportJobConfig {
     @Bean
     public FlatFileItemReader<TaskMaster> taskMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("task_master.csv"),
-                new String[] { "taskCode", "departmentCode", "name", "description",
+                new String[] { "taskCode", "departmentCode", "categoryCode", "name", "description",
                         "defaultRequiredDurationMinutes", "priority", "color", "icon" },
                 TaskMaster.class);
+    }
+
+    /* === Step : task_category_master.csv ====================================== */
+    @Bean
+    public Step taskCategoryMasterStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster> taskCategoryMasterReader) {
+        return new StepBuilder("taskCategoryMasterStep", jobRepository)
+                .<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster, io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster>chunk(1000, txManager)
+                .reader(taskCategoryMasterReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.TaskCategoryMasterMapper.upsert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster> taskCategoryMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        return csvReader(csvDir.resolve("task_category_master.csv"),
+                new String[] { "categoryCode", "categoryName", "displayOrder", "color", "icon", "active" },
+                io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster.class);
     }
 
     /* === Step : cleanup (optional by job parameter 'clean') ======== */

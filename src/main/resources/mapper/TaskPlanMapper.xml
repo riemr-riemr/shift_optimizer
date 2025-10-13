@@ -16,6 +16,7 @@
     <result column="window_end_time" property="windowEndTime" />
     <result column="required_duration_minutes" property="requiredDurationMinutes" />
     <result column="required_staff_count" property="requiredStaffCount" />
+    <result column="lane" property="lane" />
     <result column="must_be_contiguous" property="mustBeContiguous" />
     <result column="effective_from" property="effectiveFrom" />
     <result column="effective_to" property="effectiveTo" />
@@ -27,20 +28,20 @@
   <sql id="Base_Column_List">
     plan_id, store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
     fixed_start_time, fixed_end_time, window_start_time, window_end_time,
-    required_duration_minutes, required_staff_count, must_be_contiguous,
+    required_duration_minutes, required_staff_count, lane, must_be_contiguous,
     effective_from, effective_to, priority, note, active
   </sql>
 
-  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan">
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan" useGeneratedKeys="true" keyProperty="planId">
     insert into public.task_plan (
       store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
       fixed_start_time, fixed_end_time, window_start_time, window_end_time,
-      required_duration_minutes, required_staff_count, must_be_contiguous,
+      required_duration_minutes, required_staff_count, lane, must_be_contiguous,
       effective_from, effective_to, priority, note, active
     ) values (
       #{storeCode}, #{departmentCode}, #{taskCode}, #{planKind}, #{dayOfWeek}, #{specialDate}, #{scheduleType},
       #{fixedStartTime}, #{fixedEndTime}, #{windowStartTime}, #{windowEndTime},
-      #{requiredDurationMinutes}, #{requiredStaffCount}, #{mustBeContiguous},
+      #{requiredDurationMinutes}, #{requiredStaffCount}, #{lane}, #{mustBeContiguous},
       #{effectiveFrom}, #{effectiveTo}, #{priority}, #{note}, #{active}
     )
   </insert>
@@ -60,6 +61,7 @@
         window_end_time = #{windowEndTime},
         required_duration_minutes = #{requiredDurationMinutes},
         required_staff_count = #{requiredStaffCount},
+        lane = #{lane},
         must_be_contiguous = #{mustBeContiguous},
         effective_from = #{effectiveFrom},
         effective_to = #{effectiveTo},
@@ -82,6 +84,15 @@
     where store_code = #{storeCode}
       and plan_kind = 'WEEKLY'
       and day_of_week = #{dayOfWeek}
+    order by priority nulls last, plan_id
+  </select>
+
+  <select id="selectWeeklyByStoreAndDowAndDept" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'WEEKLY'
+      and day_of_week = #{dayOfWeek}
+      and department_code = #{departmentCode}
     order by priority nulls last, plan_id
   </select>
 
@@ -109,6 +120,15 @@
     where store_code = #{storeCode}
       and plan_kind = 'SPECIAL'
       and special_date = #{specialDate}
+    order by priority nulls last, plan_id
+  </select>
+
+  <select id="selectSpecialByStoreAndDateAndDept" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.task_plan
+    where store_code = #{storeCode}
+      and plan_kind = 'SPECIAL'
+      and special_date = #{specialDate}
+      and department_code = #{departmentCode}
     order by priority nulls last, plan_id
   </select>
 

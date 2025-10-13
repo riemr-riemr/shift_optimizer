@@ -17,6 +17,10 @@ public interface TaskPlanMapper {
     List<TaskPlan> selectWeeklyByStoreAndDow(@Param("storeCode") String storeCode,
                                              @Param("dayOfWeek") short dayOfWeek);
 
+    List<TaskPlan> selectWeeklyByStoreAndDowAndDept(@Param("storeCode") String storeCode,
+                                                    @Param("dayOfWeek") short dayOfWeek,
+                                                    @Param("departmentCode") String departmentCode);
+
     List<TaskPlan> selectWeeklyEffective(@Param("storeCode") String storeCode,
                                          @Param("dayOfWeek") short dayOfWeek,
                                          @Param("date") Date date);
@@ -27,6 +31,10 @@ public interface TaskPlanMapper {
 
     List<TaskPlan> selectSpecialByStoreAndDate(@Param("storeCode") String storeCode,
                                                @Param("specialDate") Date specialDate);
+
+    List<TaskPlan> selectSpecialByStoreAndDateAndDept(@Param("storeCode") String storeCode,
+                                                      @Param("specialDate") Date specialDate,
+                                                      @Param("departmentCode") String departmentCode);
 
     List<Date> selectSpecialDatesByStore(@Param("storeCode") String storeCode);
 }

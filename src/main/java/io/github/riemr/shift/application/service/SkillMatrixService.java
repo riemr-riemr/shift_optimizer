@@ -23,7 +23,9 @@ public class SkillMatrixService {
 
     /** マトリクス表示用データ取得 */
     public SkillMatrixDto loadMatrix() {
-        var employees = employeeMapper.selectAll();  // 全件取得
+        var employees = employeeMapper.selectAll().stream()
+                .peek(e -> { if (e.getStoreCode() == null) e.setStoreCode(""); })
+                .toList();  // 全件取得
         var registers  = registerMapper.selectAll(); // 全件取得
         var skills     = skillMapper.selectByExample(new EmployeeRegisterSkillExample()); // 条件なしで全件
         // employeeCode → { registerNo(Integer) → skillLevel }

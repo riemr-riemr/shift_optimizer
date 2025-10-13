@@ -21,11 +21,22 @@ public class TaskSkillMatrixService {
     private final EmployeeTaskSkillMapper employeeTaskSkillMapper;
 
     public List<Employee> listEmployees() {
-        return employeeMapper.selectAll();
+        return employeeMapper.selectAll().stream()
+                .peek(e -> { if (e.getStoreCode() == null) e.setStoreCode(""); })
+                .toList();
     }
 
     public List<TaskMaster> listTasks() {
-        return taskMasterMapper.selectAll();
+        return taskMasterMapper.selectAll().stream()
+                .peek(t -> {
+                    if (t.getDepartmentCode() == null || t.getDepartmentCode().isBlank()) {
+                        t.setDepartmentCode("520");
+                    }
+                    if (t.getName() == null || t.getName().isBlank()) {
+                        t.setName(t.getTaskCode());
+                    }
+                })
+                .toList();
     }
 
     public Map<String, Map<String, Short>> loadMatrix() {
@@ -56,4 +67,3 @@ public class TaskSkillMatrixService {
         }
     }
 }
-

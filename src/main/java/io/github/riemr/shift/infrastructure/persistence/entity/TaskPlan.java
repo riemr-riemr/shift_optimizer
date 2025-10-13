@@ -18,6 +18,7 @@ public class TaskPlan implements Serializable {
     private Date windowEndTime;
     private Integer requiredDurationMinutes;
     private Integer requiredStaffCount;
+    private Integer lane; // 1-based lane index for grid display
     private Short mustBeContiguous;
     private Date effectiveFrom;
     private Date effectiveTo;
@@ -53,6 +54,8 @@ public class TaskPlan implements Serializable {
     public void setRequiredDurationMinutes(Integer requiredDurationMinutes) { this.requiredDurationMinutes = requiredDurationMinutes; }
     public Integer getRequiredStaffCount() { return requiredStaffCount; }
     public void setRequiredStaffCount(Integer requiredStaffCount) { this.requiredStaffCount = requiredStaffCount; }
+    public Integer getLane() { return lane; }
+    public void setLane(Integer lane) { this.lane = lane; }
     public Short getMustBeContiguous() { return mustBeContiguous; }
     public void setMustBeContiguous(Short mustBeContiguous) { this.mustBeContiguous = mustBeContiguous; }
     public Date getEffectiveFrom() { return effectiveFrom; }
