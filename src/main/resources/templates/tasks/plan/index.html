@@ -71,8 +71,9 @@
       </form>
 
       <!-- 追加UI: 曜日は表示のみ。特異日はダイアログで追加 -->
-      <div class="mb-3">
+      <div class="mb-3 d-flex gap-2">
         <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#specialAddModal">特異日追加</button>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#planCopyModal">計画をコピー</button>
       </div>
 
       <!-- 適用処理は月次シフト最適化時に実行されます -->
@@ -246,6 +247,60 @@
             </form>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 計画コピー モーダル -->
+  <div class="modal fade" id="planCopyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">表示中の計画をコピー</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form th:action="@{/tasks/plan/copy}" method="post">
+          <input type="hidden" name="store" th:value="${storeCode}">
+          <input type="hidden" name="dept" th:value="${dept}">
+          <input type="hidden" name="mode" th:value="${mode}">
+          <input type="hidden" name="day" th:value="${day}">
+          <input type="hidden" name="sd" th:value="${sd}">
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="form-text">週次表示の場合は他の曜日へ、特異日表示の場合は他の曜日や特異日へコピーできます。</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">曜日へコピー（複数選択可）</label>
+                <div class="d-flex flex-wrap gap-3">
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="1" id="dow1"><label class="form-check-label" for="dow1">月</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="2" id="dow2"><label class="form-check-label" for="dow2">火</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="3" id="dow3"><label class="form-check-label" for="dow3">水</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="4" id="dow4"><label class="form-check-label" for="dow4">木</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="5" id="dow5"><label class="form-check-label" for="dow5">金</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="6" id="dow6"><label class="form-check-label" for="dow6">土</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="7" id="dow7"><label class="form-check-label" for="dow7">日</label></div>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">特異日へコピー（複数選択可）</label>
+                <select class="form-select" name="targetDate" multiple size="6">
+                  <option th:each="dm : ${days}"
+                          th:value="${#dates.format(dm.specialDate,'yyyy-MM-dd')}"
+                          th:text="${#dates.format(dm.specialDate,'MM/dd')} + ' ' + ${dm.label}"></option>
+                </select>
+                <div class="form-text">特異日は設定済みの一覧から選択します。</div>
+              </div>
+              <div class="col-12">
+                <div class="form-text text-danger">対象の曜日/日付に既存の計画がある場合は全て置き換え（削除後にコピー）されます。</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+            <button type="submit" class="btn btn-primary">コピー実行</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

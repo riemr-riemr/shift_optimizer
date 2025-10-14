@@ -138,4 +138,20 @@
       and plan_kind = 'SPECIAL'
     order by special_date
   </select>
+
+  <delete id="deleteWeeklyByStoreDeptAndDow">
+    delete from public.task_plan
+    where store_code = #{storeCode}
+      and department_code = #{departmentCode}
+      and plan_kind = 'WEEKLY'
+      and day_of_week = #{dayOfWeek}
+  </delete>
+
+  <delete id="deleteSpecialByStoreDeptAndDate">
+    delete from public.task_plan
+    where store_code = #{storeCode}
+      and department_code = #{departmentCode}
+      and plan_kind = 'SPECIAL'
+      and special_date = #{specialDate}
+  </delete>
 </mapper>

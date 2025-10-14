@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.ArrayList;
 
 @Controller
 @RequestMapping("/tasks")
@@ -93,6 +94,8 @@ public class TaskPlanController {
         // カテゴリリストを追加
         model.addAttribute("categories", taskCategoryMasterMapper.selectAll());
         if (storeCode != null) {
+            // Always provide special days list for copy modal
+            model.addAttribute("days", daysMasterRepository.listSpecialByStore(storeCode));
             List<?> results = null;
             if ("weekly".equalsIgnoreCase(mode)) {
                 short dow = dayOfWeek == null ? 1 : dayOfWeek;
@@ -103,8 +106,7 @@ public class TaskPlanController {
                 }
                 model.addAttribute("list", results);
             } else {
-                // tabs: special dates list from days_master
-                model.addAttribute("days", daysMasterRepository.listSpecialByStore(storeCode));
+                // tabs: special dates list from days_master (already set above as well)
                 if (selectedDate != null) {
                     Date specDate = Date.from(selectedDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
                     if (departmentCode != null && !departmentCode.isBlank()) {
@@ -308,6 +310,37 @@ public class TaskPlanController {
         if (departmentCode != null && !departmentCode.isBlank()) {
             redirect += "&dept=" + departmentCode;
         }
+        return redirect;
+    }
+
+    @PostMapping("/plan/copy")
+    public String copyPlans(@RequestParam("store") String storeCode,
+                            @RequestParam("dept") String departmentCode,
+                            @RequestParam("mode") String mode,
+                            @RequestParam(name = "day", required = false) Short sourceDayOfWeek,
+                            @RequestParam(name = "sd", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate sourceDate,
+                            @RequestParam(name = "targetDow", required = false) List<Short> targetDows,
+                            @RequestParam(name = "targetDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) List<LocalDate> targetDates,
+                            @RequestParam(name = "dates", required = false) String datesCsv) {
+        // Parse datesCsv if provided (comma/space/newline separated)
+        if ((targetDates == null || targetDates.isEmpty()) && datesCsv != null && !datesCsv.isBlank()) {
+            String[] parts = datesCsv.split("[\\s,;]+");
+            targetDates = new ArrayList<>();
+            for (String s : parts) {
+                if (s == null || s.isBlank()) continue;
+                targetDates.add(LocalDate.parse(s.trim()));
+            }
+        }
+        // Always replace existing plans at targets as per requirements
+        boolean replace = true;
+        planService.copyFromCurrentView(storeCode, departmentCode, mode, sourceDayOfWeek, sourceDate, targetDows, targetDates, replace);
+        String redirect = "redirect:/tasks/plan?store=" + storeCode + "&mode=" + mode;
+        if ("weekly".equalsIgnoreCase(mode)) {
+            redirect += "&day=" + (sourceDayOfWeek == null ? 1 : sourceDayOfWeek);
+        } else if (sourceDate != null) {
+            redirect += "&sd=" + sourceDate;
+        }
+        if (departmentCode != null && !departmentCode.isBlank()) redirect += "&dept=" + departmentCode;
         return redirect;
     }
 

@@ -22,6 +22,94 @@ public class TaskPlanService {
     }
 
     @Transactional
+    public int copyFromCurrentView(String storeCode,
+                                   String departmentCode,
+                                   String mode,
+                                   Short sourceDayOfWeek,
+                                   LocalDate sourceDate,
+                                   List<Short> targetDaysOfWeek,
+                                   List<LocalDate> targetDates,
+                                   boolean replaceExisting) {
+        Objects.requireNonNull(storeCode, "storeCode is required");
+        Objects.requireNonNull(departmentCode, "departmentCode is required");
+        if (!"weekly".equalsIgnoreCase(mode) && !"special".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("mode must be weekly or special");
+        }
+
+        List<TaskPlan> sourcePlans;
+        if ("weekly".equalsIgnoreCase(mode)) {
+            if (sourceDayOfWeek == null) throw new IllegalArgumentException("dayOfWeek required for weekly mode");
+            sourcePlans = planRepository.listWeeklyByStoreAndDowAndDept(storeCode, sourceDayOfWeek, departmentCode);
+        } else {
+            if (sourceDate == null) throw new IllegalArgumentException("special date required for special mode");
+            Date sd = toDate(sourceDate);
+            sourcePlans = planRepository.selectSpecialByStoreAndDateAndDept(storeCode, sd, departmentCode);
+        }
+
+        int created = 0;
+        // Copy to weekly targets
+        if (targetDaysOfWeek != null) {
+            for (Short dow : targetDaysOfWeek) {
+                if (dow == null) continue;
+                if (replaceExisting) {
+                    planRepository.deleteWeeklyByStoreDeptAndDow(storeCode, departmentCode, dow);
+                }
+                for (TaskPlan p : sourcePlans) {
+                    TaskPlan copy = clonePlan(p);
+                    copy.setPlanId(null);
+                    copy.setPlanKind("WEEKLY");
+                    copy.setDayOfWeek(dow);
+                    copy.setSpecialDate(null);
+                    planRepository.save(copy);
+                    created++;
+                }
+            }
+        }
+        // Copy to special date targets
+        if (targetDates != null) {
+            for (LocalDate d : targetDates) {
+                if (d == null) continue;
+                Date dd = toDate(d);
+                if (replaceExisting) {
+                    planRepository.deleteSpecialByStoreDeptAndDate(storeCode, departmentCode, dd);
+                }
+                for (TaskPlan p : sourcePlans) {
+                    TaskPlan copy = clonePlan(p);
+                    copy.setPlanId(null);
+                    copy.setPlanKind("SPECIAL");
+                    copy.setSpecialDate(dd);
+                    copy.setDayOfWeek(null);
+                    planRepository.save(copy);
+                    created++;
+                }
+            }
+        }
+        return created;
+    }
+
+    private TaskPlan clonePlan(TaskPlan p) {
+        TaskPlan c = new TaskPlan();
+        c.setStoreCode(p.getStoreCode());
+        c.setDepartmentCode(p.getDepartmentCode());
+        c.setTaskCode(p.getTaskCode());
+        c.setScheduleType(p.getScheduleType());
+        c.setFixedStartTime(p.getFixedStartTime());
+        c.setFixedEndTime(p.getFixedEndTime());
+        c.setWindowStartTime(p.getWindowStartTime());
+        c.setWindowEndTime(p.getWindowEndTime());
+        c.setRequiredDurationMinutes(p.getRequiredDurationMinutes());
+        c.setRequiredStaffCount(p.getRequiredStaffCount());
+        c.setLane(p.getLane());
+        c.setMustBeContiguous(p.getMustBeContiguous());
+        c.setEffectiveFrom(p.getEffectiveFrom());
+        c.setEffectiveTo(p.getEffectiveTo());
+        c.setPriority(p.getPriority());
+        c.setNote(p.getNote());
+        c.setActive(p.getActive());
+        return c;
+    }
+
+    @Transactional
     public int applyReplacing(String storeCode, LocalDate from, LocalDate to, String createdBy) {
         Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
         Date toDate = Date.from(to.atStartOfDay(ZoneId.systemDefault()).toInstant());

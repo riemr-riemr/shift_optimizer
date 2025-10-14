@@ -37,4 +37,12 @@ public interface TaskPlanMapper {
                                                       @Param("departmentCode") String departmentCode);
 
     List<Date> selectSpecialDatesByStore(@Param("storeCode") String storeCode);
+
+    int deleteWeeklyByStoreDeptAndDow(@Param("storeCode") String storeCode,
+                                      @Param("departmentCode") String departmentCode,
+                                      @Param("dayOfWeek") short dayOfWeek);
+
+    int deleteSpecialByStoreDeptAndDate(@Param("storeCode") String storeCode,
+                                        @Param("departmentCode") String departmentCode,
+                                        @Param("specialDate") Date specialDate);
 }

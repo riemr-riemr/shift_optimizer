@@ -19,4 +19,8 @@ public interface TaskPlanRepository {
     List<TaskPlan> selectSpecialByStoreAndDateAndDept(String storeCode, Date specialDate, String departmentCode);
 
     List<Date> listSpecialDatesByStore(String storeCode);
+
+    // Deletions for replace mode during copy
+    void deleteWeeklyByStoreDeptAndDow(String storeCode, String departmentCode, short dayOfWeek);
+    void deleteSpecialByStoreDeptAndDate(String storeCode, String departmentCode, Date specialDate);
 }
