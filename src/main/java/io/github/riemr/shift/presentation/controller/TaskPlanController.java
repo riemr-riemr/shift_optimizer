@@ -7,6 +7,10 @@ import io.github.riemr.shift.infrastructure.persistence.entity.DaysMaster;
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
+import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.Store;
+import io.github.riemr.shift.infrastructure.mapper.TaskCategoryMasterMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -30,17 +34,23 @@ public class TaskPlanController {
     private final TaskMasterService taskMasterService;
     private final DaysMasterRepository daysMasterRepository;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
+    private final StoreMapper storeMapper;
+    private final TaskCategoryMasterMapper taskCategoryMasterMapper;
 
     public TaskPlanController(TaskPlanRepository planRepository,
                               TaskPlanService planService,
                               TaskMasterService taskMasterService,
                               DaysMasterRepository daysMasterRepository,
-                              DepartmentSkillMatrixService departmentSkillMatrixService) {
+                              DepartmentSkillMatrixService departmentSkillMatrixService,
+                              StoreMapper storeMapper,
+                              TaskCategoryMasterMapper taskCategoryMasterMapper) {
         this.planRepository = planRepository;
         this.planService = planService;
         this.taskMasterService = taskMasterService;
         this.daysMasterRepository = daysMasterRepository;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
+        this.storeMapper = storeMapper;
+        this.taskCategoryMasterMapper = taskCategoryMasterMapper;
     }
 
     @InitBinder
@@ -76,6 +86,12 @@ public class TaskPlanController {
         model.addAttribute("from", from);
         model.addAttribute("to", to);
         model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
+        
+        // 店舗リストを追加
+        model.addAttribute("stores", storeMapper.selectByExample(null));
+        
+        // カテゴリリストを追加
+        model.addAttribute("categories", taskCategoryMasterMapper.selectAll());
         if (storeCode != null) {
             List<?> results = null;
             if ("weekly".equalsIgnoreCase(mode)) {
