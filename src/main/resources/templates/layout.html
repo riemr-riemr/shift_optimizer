@@ -235,6 +235,12 @@
                         作業マスタ
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/tasks/categories}">
+                        <i class="bi bi-tags"></i>
+                        作業カテゴリマスタ
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)}">
                     <a th:href="@{/employees}">
                         <i class="bi bi-person-badge"></i>

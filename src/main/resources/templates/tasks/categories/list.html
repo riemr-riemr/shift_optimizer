@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業カテゴリマスタ</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    .color-picker-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+    .color-preview {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      display: inline-block;
+      cursor: pointer;
+      position: relative;
+    }
+    .color-input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .predefined-colors {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 5px;
+    }
+    .color-option {
+      width: 25px;
+      height: 25px;
+      border: 2px solid #ddd;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .color-option:hover {
+      border-color: #007bff;
+    }
+    .color-option.selected {
+      border-color: #007bff;
+      border-width: 3px;
+    }
+    .category-color-sample {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid #ddd;
+      margin-right: 8px;
+    }
+    .icon-selector {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      background-color: #f8f9fa;
+    }
+    .icon-option {
+      text-align: center;
+      padding: 10px;
+      border: 2px solid transparent;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background-color: white;
+    }
+    .icon-option:hover {
+      border-color: #007bff;
+      background-color: #e3f2fd;
+    }
+    .icon-option.selected {
+      border-color: #007bff;
+      background-color: #e3f2fd;
+    }
+    .icon-option i {
+      font-size: 24px;
+      color: #495057;
+    }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>作業カテゴリマスタ</span>
+      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal">カテゴリ追加</button>
+    </div>
+    <div class="card-body">
+      <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>コード</th>
+            <th>名称</th>
+            <th>表示順</th>
+            <th>アイコン</th>
+            <th>色</th>
+            <th>有効</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="category : ${categories}">
+            <td th:text="${category.categoryCode}"></td>
+            <td th:text="${category.categoryName}"></td>
+            <td th:text="${category.displayOrder}"></td>
+            <td>
+              <i th:if="${category.icon != null and category.icon != ''}" 
+                 th:class="${category.icon}" 
+                 th:title="${category.icon}"></i>
+              <span th:if="${category.icon == null or category.icon == ''}" class="text-muted">なし</span>
+            </td>
+            <td>
+              <div class="category-color-sample" 
+                   th:style="'background-color: ' + ${category.color != null ? category.color : '#f8f9fa'}"></div>
+            </td>
+            <td>
+              <span class="badge" 
+                    th:classappend="${category.active} ? 'bg-success' : 'bg-secondary'"
+                    th:text="${category.active} ? '有効' : '無効'"></span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 edit-btn" 
+                      th:data-category-code="${category.categoryCode}"
+                      th:data-category-name="${category.categoryName}"
+                      th:data-display-order="${category.displayOrder}"
+                      th:data-color="${category.color}"
+                      th:data-icon="${category.icon}"
+                      th:data-active="${category.active}">編集</button>
+              <form th:action="@{'/tasks/categories/' + ${category.categoryCode} + '/delete'}" method="post" class="d-inline">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn btn-sm btn-outline-danger" 
+                        onclick="return confirm('このカテゴリを削除しますか？')">削除</button>
+              </form>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 追加モーダル -->
+  <div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">カテゴリ追加</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form th:action="@{/tasks/categories}" method="post">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">カテゴリコード</label>
+              <input type="text" class="form-control" name="categoryCode" required maxlength="32">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">カテゴリ名</label>
+              <input type="text" class="form-control" name="categoryName" required maxlength="100">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">表示順</label>
+              <input type="number" class="form-control" name="displayOrder" min="1" max="999">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">色</label>
+              <div class="color-picker-wrapper">
+                <div class="color-preview" id="addColorPreview" style="background-color: #007bff;" onclick="document.getElementById('addColorInput').click()"></div>
+                <input type="color" class="color-input" name="color" id="addColorInput" value="#007bff">
+              </div>
+              <div class="predefined-colors">
+                <div class="color-option" style="background-color: #007bff" data-color="#007bff"></div>
+                <div class="color-option" style="background-color: #28a745" data-color="#28a745"></div>
+                <div class="color-option" style="background-color: #dc3545" data-color="#dc3545"></div>
+                <div class="color-option" style="background-color: #ffc107" data-color="#ffc107"></div>
+                <div class="color-option" style="background-color: #17a2b8" data-color="#17a2b8"></div>
+                <div class="color-option" style="background-color: #6f42c1" data-color="#6f42c1"></div>
+                <div class="color-option" style="background-color: #fd7e14" data-color="#fd7e14"></div>
+                <div class="color-option" style="background-color: #20c997" data-color="#20c997"></div>
+                <div class="color-option" style="background-color: #6c757d" data-color="#6c757d"></div>
+                <div class="color-option" style="background-color: #343a40" data-color="#343a40"></div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">アイコン</label>
+              <div class="icon-selector">
+                <div class="row g-2 mb-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-cash-register">
+                      <i class="fas fa-cash-register"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-boxes">
+                      <i class="fas fa-boxes"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-broom">
+                      <i class="fas fa-broom"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-clipboard-list">
+                      <i class="fas fa-clipboard-list"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-handshake">
+                      <i class="fas fa-handshake"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-file-alt">
+                      <i class="fas fa-file-alt"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-utensils">
+                      <i class="fas fa-utensils"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-shopping-cart">
+                      <i class="fas fa-shopping-cart"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="row g-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-truck">
+                      <i class="fas fa-truck"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-tools">
+                      <i class="fas fa-tools"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-users">
+                      <i class="fas fa-users"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-cog">
+                      <i class="fas fa-cog"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" name="icon" id="addIconInput">
+            </div>
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="active" id="addActive" checked>
+                <label class="form-check-label" for="addActive">有効</label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+            <button type="submit" class="btn btn-primary">追加</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 編集モーダル -->
+  <div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">カテゴリ編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="editForm" method="post">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">カテゴリコード</label>
+              <input type="text" class="form-control" id="editCategoryCode" readonly>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">カテゴリ名</label>
+              <input type="text" class="form-control" name="categoryName" id="editCategoryName" required maxlength="100">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">表示順</label>
+              <input type="number" class="form-control" name="displayOrder" id="editDisplayOrder" min="1" max="999">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">色</label>
+              <div class="color-picker-wrapper">
+                <div class="color-preview" id="editColorPreview" onclick="document.getElementById('editColorInput').click()"></div>
+                <input type="color" class="color-input" name="color" id="editColorInput">
+              </div>
+              <div class="predefined-colors" id="editPredefinedColors">
+                <div class="color-option" style="background-color: #007bff" data-color="#007bff"></div>
+                <div class="color-option" style="background-color: #28a745" data-color="#28a745"></div>
+                <div class="color-option" style="background-color: #dc3545" data-color="#dc3545"></div>
+                <div class="color-option" style="background-color: #ffc107" data-color="#ffc107"></div>
+                <div class="color-option" style="background-color: #17a2b8" data-color="#17a2b8"></div>
+                <div class="color-option" style="background-color: #6f42c1" data-color="#6f42c1"></div>
+                <div class="color-option" style="background-color: #fd7e14" data-color="#fd7e14"></div>
+                <div class="color-option" style="background-color: #20c997" data-color="#20c997"></div>
+                <div class="color-option" style="background-color: #6c757d" data-color="#6c757d"></div>
+                <div class="color-option" style="background-color: #343a40" data-color="#343a40"></div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">アイコン</label>
+              <div class="icon-selector" id="editIconSelector">
+                <div class="row g-2 mb-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-cash-register">
+                      <i class="fas fa-cash-register"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-boxes">
+                      <i class="fas fa-boxes"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-broom">
+                      <i class="fas fa-broom"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-clipboard-list">
+                      <i class="fas fa-clipboard-list"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-handshake">
+                      <i class="fas fa-handshake"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-file-alt">
+                      <i class="fas fa-file-alt"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-utensils">
+                      <i class="fas fa-utensils"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-shopping-cart">
+                      <i class="fas fa-shopping-cart"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="row g-2">
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-truck">
+                      <i class="fas fa-truck"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-tools">
+                      <i class="fas fa-tools"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-users">
+                      <i class="fas fa-users"></i>
+                    </div>
+                  </div>
+                  <div class="col-3">
+                    <div class="icon-option" data-icon="fas fa-cog">
+                      <i class="fas fa-cog"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" name="icon" id="editIconInput">
+            </div>
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="active" id="editActive">
+                <label class="form-check-label" for="editActive">有効</label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+            <button type="submit" class="btn btn-primary">更新</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 色選択機能
+    document.addEventListener('DOMContentLoaded', function() {
+      // 追加モーダルの色選択
+      const addColorInput = document.getElementById('addColorInput');
+      const addColorPreview = document.getElementById('addColorPreview');
+      const addPredefinedColors = document.querySelectorAll('#addCategoryModal .color-option');
+      
+      addColorInput.addEventListener('input', function() {
+        addColorPreview.style.backgroundColor = this.value;
+        updateColorSelection(addPredefinedColors, this.value);
+      });
+      
+      addPredefinedColors.forEach(option => {
+        option.addEventListener('click', function() {
+          const color = this.getAttribute('data-color');
+          addColorInput.value = color;
+          addColorPreview.style.backgroundColor = color;
+          updateColorSelection(addPredefinedColors, color);
+        });
+      });
+      
+      // 編集モーダルの色選択
+      const editColorInput = document.getElementById('editColorInput');
+      const editColorPreview = document.getElementById('editColorPreview');
+      const editPredefinedColors = document.querySelectorAll('#editPredefinedColors .color-option');
+      
+      editColorInput.addEventListener('input', function() {
+        editColorPreview.style.backgroundColor = this.value;
+        updateColorSelection(editPredefinedColors, this.value);
+      });
+      
+      editPredefinedColors.forEach(option => {
+        option.addEventListener('click', function() {
+          const color = this.getAttribute('data-color');
+          editColorInput.value = color;
+          editColorPreview.style.backgroundColor = color;
+          updateColorSelection(editPredefinedColors, color);
+        });
+      });
+      
+      // 編集ボタンのイベントリスナー
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const categoryCode = this.getAttribute('data-category-code');
+          const categoryName = this.getAttribute('data-category-name');
+          const displayOrder = this.getAttribute('data-display-order');
+          const color = this.getAttribute('data-color');
+          const icon = this.getAttribute('data-icon');
+          const active = this.getAttribute('data-active') === 'true';
+          
+          editCategory(categoryCode, categoryName, displayOrder, color, icon, active);
+        });
+      });
+      
+      // アイコン選択機能
+      setupIconSelector('#addCategoryModal', '#addIconInput');
+      setupIconSelector('#editCategoryModal', '#editIconInput');
+    });
+    
+    function setupIconSelector(modalSelector, inputSelector) {
+      const modal = document.querySelector(modalSelector);
+      const iconInput = document.querySelector(inputSelector);
+      
+      if (!modal || !iconInput) return;
+      
+      const iconOptions = modal.querySelectorAll('.icon-option');
+      iconOptions.forEach(option => {
+        option.addEventListener('click', function() {
+          // Remove selected class from all options in this modal
+          iconOptions.forEach(opt => opt.classList.remove('selected'));
+          // Add selected class to clicked option
+          this.classList.add('selected');
+          // Update hidden input
+          iconInput.value = this.getAttribute('data-icon');
+        });
+      });
+    }
+    
+    function updateIconSelection(modalSelector, selectedIcon) {
+      const modal = document.querySelector(modalSelector);
+      if (!modal) return;
+      
+      const iconOptions = modal.querySelectorAll('.icon-option');
+      iconOptions.forEach(option => {
+        if (option.getAttribute('data-icon') === selectedIcon) {
+          option.classList.add('selected');
+        } else {
+          option.classList.remove('selected');
+        }
+      });
+    }
+    
+    function updateColorSelection(options, selectedColor) {
+      options.forEach(option => {
+        if (option.getAttribute('data-color') === selectedColor) {
+          option.classList.add('selected');
+        } else {
+          option.classList.remove('selected');
+        }
+      });
+    }
+    
+    function editCategory(categoryCode, categoryName, displayOrder, color, icon, active) {
+      document.getElementById('editCategoryCode').value = categoryCode;
+      document.getElementById('editCategoryName').value = categoryName;
+      document.getElementById('editDisplayOrder').value = displayOrder || '';
+      document.getElementById('editColorInput').value = color || '#007bff';
+      document.getElementById('editColorPreview').style.backgroundColor = color || '#007bff';
+      document.getElementById('editIconInput').value = icon || '';
+      document.getElementById('editActive').checked = active;
+      
+      // 編集フォームのアクションURLを設定
+      document.getElementById('editForm').action = '/tasks/categories/' + categoryCode + '/update';
+      
+      // 色選択状態を更新
+      const editPredefinedColors = document.querySelectorAll('#editPredefinedColors .color-option');
+      updateColorSelection(editPredefinedColors, color || '#007bff');
+      
+      // アイコン選択状態を更新
+      updateIconSelection('#editCategoryModal', icon || '');
+      
+      // モーダルを表示
+      new bootstrap.Modal(document.getElementById('editCategoryModal')).show();
+    }
+  </script>
+</main>
+</body>
+</html>
