@@ -53,22 +53,8 @@ public class TaskController {
         } else {
             taskService.createFlexibleTask(form, createdBy);
         }
-        return "redirect:/tasks?store=" + form.getStoreCode() + "&date=" + form.getWorkDate();
-    }
-
-    @GetMapping
-    public String list(@RequestParam(name = "store", required = false) String storeCode,
-                       @RequestParam(name = "date", required = false)
-                       @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-                       Model model) {
-        model.addAttribute("storeCode", storeCode);
-        model.addAttribute("date", date);
-        if (storeCode != null && date != null) {
-            model.addAttribute("tasks", taskService.list(storeCode, date));
-        } else {
-            model.addAttribute("tasks", java.util.Collections.emptyList());
-        }
-        return "tasks/list";
+        // Redirect to task plan page after creation instead of list screen
+        return "redirect:/tasks/plan?store=" + form.getStoreCode() + "&sd=" + form.getWorkDate();
     }
 
     @PostMapping("/{taskId}/assign")
@@ -80,6 +66,7 @@ public class TaskController {
                          @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         String createdBy = "system"; // TODO auth user
         assignmentService.assignManually(taskId, employeeCode, startAt, endAt, createdBy);
-        return "redirect:/tasks?store=" + storeCode + "&date=" + date;
+        // Redirect to task plan page after assignment instead of list screen
+        return "redirect:/tasks/plan?store=" + storeCode + "&sd=" + date;
     }
 }
