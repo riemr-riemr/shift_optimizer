@@ -1,88 +1,197 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout}">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
 <head>
-  <title>従業員管理</title>
+  <meta charset="UTF-8">
+  <title>従業員マスタ</title>
 </head>
 <body>
-<div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-people"></i> 従業員管理</h1>
-    <p class="mb-0">従業員の基本情報と勤務条件を管理できます</p>
-  </div>
-
-  <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0"><i class="bi bi-list-ul"></i> 従業員一覧</h5>
-      <a class="btn btn-success" th:href="@{/employees/new}">
-        <i class="bi bi-plus-lg"></i> 新規登録
-      </a>
+<main layout:fragment="content">
+  <div th:replace="~{fragments/master-layout :: master-list-modal('従業員マスタ', 'bi bi-people', ~{::add-modal}, ~{::data-table}, ~{::edit-modal})}">
+    
+    <!-- Data Table -->
+    <div th:fragment="data-table" class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>従業員コード</th>
+            <th>氏名</th>
+            <th>店舗コード</th>
+            <th>日上限(分)</th>
+            <th>月上限(日)</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="e : ${employees}">
+            <td th:text="${e.employeeCode}"></td>
+            <td th:text="${e.employeeName}"></td>
+            <td>
+              <span class="badge bg-info" th:text="${e.storeCode}"></span>
+            </td>
+            <td class="text-end" th:text="${e.maxWorkMinutesDay}"></td>
+            <td class="text-end" th:text="${e.maxWorkDaysMonth}"></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 edit-btn"
+                      th:data-employee-code="${e.employeeCode}"
+                      th:data-employee-name="${e.employeeName}"
+                      th:data-store-code="${e.storeCode}"
+                      th:data-max-work-minutes-day="${e.maxWorkMinutesDay}"
+                      th:data-max-work-days-month="${e.maxWorkDaysMonth}">編集</button>
+              <form th:action="@{'/employees/' + ${e.employeeCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('従業員「' + '[[${e.employeeName}]]' + '」を削除しますか？');">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn btn-sm btn-outline-danger">削除</button>
+              </form>
+            </td>
+          </tr>
+          <tr th:if="${#lists.isEmpty(employees)}">
+            <td colspan="6" class="text-center text-muted py-4">
+              <i class="bi bi-inbox display-4 d-block mb-2"></i>
+              登録されている従業員がありません
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover table-striped mb-0">
-          <thead class="table-dark">
-            <tr>
-              <th scope="col"><i class="bi bi-person-badge"></i> 従業員コード</th>
-              <th scope="col"><i class="bi bi-person"></i> 氏名</th>
-              <th scope="col"><i class="bi bi-shop"></i> 店舗コード</th>
-              <th scope="col"><i class="bi bi-clock"></i> 日上限(分)</th>
-              <th scope="col"><i class="bi bi-calendar-date"></i> 月上限(日)</th>
-              <th scope="col" class="text-center"><i class="bi bi-gear"></i> 操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr th:each="e : ${employees}">
-              <td class="fw-bold text-primary" th:text="${e.employeeCode}"></td>
-              <td th:text="${e.employeeName}"></td>
-              <td>
-                <span class="badge bg-info" th:text="${e.storeCode}"></span>
-              </td>
-              <td class="text-end" th:text="${e.maxWorkMinutesDay}"></td>
-              <td class="text-end" th:text="${e.maxWorkDaysMonth}"></td>
-              <td class="text-center">
-                <div class="btn-group btn-group-sm" role="group">
-                  <a th:href="@{|/employees/${e.employeeCode}|}" 
-                     class="btn btn-outline-primary" 
-                     title="編集">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <form th:action="@{|/employees/${e.employeeCode}/delete|}" 
-                        method="post" 
-                        class="d-inline"
-                        onsubmit="return confirm('従業員「' + '[[${e.employeeName}]]' + '」を削除しますか？');">
-                    <button type="submit" 
-                            class="btn btn-outline-danger" 
-                            title="削除">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
+
+    <!-- Add Modal -->
+    <div th:fragment="add-modal" class="modal fade" id="addModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">従業員追加</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form th:action="@{/employees}" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員コード</label>
+                    <input type="text" class="form-control" name="employeeCode" required maxlength="32">
+                  </div>
                 </div>
-              </td>
-            </tr>
-            <tr th:if="${#lists.isEmpty(employees)}">
-              <td colspan="6" class="text-center text-muted py-4">
-                <i class="bi bi-inbox display-4 d-block mb-2"></i>
-                登録されている従業員がありません
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員名</label>
+                    <input type="text" class="form-control" name="employeeName" required maxlength="100">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">店舗コード</label>
+                    <input type="text" class="form-control" name="storeCode" required maxlength="32">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日上限(分)</label>
+                    <input type="number" class="form-control" name="maxWorkMinutesDay" min="1" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">月上限(日)</label>
+                    <input type="number" class="form-control" name="maxWorkDaysMonth" min="1" max="31">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
+
+    <!-- Edit Modal -->
+    <div th:fragment="edit-modal" class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">従業員編集</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="editForm" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員コード</label>
+                    <input type="text" class="form-control" id="editEmployeeCode" readonly>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員名</label>
+                    <input type="text" class="form-control" name="employeeName" id="editEmployeeName" required maxlength="100">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">店舗コード</label>
+                    <input type="text" class="form-control" name="storeCode" id="editStoreCode" required maxlength="32">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日上限(分)</label>
+                    <input type="number" class="form-control" name="maxWorkMinutesDay" id="editMaxWorkMinutesDay" min="1" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">月上限(日)</label>
+                    <input type="number" class="form-control" name="maxWorkDaysMonth" id="editMaxWorkDaysMonth" min="1" max="31">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <div class="mt-3 d-flex justify-content-between align-items-center text-muted">
-    <small>
-      <i class="bi bi-info-circle"></i> 
-      従業員総数: <span class="fw-bold" th:text="${#lists.size(employees)}">0</span>名
-    </small>
-    <small>
-      <i class="bi bi-lightbulb"></i> 
-      ヒント: 従業員コードをクリックして編集できます
-    </small>
-  </div>
-</div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const employeeCode = this.getAttribute('data-employee-code');
+          const employeeName = this.getAttribute('data-employee-name');
+          const storeCode = this.getAttribute('data-store-code');
+          const maxWorkMinutesDay = this.getAttribute('data-max-work-minutes-day');
+          const maxWorkDaysMonth = this.getAttribute('data-max-work-days-month');
+          
+          document.getElementById('editEmployeeCode').value = employeeCode;
+          document.getElementById('editEmployeeName').value = employeeName;
+          document.getElementById('editStoreCode').value = storeCode;
+          document.getElementById('editMaxWorkMinutesDay').value = maxWorkMinutesDay || '';
+          document.getElementById('editMaxWorkDaysMonth').value = maxWorkDaysMonth || '';
+          
+          document.getElementById('editForm').action = '/employees/' + employeeCode + '/update';
+          
+          new bootstrap.Modal(document.getElementById('editModal')).show();
+        });
+      });
+    });
+  </script>
+</main>
 </body>
 </html>

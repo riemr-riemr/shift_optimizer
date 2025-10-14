@@ -6,40 +6,151 @@
 </head>
 <body>
 <main layout:fragment="content">
-  <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span>作業マスタ</span>
-    </div>
-    <div class="card-body">
-      <form th:action="@{/tasks/master}" th:object="${form}" method="post" class="row g-2 mb-3">
-        <div class="col-auto"><input class="form-control form-control-sm" placeholder="コード" th:field="*{taskCode}" required></div>
-        <div class="col-auto"><input class="form-control form-control-sm" placeholder="部門コード" th:field="*{departmentCode}"></div>
-        <div class="col-auto"><input class="form-control form-control-sm" placeholder="名称" th:field="*{name}" required></div>
-        <div class="col-auto"><input class="form-control form-control-sm" placeholder="説明" th:field="*{description}"></div>
-        <!-- 作業タイプは計画登録時に設定するためマスタからは除外 -->
-        <div class="col-auto"><input type="number" class="form-control form-control-sm" placeholder="所要(分)" th:field="*{defaultRequiredDurationMinutes}"></div>
-        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">追加</button></div>
-      </form>
-
+  <div th:replace="~{fragments/master-layout :: master-list-modal('作業マスタ', 'fas fa-tasks', ~{::add-modal}, ~{::data-table}, ~{::edit-modal})}">
+    
+    <!-- Data Table -->
+    <div th:fragment="data-table" class="table-responsive">
       <table class="table table-sm">
-        <thead><tr><th>コード</th><th>部門コード</th><th>名称</th><th>所要</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th>コード</th>
+            <th>部門コード</th>
+            <th>名称</th>
+            <th>所要</th>
+            <th>操作</th>
+          </tr>
+        </thead>
         <tbody>
-        <tr th:each="m : ${list}">
-          <td th:text="${m.taskCode}"></td>
-          <td th:text="${m.departmentCode}"></td>
-          <td th:text="${m.name}"></td>
-          <td th:text="${m.defaultRequiredDurationMinutes}"></td>
-          <td>
-            <form th:action="@{'/tasks/master/' + ${m.taskCode} + '/delete'}" method="post">
-              <input type="hidden" name="departmentCode" th:value="${m.departmentCode}">
-              <button class="btn btn-sm btn-outline-danger">削除</button>
-            </form>
-          </td>
-        </tr>
+          <tr th:each="m : ${list}">
+            <td th:text="${m.taskCode}"></td>
+            <td th:text="${m.departmentCode}"></td>
+            <td th:text="${m.name}"></td>
+            <td th:text="${m.defaultRequiredDurationMinutes}"></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 edit-btn"
+                      th:data-task-code="${m.taskCode}"
+                      th:data-department-code="${m.departmentCode}"
+                      th:data-name="${m.name}"
+                      th:data-description="${m.description}"
+                      th:data-default-required-duration-minutes="${m.defaultRequiredDurationMinutes}">編集</button>
+              <form th:action="@{'/tasks/master/' + ${m.taskCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('このタスクを削除しますか？');">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <input type="hidden" name="departmentCode" th:value="${m.departmentCode}">
+                <button class="btn btn-sm btn-outline-danger">削除</button>
+              </form>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
+
+    <!-- Add Modal -->
+    <div th:fragment="add-modal" class="modal fade" id="addModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">作業追加</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form th:action="@{/tasks/master}" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">作業コード</label>
+                <input type="text" class="form-control" name="taskCode" required maxlength="32">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">部門コード</label>
+                <input type="text" class="form-control" name="departmentCode" maxlength="32">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">作業名</label>
+                <input type="text" class="form-control" name="name" required maxlength="100">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">説明</label>
+                <textarea class="form-control" name="description" rows="3" maxlength="255"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">所要時間(分)</label>
+                <input type="number" class="form-control" name="defaultRequiredDurationMinutes" min="1">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div th:fragment="edit-modal" class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">作業編集</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="editForm" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">作業コード</label>
+                <input type="text" class="form-control" id="editTaskCode" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">部門コード</label>
+                <input type="text" class="form-control" name="departmentCode" id="editDepartmentCode" maxlength="32">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">作業名</label>
+                <input type="text" class="form-control" name="name" id="editName" required maxlength="100">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">説明</label>
+                <textarea class="form-control" name="description" id="editDescription" rows="3" maxlength="255"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">所要時間(分)</label>
+                <input type="number" class="form-control" name="defaultRequiredDurationMinutes" id="editDefaultRequiredDurationMinutes" min="1">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const taskCode = this.getAttribute('data-task-code');
+          const departmentCode = this.getAttribute('data-department-code');
+          const name = this.getAttribute('data-name');
+          const description = this.getAttribute('data-description');
+          const defaultRequiredDurationMinutes = this.getAttribute('data-default-required-duration-minutes');
+          
+          document.getElementById('editTaskCode').value = taskCode;
+          document.getElementById('editDepartmentCode').value = departmentCode || '';
+          document.getElementById('editName').value = name;
+          document.getElementById('editDescription').value = description || '';
+          document.getElementById('editDefaultRequiredDurationMinutes').value = defaultRequiredDurationMinutes || '';
+          
+          document.getElementById('editForm').action = '/tasks/master/' + taskCode + '/update';
+          
+          new bootstrap.Modal(document.getElementById('editModal')).show();
+        });
+      });
+    });
+  </script>
 </main>
 </body>
 </html>

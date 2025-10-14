@@ -54,6 +54,28 @@
             list-style: none;
             padding: 1rem 0;
             margin: 0;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Custom scrollbar for sidebar */
+        #sidebar .nav-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #sidebar .nav-list::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+
+        #sidebar .nav-list::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+        }
+
+        #sidebar .nav-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.5);
         }
 
         #sidebar .nav-category {
@@ -219,11 +241,6 @@
                     </a>
                 </li>
 
-                <!-- 人員管理 -->
-                <li class="nav-category">
-                    <i class="bi bi-people me-1"></i>
-                    人員管理
-                </li>
                 <!-- マスタ登録 -->
                 <li class="nav-category">
                     <i class="bi bi-gear me-1"></i>
@@ -244,7 +261,7 @@
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)}">
                     <a th:href="@{/employees}">
                         <i class="bi bi-person-badge"></i>
-                        従業員管理
+                        従業員マスタ
                     </a>
                 </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
