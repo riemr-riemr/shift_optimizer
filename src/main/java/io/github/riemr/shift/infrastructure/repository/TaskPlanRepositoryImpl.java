@@ -27,28 +27,8 @@ public class TaskPlanRepositoryImpl implements TaskPlanRepository {
     @Override public List<TaskPlan> listWeeklyEffective(String storeCode, short dayOfWeek, Date date) {
         return mapper.selectWeeklyEffective(storeCode, dayOfWeek, date);
     }
-    @Override public List<TaskPlan> listSpecialByStoreAndRange(String storeCode, Date from, Date to) {
-        return mapper.selectSpecialByStoreAndRange(storeCode, from, to);
-    }
-
-    @Override public List<TaskPlan> selectSpecialByStoreAndDate(String storeCode, Date specialDate) {
-        return mapper.selectSpecialByStoreAndDate(storeCode, specialDate);
-    }
-    @Override public List<TaskPlan> selectSpecialByStoreAndDateAndDept(String storeCode, Date specialDate, String departmentCode) {
-        return mapper.selectSpecialByStoreAndDateAndDept(storeCode, specialDate, departmentCode);
-    }
-
-    @Override public List<Date> listSpecialDatesByStore(String storeCode) {
-        return mapper.selectSpecialDatesByStore(storeCode);
-    }
-
     @Override
     public void deleteWeeklyByStoreDeptAndDow(String storeCode, String departmentCode, short dayOfWeek) {
         mapper.deleteWeeklyByStoreDeptAndDow(storeCode, departmentCode, dayOfWeek);
-    }
-
-    @Override
-    public void deleteSpecialByStoreDeptAndDate(String storeCode, String departmentCode, Date specialDate) {
-        mapper.deleteSpecialByStoreDeptAndDate(storeCode, departmentCode, specialDate);
     }
 }

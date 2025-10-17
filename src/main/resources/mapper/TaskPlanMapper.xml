@@ -6,9 +6,7 @@
     <result column="store_code" property="storeCode" />
     <result column="department_code" property="departmentCode" />
     <result column="task_code" property="taskCode" />
-    <result column="plan_kind" property="planKind" />
     <result column="day_of_week" property="dayOfWeek" />
-    <result column="special_date" property="specialDate" />
     <result column="schedule_type" property="scheduleType" />
     <result column="fixed_start_time" property="fixedStartTime" />
     <result column="fixed_end_time" property="fixedEndTime" />
@@ -26,7 +24,7 @@
   </resultMap>
 
   <sql id="Base_Column_List">
-    plan_id, store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+    plan_id, store_code, department_code, task_code, day_of_week, schedule_type,
     fixed_start_time, fixed_end_time, window_start_time, window_end_time,
     required_duration_minutes, required_staff_count, lane, must_be_contiguous,
     effective_from, effective_to, priority, note, active
@@ -34,12 +32,12 @@
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan" useGeneratedKeys="true" keyProperty="planId">
     insert into public.task_plan (
-      store_code, department_code, task_code, plan_kind, day_of_week, special_date, schedule_type,
+      store_code, department_code, task_code, day_of_week, schedule_type,
       fixed_start_time, fixed_end_time, window_start_time, window_end_time,
       required_duration_minutes, required_staff_count, lane, must_be_contiguous,
       effective_from, effective_to, priority, note, active
     ) values (
-      #{storeCode}, #{departmentCode}, #{taskCode}, #{planKind}, #{dayOfWeek}, #{specialDate}, #{scheduleType},
+      #{storeCode}, #{departmentCode}, #{taskCode}, #{dayOfWeek}, #{scheduleType},
       #{fixedStartTime}, #{fixedEndTime}, #{windowStartTime}, #{windowEndTime},
       #{requiredDurationMinutes}, #{requiredStaffCount}, #{lane}, #{mustBeContiguous},
       #{effectiveFrom}, #{effectiveTo}, #{priority}, #{note}, #{active}
@@ -51,9 +49,7 @@
     set store_code = #{storeCode},
         department_code = #{departmentCode},
         task_code = #{taskCode},
-        plan_kind = #{planKind},
         day_of_week = #{dayOfWeek},
-        special_date = #{specialDate},
         schedule_type = #{scheduleType},
         fixed_start_time = #{fixedStartTime},
         fixed_end_time = #{fixedEndTime},
@@ -82,7 +78,6 @@
   <select id="selectWeeklyByStoreAndDow" resultMap="BaseResultMap">
     select <include refid="Base_Column_List" /> from public.task_plan
     where store_code = #{storeCode}
-      and plan_kind = 'WEEKLY'
       and day_of_week = #{dayOfWeek}
     order by priority nulls last, plan_id
   </select>
@@ -90,7 +85,6 @@
   <select id="selectWeeklyByStoreAndDowAndDept" resultMap="BaseResultMap">
     select <include refid="Base_Column_List" /> from public.task_plan
     where store_code = #{storeCode}
-      and plan_kind = 'WEEKLY'
       and day_of_week = #{dayOfWeek}
       and department_code = #{departmentCode}
     order by priority nulls last, plan_id
@@ -99,7 +93,6 @@
   <select id="selectWeeklyEffective" resultMap="BaseResultMap">
     select <include refid="Base_Column_List" /> from public.task_plan
     where store_code = #{storeCode}
-      and plan_kind = 'WEEKLY'
       and day_of_week = #{dayOfWeek}
       and active = true
       and (effective_from is null or effective_from &lt;= #{date})
@@ -107,51 +100,10 @@
     order by priority nulls last, plan_id
   </select>
 
-  <select id="selectSpecialByStoreAndRange" resultMap="BaseResultMap">
-    select <include refid="Base_Column_List" /> from public.task_plan
-    where store_code = #{storeCode}
-      and plan_kind = 'SPECIAL'
-      and special_date between #{from} and #{to}
-    order by special_date, priority nulls last
-  </select>
-
-  <select id="selectSpecialByStoreAndDate" resultMap="BaseResultMap">
-    select <include refid="Base_Column_List" /> from public.task_plan
-    where store_code = #{storeCode}
-      and plan_kind = 'SPECIAL'
-      and special_date = #{specialDate}
-    order by priority nulls last, plan_id
-  </select>
-
-  <select id="selectSpecialByStoreAndDateAndDept" resultMap="BaseResultMap">
-    select <include refid="Base_Column_List" /> from public.task_plan
-    where store_code = #{storeCode}
-      and plan_kind = 'SPECIAL'
-      and special_date = #{specialDate}
-      and department_code = #{departmentCode}
-    order by priority nulls last, plan_id
-  </select>
-
-  <select id="selectSpecialDatesByStore" resultType="java.util.Date">
-    select distinct special_date from public.task_plan
-    where store_code = #{storeCode}
-      and plan_kind = 'SPECIAL'
-    order by special_date
-  </select>
-
   <delete id="deleteWeeklyByStoreDeptAndDow">
     delete from public.task_plan
     where store_code = #{storeCode}
       and department_code = #{departmentCode}
-      and plan_kind = 'WEEKLY'
       and day_of_week = #{dayOfWeek}
-  </delete>
-
-  <delete id="deleteSpecialByStoreDeptAndDate">
-    delete from public.task_plan
-    where store_code = #{storeCode}
-      and department_code = #{departmentCode}
-      and plan_kind = 'SPECIAL'
-      and special_date = #{specialDate}
   </delete>
 </mapper>

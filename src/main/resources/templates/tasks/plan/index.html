@@ -34,16 +34,11 @@
           </select>
         </div>
         
-        <!-- 3. 曜日/特異日選択 -->
-        <div class="col-auto">
-          <select class="form-select form-select-sm" name="mode" id="modeSelect">
-            <option th:selected="${mode}=='weekly'" value="weekly">曜日</option>
-            <option th:selected="${mode}=='special'" value="special">特異日</option>
-          </select>
-        </div>
+        <!-- 3. 曜日選択のみ -->
+        <input type="hidden" name="mode" value="weekly" />
         
-        <!-- 4a. 曜日選択（週次モード時） -->
-        <div class="col-auto" th:if="${mode}=='weekly'">
+        <!-- 4. 曜日選択 -->
+        <div class="col-auto">
           <select class="form-select form-select-sm" name="day">
             <option th:value="1" th:selected="${day==1}">月</option>
             <option th:value="2" th:selected="${day==2}">火</option>
@@ -55,24 +50,12 @@
           </select>
         </div>
         
-        <!-- 4b. 特異日選択（特異日モード時） -->
-        <div class="col-auto" th:if="${mode}=='special'">
-          <select class="form-select form-select-sm" name="sd">
-            <option value="" th:selected="${sd==null}">特異日を選択</option>
-            <option th:each="dm : ${days}"
-                    th:value="${#dates.format(dm.specialDate,'yyyy-MM-dd')}"
-                    th:selected="${sd}==${dm.specialDate}"
-                    th:text="${#dates.format(dm.specialDate,'MM/dd')} + ' ' + ${dm.label}">
-            </option>
-          </select>
-        </div>
-        <!-- 特異日: タブ選択は下部に表示 -->
+        <!-- 特異日UIは廃止 -->
         <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">表示</button></div>
       </form>
 
-      <!-- 追加UI: 曜日は表示のみ。特異日はダイアログで追加 -->
+      <!-- 追加UI -->
       <div class="mb-3 d-flex gap-2">
-        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#specialAddModal">特異日追加</button>
         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#planCopyModal">計画をコピー</button>
       </div>
 
@@ -224,30 +207,7 @@
         </div>
       </div>
 
-      <!-- 特異日追加モーダル -->
-      <div class="modal fade" id="specialAddModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">特異日を追加</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form th:action="@{/tasks/plan/days}" method="post">
-              <div class="modal-body">
-                <div class="row g-2 mb-2">
-                  <div class="col-4"><input class="form-control form-control-sm" name="store" placeholder="店舗" th:value="${storeCode}" required></div>
-                  <div class="col-4"><input class="form-control form-control-sm" type="date" name="date" required></div>
-                  <div class="col-4"><input class="form-control form-control-sm" name="label" placeholder="特異日名" required></div>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-                <button type="submit" class="btn btn-primary">追加</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
+      <!-- 特異日追加モーダルは廃止 -->
     </div>
   </div>
 
@@ -262,14 +222,11 @@
         <form th:action="@{/tasks/plan/copy}" method="post">
           <input type="hidden" name="store" th:value="${storeCode}">
           <input type="hidden" name="dept" th:value="${dept}">
-          <input type="hidden" name="mode" th:value="${mode}">
+          <input type="hidden" name="mode" value="weekly">
           <input type="hidden" name="day" th:value="${day}">
-          <input type="hidden" name="sd" th:value="${sd}">
           <div class="modal-body">
             <div class="row g-3">
-              <div class="col-12">
-                <div class="form-text">週次表示の場合は他の曜日へ、特異日表示の場合は他の曜日や特異日へコピーできます。</div>
-              </div>
+              <div class="col-12"><div class="form-text">表示中の曜日計画を他の曜日へコピーします。</div></div>
               <div class="col-12">
                 <label class="form-label">曜日へコピー（複数選択可）</label>
                 <div class="d-flex flex-wrap gap-3">
@@ -282,15 +239,7 @@
                   <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="7" id="dow7"><label class="form-check-label" for="dow7">日</label></div>
                 </div>
               </div>
-              <div class="col-12">
-                <label class="form-label">特異日へコピー（複数選択可）</label>
-                <select class="form-select" name="targetDate" multiple size="6">
-                  <option th:each="dm : ${days}"
-                          th:value="${#dates.format(dm.specialDate,'yyyy-MM-dd')}"
-                          th:text="${#dates.format(dm.specialDate,'MM/dd')} + ' ' + ${dm.label}"></option>
-                </select>
-                <div class="form-text">特異日は設定済みの一覧から選択します。</div>
-              </div>
+              <!-- 特異日コピーは廃止 -->
               <div class="col-12">
                 <div class="form-text text-danger">対象の曜日/日付に既存の計画がある場合は全て置き換え（削除後にコピー）されます。</div>
               </div>
@@ -307,13 +256,8 @@
 
   <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function() {
-      const modeSelect = document.getElementById('modeSelect');
       const planForm = document.getElementById('planForm');
       const deptSelect = document.getElementById('deptSelect');
-      
-      modeSelect.addEventListener('change', function() {
-        planForm.submit();
-      });
 
       if (deptSelect) {
         deptSelect.addEventListener('change', function () {
@@ -323,9 +267,9 @@
 
       // === Grid builder ===
       const storeCode = /*[[${storeCode}]]*/ '';
-      const mode = /*[[${mode}]]*/ 'weekly';
+      const mode = 'weekly';
       const selectedDow = /*[[${day}]]*/ 1;
-      const selectedDate = /*[[${sd}]]*/ null;
+      const selectedDate = null;
       const selectedDept = /*[[${dept}]]*/ '';
       const gridPlans = /*[[${gridPlans}]]*/ [];
       const masters = /*[[${masters}]]*/ [];
@@ -411,7 +355,7 @@
           clearHighlight();
           const from = Math.min(c1, c2);
           const to = Math.max(c1, c2);
-          const rowStartIndex = (1 /*header*/ + rowIndex + 1) * (cols + 1); // Not used; we'll query by dataset
+            const rowStartIndex = (1 + rowIndex + 1) * (cols + 1); // Not used; we'll query by dataset
           const cells = grid.querySelectorAll(`.cell[data-row="${rowIndex}"]`);
           for (let i = from; i <= to; i++) {
             const el = Array.from(cells).find(x => Number(x.dataset.col) === i);
@@ -592,7 +536,7 @@
           } else {
             const d = (dateEl && dateEl.value) ? dateEl.value : (selectedDate ? formatDate(selectedDate) : '');
             if (!d) { alert('特異日を選択してください'); dragState.active = false; clearHighlight(); return; }
-            pending.specialDate = d;
+            // specialDate support removed
           }
           pendingCreates.push(pending);
           // Draw single plan block
@@ -751,7 +695,7 @@
           finalizeRange();
         });
 
-        // Helper: open edit modal for a given filled cell
+      // Helper: open edit modal for a given filled cell
         function openEditForCell(cell) {
           currentCtxCell = cell;
           const pid = cell.dataset.planId;
@@ -1598,7 +1542,7 @@
               const form = new URLSearchParams();
               form.set('store', storeCode);
               form.set('mode', mode);
-              if (mode === 'weekly') form.set('day', String(selectedDow || 1)); else if (selectedDate) form.set('sd', formatDate(selectedDate));
+              form.set('day', String(selectedDow || 1));
               if (selectedDept) form.set('dept', selectedDept);
               const resDel = await fetch(`/tasks/plan/${id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(header && token ? { [header]: token } : {}) }, body: form.toString() });
               if (!resDel.ok) throw new Error('削除に失敗しました');
@@ -1609,7 +1553,7 @@
               const form = new URLSearchParams();
               form.set('mode', c.mode);
               form.set('storeCode', c.storeCode);
-              if (c.mode === 'weekly') form.set('dayOfWeek', String(c.dayOfWeek)); else form.set('specialDate', c.specialDate);
+              form.set('dayOfWeek', String(c.dayOfWeek));
               form.set('departmentCode', c.departmentCode);
               form.set('taskCode', c.taskCode);
               form.set('scheduleType', 'FIXED');
@@ -1643,7 +1587,7 @@
               if (u.note) form.set('note', u.note);
               form.set('store', storeCode);
               form.set('mode', mode);
-              if (mode === 'weekly') form.set('day', String(selectedDow || 1)); else if (selectedDate) form.set('sd', formatDate(selectedDate));
+              form.set('day', String(selectedDow || 1));
               if (selectedDept) form.set('dept', selectedDept);
               const res = await fetch(`/tasks/plan/${u.planId}/update`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(header && token ? { [header]: token } : {}) }, body: form.toString() });
               if (!res.ok) throw new Error('更新に失敗しました');
@@ -1840,7 +1784,7 @@
         if (mode === 'weekly') {
           formData.append('day', String(selectedDow || 1));
         } else if (selectedDate) {
-          formData.append('sd', formatDate(selectedDate));
+          // special date removed
         }
         if (selectedDept) {
           formData.append('dept', selectedDept);

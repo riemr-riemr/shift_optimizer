@@ -3,12 +3,17 @@ package io.github.riemr.shift.infrastructure.persistence.entity;
 import java.io.Serializable;
 import java.util.Date;
 
-public class TaskPlan implements Serializable {
+/**
+ * Monthly recurring task plan.
+ * Supports two patterns:
+ *  - DOM: specific days of month (stored in monthly_task_plan_dom)
+ *  - WOM: week-of-month x day-of-week (stored in monthly_task_plan_wom)
+ */
+public class MonthlyTaskPlan implements Serializable {
     private Long planId;
     private String storeCode;
-    private String departmentCode; // 追加: 部門コード (任意)
+    private String departmentCode;
     private String taskCode;
-    private Short dayOfWeek;
     private String scheduleType; // FIXED or FLEXIBLE
     private Date fixedStartTime;
     private Date fixedEndTime;
@@ -16,7 +21,7 @@ public class TaskPlan implements Serializable {
     private Date windowEndTime;
     private Integer requiredDurationMinutes;
     private Integer requiredStaffCount;
-    private Integer lane; // 1-based lane index for grid display
+    private Integer lane; // visual lane
     private Short mustBeContiguous;
     private Date effectiveFrom;
     private Date effectiveTo;
@@ -32,8 +37,6 @@ public class TaskPlan implements Serializable {
     public void setDepartmentCode(String departmentCode) { this.departmentCode = departmentCode; }
     public String getTaskCode() { return taskCode; }
     public void setTaskCode(String taskCode) { this.taskCode = taskCode; }
-    public Short getDayOfWeek() { return dayOfWeek; }
-    public void setDayOfWeek(Short dayOfWeek) { this.dayOfWeek = dayOfWeek; }
     public String getScheduleType() { return scheduleType; }
     public void setScheduleType(String scheduleType) { this.scheduleType = scheduleType; }
     public Date getFixedStartTime() { return fixedStartTime; }
@@ -63,3 +66,4 @@ public class TaskPlan implements Serializable {
     public Boolean getActive() { return active; }
     public void setActive(Boolean active) { this.active = active; }
 }
+

@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>月次作業の登録</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>月次作業の登録（DOM/WOM）</span>
+    </div>
+    <div class="card-body">
+      <form class="row g-2 mb-3" id="formSearch">
+        <div class="col-auto" style="min-width: 180px;">
+          <select class="form-select form-select-sm" name="store" id="storeSelect" required>
+            <option value="" th:selected="${storeCode == null or storeCode == ''}">店舗を選択</option>
+            <option th:each="s : ${stores}"
+                    th:value="${s.storeCode}"
+                    th:selected="${storeCode == s.storeCode}"
+                    th:text="${s.storeCode} + ' - ' + ${s.storeName}"></option>
+          </select>
+        </div>
+        <div class="col-auto" style="min-width: 220px;">
+          <select class="form-select form-select-sm" name="dept" id="deptSelect" required>
+            <option value="" th:selected="${dept == null or dept == ''}">部門を選択</option>
+            <option th:each="d : ${departments}"
+                    th:value="${d.departmentCode}"
+                    th:selected="${dept == d.departmentCode}"
+                    th:text="${d.departmentCode} + ' - ' + ${d.departmentName}"></option>
+          </select>
+        </div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">表示</button></div>
+      </form>
+
+      <div class="alert alert-info py-3 mb-4">
+        <div class="d-flex align-items-start">
+          <i class="bi bi-info-circle me-2 mt-1"></i>
+          <div>
+            <strong>設定タイプについて:</strong><br>
+            <div class="mt-2">
+              <span class="badge bg-primary me-2">DOM</span> 月の特定日（1〜31日）ごとの繰り返し<br>
+              <span class="badge bg-success me-2">WOM</span> 第n週×曜日（第1〜5週 × 月〜日）の繰り返し
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-12 col-xl-4">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">作業とスケジュール</h6>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">作業</label>
+                <select class="form-select" id="taskSelect">
+                  <option value="">作業を選択してください</option>
+                  <option th:each="m : ${masters}"
+                          th:value="${m.taskCode} + '|' + ${m.departmentCode}"
+                          th:text="${m.departmentCode} + ' / ' + ${m.taskCode} + ' - ' + ${m.name}"></option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">対象範囲</label>
+                <select class="form-select" id="targetType">
+                  <option value="dom" selected>指定日（1〜31日）</option>
+                  <option value="wom">曜日指定（第n週 × 曜日）</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">スケジュールタイプ</label>
+                <select class="form-select" id="scheduleType">
+                  <option value="FIXED">固定時間</option>
+                  <option value="FLEXIBLE">可変時間（窓＋所要）</option>
+                </select>
+              </div>
+              <div id="fixedGroup" class="mb-3">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">開始時間</label>
+                    <input type="time" class="form-control" id="fixedStart" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">終了時間</label>
+                    <input type="time" class="form-control" id="fixedEnd" step="900">
+                  </div>
+                </div>
+              </div>
+              <div id="flexGroup" class="mb-3" style="display:none;">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">窓開始</label>
+                    <input type="time" class="form-control" id="winStart" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">窓終了</label>
+                    <input type="time" class="form-control" id="winEnd" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">所要時間（分）</label>
+                    <input type="number" min="0" step="15" class="form-control" id="duration">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">連続必須</label>
+                    <select class="form-select" id="contiguous">
+                      <option value="1">はい</option>
+                      <option value="0">いいえ</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">必要人数</label>
+                    <input type="number" class="form-control" id="staff" min="1" step="1" value="1">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">レーン</label>
+                    <input type="number" class="form-control" id="lane" min="1" step="1">
+                  </div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">優先度</label>
+                    <input type="number" class="form-control" id="priority" step="1">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">有効状態</label>
+                    <select class="form-select" id="active">
+                      <option value="true">有効</option>
+                      <option value="false">無効</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">適用開始日</label>
+                    <input type="date" class="form-control" id="effFrom">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold">適用終了日</label>
+                    <input type="date" class="form-control" id="effTo">
+                  </div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">備考</label>
+                <input type="text" class="form-control" id="note" placeholder="備考を入力してください">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-8">
+          <div class="card mb-3">
+            <div class="card-header">
+              <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
+                <h6 class="mb-0">カレンダー（登録済み月次作業）</h6>
+                <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
+                  <label class="form-label mb-0 text-nowrap">対象月:</label>
+                  <div class="d-flex gap-2">
+                    <input type="month" class="form-control form-control-sm" id="monthPicker" style="width: 150px;">
+                    <button class="btn btn-outline-secondary btn-sm" id="btnReloadCal">
+                      <i class="bi bi-arrow-clockwise"></i> 更新
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="calendar" class="calendar-grid"></div>
+            </div>
+          </div>
+          <div id="domSection" class="card mb-3">
+            <div class="card-header">
+              <h6 class="mb-0">DOM設定（1〜31日を選択）</h6>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <div class="d-flex flex-wrap gap-2" id="domDays"></div>
+              </div>
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-primary" id="btnSaveDom">
+                  <i class="bi bi-check-circle"></i> DOMで登録
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="womSection" class="card" style="display:none;">
+            <div class="card-header">
+              <h6 class="mb-0">WOM設定（第n週 × 曜日）</h6>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">第n週（複数選択可）</label>
+                  <div class="d-flex flex-wrap gap-2" id="womWeeks"></div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">曜日（複数選択可）</label>
+                  <div class="d-flex flex-wrap gap-2" id="womDows"></div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-primary" id="btnSaveWom">
+                  <i class="bi bi-check-circle"></i> WOMで登録
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="alert mt-3 d-none" role="alert"></div>
+    </div>
+  </div>
+
+  <script th:inline="javascript">
+    document.addEventListener('DOMContentLoaded', () => {
+      const stores = /*[[${stores}]]*/ [];
+      const storeCode = /*[[${storeCode}]]*/ '';
+      const dept = /*[[${dept}]]*/ '';
+
+      const formSearch = document.getElementById('formSearch');
+      const deptSelect = document.getElementById('deptSelect');
+      const scheduleType = document.getElementById('scheduleType');
+      const targetType = document.getElementById('targetType');
+      const domSection = document.getElementById('domSection');
+      const womSection = document.getElementById('womSection');
+      const fixedGroup = document.getElementById('fixedGroup');
+      const flexGroup = document.getElementById('flexGroup');
+      const msg = document.getElementById('msg');
+      const cal = document.getElementById('calendar');
+      const monthPicker = document.getElementById('monthPicker');
+      const btnReloadCal = document.getElementById('btnReloadCal');
+
+      scheduleType.addEventListener('change', () => {
+        const t = scheduleType.value;
+        if (t === 'FIXED') { fixedGroup.style.display='flex'; flexGroup.style.display='none'; }
+        else { fixedGroup.style.display='flex'; flexGroup.style.display='flex'; }
+      });
+
+      function updateTargetVisibility() {
+        const v = targetType.value || 'dom';
+        if (v === 'dom') { domSection.style.display='block'; womSection.style.display='none'; }
+        else { domSection.style.display='none'; womSection.style.display='block'; }
+      }
+      targetType.addEventListener('change', updateTargetVisibility);
+      updateTargetVisibility();
+
+      if (deptSelect) {
+        deptSelect.addEventListener('change', () => formSearch.submit());
+      }
+
+      // Build DOM day checkboxes 1..31
+      const domWrap = document.getElementById('domDays');
+      for (let d = 1; d <= 31; d++) {
+        const id = 'dom_' + d;
+        const div = document.createElement('div');
+        div.className = 'form-check form-check-inline';
+        div.innerHTML = '<input class="form-check-input" type="checkbox" id="' + id + '" value="' + d + '"> '
+          + '<label class="form-check-label" for="' + id + '">' + d + '日</label>';
+        domWrap.appendChild(div);
+      }
+
+      // Build WOM week checkboxes 1..5 and dows 1..7
+      const womWeeks = document.getElementById('womWeeks');
+      for (let w = 1; w <= 5; w++) {
+        const id = 'w_' + w;
+        const div = document.createElement('div');
+        div.className = 'form-check form-check-inline';
+        div.innerHTML = '<input class="form-check-input" type="checkbox" id="' + id + '" value="' + w + '"> '
+          + '<label class="form-check-label" for="' + id + '">' + w + '週目</label>';
+        womWeeks.appendChild(div);
+      }
+      const womDows = document.getElementById('womDows');
+      const dowNames = ['月','火','水','木','金','土','日'];
+      for (let d = 1; d <= 7; d++) {
+        const id = 'dow_' + d;
+        const div = document.createElement('div');
+        div.className = 'form-check form-check-inline';
+        div.innerHTML = '<input class="form-check-input" type="checkbox" id="' + id + '" value="' + d + '"> '
+          + '<label class="form-check-label" for="' + id + '">' + dowNames[d-1] + '</label>';
+        womDows.appendChild(div);
+      }
+
+      // Submit helpers
+      function collectCommon() {
+        const store = document.getElementById('storeSelect').value || '';
+        const dept = document.getElementById('deptSelect').value || '';
+        const taskPair = (document.getElementById('taskSelect').value || '').split('|');
+        const taskCode = taskPair[0] || '';
+        const deptFromTask = taskPair[1] || dept || null;
+        const sch = document.getElementById('scheduleType').value;
+        const payload = {
+          storeCode: store,
+          departmentCode: deptFromTask,
+          taskCode: taskCode,
+          scheduleType: sch,
+          fixedStartTime: document.getElementById('fixedStart').value || null,
+          fixedEndTime: document.getElementById('fixedEnd').value || null,
+          windowStartTime: document.getElementById('winStart').value || null,
+          windowEndTime: document.getElementById('winEnd').value || null,
+          requiredDurationMinutes: toInt(document.getElementById('duration').value),
+          requiredStaffCount: toInt(document.getElementById('staff').value) || 1,
+          lane: toInt(document.getElementById('lane').value),
+          mustBeContiguous: toInt(document.getElementById('contiguous').value),
+          effectiveFrom: document.getElementById('effFrom').value || null,
+          effectiveTo: document.getElementById('effTo').value || null,
+          priority: toInt(document.getElementById('priority').value),
+          note: document.getElementById('note').value || null,
+          active: (document.getElementById('active').value || 'true') === 'true'
+        };
+        // Normalize fields per scheduleType
+        if (sch === 'FIXED') {
+          payload.windowStartTime = null; payload.windowEndTime = null; payload.requiredDurationMinutes = null;
+        } else {
+          payload.fixedStartTime = null; payload.fixedEndTime = null;
+        }
+        return payload;
+      }
+      function toInt(v){ const n = Number(v); return Number.isFinite(n) ? n : null; }
+      function showMsg(kind, text){ msg.className = `alert alert-\${kind} mt-3`; msg.textContent = text; msg.classList.remove('d-none'); }
+
+      document.getElementById('btnSaveDom').addEventListener('click', async () => {
+        const payload = collectCommon();
+        const days = Array.from(document.querySelectorAll('#domDays input:checked')).map(x => Number(x.value));
+        if (!payload.storeCode) return showMsg('danger','店舗を選択してください');
+        if (!payload.taskCode) return showMsg('danger','作業を選択してください');
+        if (days.length === 0) return showMsg('danger','1〜31日のいずれかを選択してください');
+        payload.daysOfMonth = days;
+        try {
+          const res = await fetch('/tasks/api/monthly/dom', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+          if (!res.ok) throw new Error(await res.text());
+          const j = await res.json();
+          showMsg('success', `DOMで登録しました（planId=\${j.planId} / days=\${j.daysCount}）。`);
+        } catch (e) { showMsg('danger', `登録に失敗しました: \${e}`); }
+      });
+
+      document.getElementById('btnSaveWom').addEventListener('click', async () => {
+        const payload = collectCommon();
+        const weeks = Array.from(document.querySelectorAll('#womWeeks input:checked')).map(x => Number(x.value));
+        const dows = Array.from(document.querySelectorAll('#womDows input:checked')).map(x => Number(x.value));
+        if (!payload.storeCode) return showMsg('danger','店舗を選択してください');
+        if (!payload.taskCode) return showMsg('danger','作業を選択してください');
+        if (weeks.length === 0 || dows.length === 0) return showMsg('danger','第n週と曜日を選択してください');
+        payload.weeksOfMonth = weeks; payload.daysOfWeek = dows;
+        try {
+          const res = await fetch('/tasks/api/monthly/wom', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+          if (!res.ok) throw new Error(await res.text());
+          const j = await res.json();
+          showMsg('success', `WOMで登録しました（planId=\${j.planId} / pairs=\${j.pairs}）。`);
+        } catch (e) { showMsg('danger', `登録に失敗しました: \${e}`); }
+      });
+    });
+  </script>
+  <script>
+    // Calendar styles and rendering
+    const style = document.createElement('style');
+    style.textContent = `
+      .calendar-grid { 
+        display: grid; 
+        grid-template-columns: repeat(7, 1fr); 
+        gap: 8px; 
+        margin-bottom: 1rem;
+      }
+      .cal-cell { 
+        border: 1px solid #dee2e6; 
+        border-radius: 8px; 
+        padding: 8px; 
+        min-height: 120px; 
+        background: #fff; 
+        transition: box-shadow 0.2s ease;
+      }
+      .cal-cell:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      .cal-head { 
+        font-weight: 600; 
+        text-align: center; 
+        padding: 8px 0; 
+        color: #495057; 
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      .cal-date { 
+        font-size: 13px; 
+        color: #6c757d; 
+        margin-bottom: 6px; 
+        font-weight: 500;
+      }
+      .cal-item { 
+        font-size: 11px; 
+        line-height: 1.3; 
+        padding: 4px 6px; 
+        border-left: 3px solid #0d6efd; 
+        background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%); 
+        border-radius: 4px; 
+        margin-bottom: 4px; 
+        cursor: pointer;
+        transition: all 0.2s ease;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      .cal-item:hover {
+        background: linear-gradient(135deg, #e3f2fd 0%, #d1ecf1 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .cal-empty { 
+        color: #adb5bd; 
+        font-size: 12px; 
+        text-align: center;
+        font-style: italic;
+      }
+      @media (max-width: 768px) {
+        .calendar-grid {
+          gap: 4px;
+        }
+        .cal-cell {
+          min-height: 80px;
+          padding: 4px;
+        }
+        .cal-item {
+          font-size: 10px;
+          padding: 2px 4px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    function yyyyMM(date) { return '' + date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0'); }
+    function renderCalendarSkeleton(year, month) {
+      const cal = document.getElementById('calendar');
+      cal.innerHTML = '';
+      const dows = ['月','火','水','木','金','土','日'];
+      for (let i = 0; i < 7; i++) { const h = document.createElement('div'); h.className = 'cal-head'; h.textContent = dows[i]; cal.appendChild(h); }
+      const first = new Date(year, month-1, 1);
+      let iso = first.getDay();
+      iso = iso === 0 ? 7 : iso;
+      const daysInMonth = new Date(year, month, 0).getDate();
+      for (let i = 1; i < iso; i++) { const e = document.createElement('div'); e.className = 'cal-cell'; cal.appendChild(e); }
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cell = document.createElement('div'); cell.className = 'cal-cell';
+        const head = document.createElement('div'); head.className = 'cal-date'; head.textContent = '' + day + '日'; cell.appendChild(head);
+        const list = document.createElement('div'); list.id = 'day-' + day; cell.appendChild(list);
+        cal.appendChild(cell);
+      }
+    }
+    async function loadCalendar(year, month) {
+      const cal = document.getElementById('calendar');
+      const store = document.getElementById('storeSelect').value || '';
+      const dept = document.getElementById('deptSelect').value || '';
+      if (!store) { cal.innerHTML = '<div class="text-muted">店舗を選択してください</div>'; return; }
+      renderCalendarSkeleton(year, month);
+      try {
+        const res = await fetch('/tasks/api/monthly/calendar?store=' + encodeURIComponent(store) + '&dept=' + encodeURIComponent(dept) + '&month=' + year + '-' + String(month).padStart(2,'0'));
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        for (const [dateStr, items] of Object.entries(data)) {
+          const d = new Date(dateStr);
+          const day = d.getDate();
+          const container = document.getElementById('day-' + day);
+          if (!container) continue;
+          if (!items || items.length === 0) {
+            const em = document.createElement('div'); em.className = 'cal-empty'; em.textContent = '—'; container.appendChild(em);
+          } else {
+            for (const it of items) {
+              const div = document.createElement('div');
+              div.className = 'cal-item';
+              const label = it.taskCode || '';
+              let time = '';
+              if (it.scheduleType === 'FIXED') { time = (it.fixedStartTime || '') + '-' + (it.fixedEndTime || ''); }
+              else { time = (it.windowStartTime || '') + '-' + (it.windowEndTime || '') + ' (' + (it.requiredDurationMinutes || '?') + '分)'; }
+              div.textContent = label + ' ' + time;
+              div.dataset.planId = it.planId;
+              div.dataset.taskData = JSON.stringify(it);
+              div.style.cursor = 'pointer';
+              div.title = '右クリックして編集';
+              container.appendChild(div);
+            }
+          }
+        }
+      } catch (e) {
+        cal.innerHTML = '<div class="text-danger">カレンダー読み込みに失敗しました: ' + e + '</div>';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const monthPicker = document.getElementById('monthPicker');
+      const btnReloadCal = document.getElementById('btnReloadCal');
+      const now = new Date(); monthPicker.value = yyyyMM(now);
+      const parts = monthPicker.value.split('-').map(Number); loadCalendar(parts[0], parts[1]);
+      monthPicker.addEventListener('change', () => { const [yy,mm] = monthPicker.value.split('-').map(Number); loadCalendar(yy,mm); });
+      btnReloadCal.addEventListener('click', () => { const [yy,mm] = monthPicker.value.split('-').map(Number); loadCalendar(yy,mm); });
+    });
+  </script>
+
+  <!-- 編集モーダル -->
+  <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editModalLabel">月次作業の編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="editForm">
+            <input type="hidden" id="editPlanId">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">作業コード</label>
+                <input type="text" class="form-control" id="editTaskCode" readonly>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">スケジュールタイプ</label>
+                <select class="form-select" id="editScheduleType">
+                  <option value="FIXED">固定時間</option>
+                  <option value="FLEXIBLE">可変時間（窓＋所要）</option>
+                </select>
+              </div>
+              <div id="editFixedGroup" class="col-12">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label">開始時間</label>
+                    <input type="time" class="form-control" id="editFixedStart" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">終了時間</label>
+                    <input type="time" class="form-control" id="editFixedEnd" step="900">
+                  </div>
+                </div>
+              </div>
+              <div id="editFlexGroup" class="col-12" style="display:none;">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label">窓開始</label>
+                    <input type="time" class="form-control" id="editWinStart" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">窓終了</label>
+                    <input type="time" class="form-control" id="editWinEnd" step="900">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">所要時間（分）</label>
+                    <input type="number" class="form-control" id="editDuration" min="0" step="15">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">連続必須</label>
+                    <select class="form-select" id="editContiguous">
+                      <option value="1">はい</option>
+                      <option value="0">いいえ</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">人数</label>
+                <input type="number" class="form-control" id="editStaff" min="1" step="1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">レーン</label>
+                <input type="number" class="form-control" id="editLane" min="1" step="1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">優先度</label>
+                <input type="number" class="form-control" id="editPriority" step="1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">有効</label>
+                <select class="form-select" id="editActive">
+                  <option value="true">有効</option>
+                  <option value="false">無効</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">適用開始</label>
+                <input type="date" class="form-control" id="editEffFrom">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">適用終了</label>
+                <input type="date" class="form-control" id="editEffTo">
+              </div>
+              <div class="col-12">
+                <label class="form-label">備考</label>
+                <input type="text" class="form-control" id="editNote">
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" id="btnDelete">削除</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="btnSaveEdit">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    // モーダル機能
+    document.addEventListener('DOMContentLoaded', () => {
+      let currentTaskData = null;
+      const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+      const editScheduleType = document.getElementById('editScheduleType');
+      const editFixedGroup = document.getElementById('editFixedGroup');
+      const editFlexGroup = document.getElementById('editFlexGroup');
+
+      // スケジュールタイプ変更
+      editScheduleType.addEventListener('change', () => {
+        const t = editScheduleType.value;
+        if (t === 'FIXED') {
+          editFixedGroup.style.display = 'block';
+          editFlexGroup.style.display = 'none';
+        } else {
+          editFixedGroup.style.display = 'block';
+          editFlexGroup.style.display = 'block';
+        }
+      });
+
+      // 作業項目右クリックでモーダル表示
+      document.addEventListener('contextmenu', (e) => {
+        const target = e.target.closest('.cal-item');
+        if (target && target.dataset.taskData) {
+          e.preventDefault();
+          currentTaskData = JSON.parse(target.dataset.taskData);
+          populateEditForm(currentTaskData);
+          editModal.show();
+        }
+      });
+
+      // フォームに値を設定
+      function populateEditForm(data) {
+        document.getElementById('editPlanId').value = data.planId || '';
+        document.getElementById('editTaskCode').value = data.taskCode || '';
+        document.getElementById('editScheduleType').value = data.scheduleType || 'FIXED';
+        document.getElementById('editFixedStart').value = data.fixedStartTime || '';
+        document.getElementById('editFixedEnd').value = data.fixedEndTime || '';
+        document.getElementById('editWinStart').value = data.windowStartTime || '';
+        document.getElementById('editWinEnd').value = data.windowEndTime || '';
+        document.getElementById('editDuration').value = data.requiredDurationMinutes || '';
+        document.getElementById('editContiguous').value = data.mustBeContiguous ? '1' : '0';
+        document.getElementById('editStaff').value = data.requiredStaffCount || '';
+        document.getElementById('editLane').value = data.lane || '';
+        document.getElementById('editPriority').value = data.priority || '';
+        document.getElementById('editActive').value = data.active ? 'true' : 'false';
+        document.getElementById('editEffFrom').value = data.effectiveFrom || '';
+        document.getElementById('editEffTo').value = data.effectiveTo || '';
+        document.getElementById('editNote').value = data.note || '';
+        
+        // スケジュールタイプに応じた表示切替
+        editScheduleType.dispatchEvent(new Event('change'));
+      }
+
+      // 保存
+      document.getElementById('btnSaveEdit').addEventListener('click', async () => {
+        await saveEdit();
+      });
+
+      // モーダルの削除ボタン
+      document.getElementById('btnDelete').addEventListener('click', async () => {
+        const planId = document.getElementById('editPlanId').value;
+        if (planId && confirm('この月次作業を削除しますか？')) {
+          await deleteTask(planId);
+          editModal.hide();
+        }
+      });
+
+      async function saveEdit() {
+        const planId = document.getElementById('editPlanId').value;
+        const payload = {
+          planId: planId,
+          scheduleType: document.getElementById('editScheduleType').value,
+          fixedStartTime: document.getElementById('editFixedStart').value || null,
+          fixedEndTime: document.getElementById('editFixedEnd').value || null,
+          windowStartTime: document.getElementById('editWinStart').value || null,
+          windowEndTime: document.getElementById('editWinEnd').value || null,
+          requiredDurationMinutes: toInt(document.getElementById('editDuration').value),
+          mustBeContiguous: document.getElementById('editContiguous').value === '1',
+          requiredStaffCount: toInt(document.getElementById('editStaff').value),
+          lane: toInt(document.getElementById('editLane').value),
+          priority: toInt(document.getElementById('editPriority').value),
+          active: document.getElementById('editActive').value === 'true',
+          effectiveFrom: document.getElementById('editEffFrom').value || null,
+          effectiveTo: document.getElementById('editEffTo').value || null,
+          note: document.getElementById('editNote').value || null
+        };
+
+        // スケジュールタイプに応じてnull化
+        if (payload.scheduleType === 'FIXED') {
+          payload.windowStartTime = null;
+          payload.windowEndTime = null;
+          payload.requiredDurationMinutes = null;
+        } else {
+          payload.fixedStartTime = null;
+          payload.fixedEndTime = null;
+        }
+
+        try {
+          const res = await fetch('/tasks/api/monthly/update', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          if (!res.ok) throw new Error(await res.text());
+          
+          showMsg('success', '月次作業を更新しました。');
+          editModal.hide();
+          
+          // カレンダーを再読み込み
+          const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
+          loadCalendar(yy, mm);
+        } catch (e) {
+          showMsg('danger', `更新に失敗しました: ${e}`);
+        }
+      }
+
+      async function deleteTask(planId) {
+        try {
+          const res = await fetch('/tasks/api/monthly/delete/' + planId, {
+            method: 'DELETE'
+          });
+          
+          if (!res.ok) throw new Error(await res.text());
+          
+          showMsg('success', '月次作業を削除しました。');
+          
+          // カレンダーを再読み込み
+          const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
+          loadCalendar(yy, mm);
+        } catch (e) {
+          showMsg('danger', `削除に失敗しました: ${e}`);
+        }
+      }
+
+      function toInt(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function showMsg(kind, text) {
+        const msg = document.getElementById('msg');
+        msg.className = `alert alert-${kind} mt-3`;
+        msg.textContent = text;
+        msg.classList.remove('d-none');
+      }
+    });
+  </script>
+  </main>
+</body>
+</html>

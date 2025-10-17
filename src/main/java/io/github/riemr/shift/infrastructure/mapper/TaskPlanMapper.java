@@ -25,24 +25,8 @@ public interface TaskPlanMapper {
                                          @Param("dayOfWeek") short dayOfWeek,
                                          @Param("date") Date date);
 
-    List<TaskPlan> selectSpecialByStoreAndRange(@Param("storeCode") String storeCode,
-                                                @Param("from") Date from,
-                                                @Param("to") Date to);
-
-    List<TaskPlan> selectSpecialByStoreAndDate(@Param("storeCode") String storeCode,
-                                               @Param("specialDate") Date specialDate);
-
-    List<TaskPlan> selectSpecialByStoreAndDateAndDept(@Param("storeCode") String storeCode,
-                                                      @Param("specialDate") Date specialDate,
-                                                      @Param("departmentCode") String departmentCode);
-
-    List<Date> selectSpecialDatesByStore(@Param("storeCode") String storeCode);
-
     int deleteWeeklyByStoreDeptAndDow(@Param("storeCode") String storeCode,
                                       @Param("departmentCode") String departmentCode,
                                       @Param("dayOfWeek") short dayOfWeek);
 
-    int deleteSpecialByStoreDeptAndDate(@Param("storeCode") String storeCode,
-                                        @Param("departmentCode") String departmentCode,
-                                        @Param("specialDate") Date specialDate);
 }

@@ -65,7 +65,6 @@ public class TaskPlanController {
         binder.registerCustomEditor(Date.class, "fixedEndTime", new CustomDateEditor(timeFmt, true));
         binder.registerCustomEditor(Date.class, "windowStartTime", new CustomDateEditor(timeFmt, true));
         binder.registerCustomEditor(Date.class, "windowEndTime", new CustomDateEditor(timeFmt, true));
-        binder.registerCustomEditor(Date.class, "specialDate", new CustomDateEditor(dateFmt, true));
         binder.registerCustomEditor(Date.class, "effectiveFrom", new CustomDateEditor(dateFmt, true));
         binder.registerCustomEditor(Date.class, "effectiveTo", new CustomDateEditor(dateFmt, true));
     }
@@ -94,8 +93,6 @@ public class TaskPlanController {
         // カテゴリリストを追加
         model.addAttribute("categories", taskCategoryMasterMapper.selectAll());
         if (storeCode != null) {
-            // Always provide special days list for copy modal
-            model.addAttribute("days", daysMasterRepository.listSpecialByStore(storeCode));
             List<?> results = null;
             if ("weekly".equalsIgnoreCase(mode)) {
                 short dow = dayOfWeek == null ? 1 : dayOfWeek;
@@ -106,18 +103,8 @@ public class TaskPlanController {
                 }
                 model.addAttribute("list", results);
             } else {
-                // tabs: special dates list from days_master (already set above as well)
-                if (selectedDate != null) {
-                    Date specDate = Date.from(selectedDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-                    if (departmentCode != null && !departmentCode.isBlank()) {
-                        results = planRepository.selectSpecialByStoreAndDateAndDept(storeCode, specDate, departmentCode);
-                    } else {
-                        results = planRepository.selectSpecialByStoreAndDate(storeCode, specDate);
-                    }
-                    model.addAttribute("list", results);
-                } else {
-                    model.addAttribute("list", java.util.Collections.emptyList());
-                }
+                // Special-day mode is no longer supported for task_plan
+                model.addAttribute("list", java.util.Collections.emptyList());
             }
         } else {
             model.addAttribute("list", java.util.Collections.emptyList());
@@ -134,14 +121,7 @@ public class TaskPlanController {
                         ? planRepository.listWeeklyByStoreAndDowAndDept(storeCode, dow, departmentCode)
                         : planRepository.listWeeklyByStoreAndDow(storeCode, dow);
             } else {
-                if (selectedDate != null) {
-                    Date specDate = Date.from(selectedDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-                    gridResults = (departmentCode != null && !departmentCode.isBlank())
-                            ? planRepository.selectSpecialByStoreAndDateAndDept(storeCode, specDate, departmentCode)
-                            : planRepository.selectSpecialByStoreAndDate(storeCode, specDate);
-                } else {
-                    gridResults = java.util.Collections.emptyList();
-                }
+                gridResults = java.util.Collections.emptyList();
             }
             // Serialize to list of maps
             SimpleDateFormat hm = new SimpleDateFormat("HH:mm");
@@ -171,19 +151,7 @@ public class TaskPlanController {
         return "tasks/plan/index";
     }
 
-    @PostMapping("/plan/days")
-    public String addSpecialDay(@RequestParam("store") String storeCode,
-                                @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate specialDate,
-                                @RequestParam("label") String label) {
-        DaysMaster d = new DaysMaster();
-        d.setStoreCode(storeCode);
-        d.setKind("SPECIAL");
-        d.setSpecialDate(java.util.Date.from(specialDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()));
-        d.setLabel(label);
-        d.setActive(true);
-        daysMasterRepository.save(d);
-        return "redirect:/tasks/plan?store=" + storeCode + "&mode=special&sd=" + specialDate;
-    }
+    // 特異日追加は廃止
 
     @PostMapping(value = "/plan")
     public Object create(@RequestParam("mode") String mode,
@@ -192,30 +160,19 @@ public class TaskPlanController {
         // Set safe defaults for quick grid posts
         if (form.getActive() == null) form.setActive(Boolean.TRUE);
         if (form.getRequiredStaffCount() == null) form.setRequiredStaffCount(1);
-        if ("weekly".equalsIgnoreCase(mode)) {
-            form.setPlanKind("WEEKLY");
-            planRepository.save(form);
-            String redirect = "redirect:/tasks/plan?store=" + form.getStoreCode() + "&mode=weekly&day=" + (form.getDayOfWeek() == null ? 1 : form.getDayOfWeek());
-            if (form.getDepartmentCode() != null && !form.getDepartmentCode().isBlank()) {
-                redirect += "&dept=" + form.getDepartmentCode();
-            }
-            if (isAjax(request)) {
-                return ResponseEntity.ok(java.util.Map.of("id", form.getPlanId()));
-            }
-            return redirect;
-        } else {
-            form.setPlanKind("SPECIAL");
-            planRepository.save(form);
-            LocalDate d = form.getSpecialDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-            String redirect = "redirect:/tasks/plan?store=" + form.getStoreCode() + "&mode=special&sd=" + d;
-            if (form.getDepartmentCode() != null && !form.getDepartmentCode().isBlank()) {
-                redirect += "&dept=" + form.getDepartmentCode();
-            }
-            if (isAjax(request)) {
-                return ResponseEntity.ok(java.util.Map.of("id", form.getPlanId()));
-            }
-            return redirect;
+        // weekly のみサポート
+        if (!"weekly".equalsIgnoreCase(mode)) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "weekly mode only"));
         }
+        planRepository.save(form);
+        String redirect = "redirect:/tasks/plan?store=" + form.getStoreCode() + "&mode=weekly&day=" + (form.getDayOfWeek() == null ? 1 : form.getDayOfWeek());
+        if (form.getDepartmentCode() != null && !form.getDepartmentCode().isBlank()) {
+            redirect += "&dept=" + form.getDepartmentCode();
+        }
+        if (isAjax(request)) {
+            return ResponseEntity.ok(java.util.Map.of("id", form.getPlanId()));
+        }
+        return redirect;
     }
 
     private boolean isAjax(jakarta.servlet.http.HttpServletRequest request) {
@@ -333,7 +290,10 @@ public class TaskPlanController {
         }
         // Always replace existing plans at targets as per requirements
         boolean replace = true;
-        planService.copyFromCurrentView(storeCode, departmentCode, mode, sourceDayOfWeek, sourceDate, targetDows, targetDates, replace);
+        // Only weekly copy is supported; special mode is ignored
+        if ("weekly".equalsIgnoreCase(mode)) {
+            planService.copyFromCurrentView(storeCode, departmentCode, "weekly", sourceDayOfWeek, null, targetDows, null, replace);
+        }
         String redirect = "redirect:/tasks/plan?store=" + storeCode + "&mode=" + mode;
         if ("weekly".equalsIgnoreCase(mode)) {
             redirect += "&day=" + (sourceDayOfWeek == null ? 1 : sourceDayOfWeek);

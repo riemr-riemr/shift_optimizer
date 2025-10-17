@@ -71,7 +71,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                     new AntPathRequestMatcher("/shift/api/**"),
-                    new AntPathRequestMatcher("/employee-request/**")
+                    new AntPathRequestMatcher("/employee-request/**"),
+                    new AntPathRequestMatcher("/tasks/api/**")
                 )
             );
 

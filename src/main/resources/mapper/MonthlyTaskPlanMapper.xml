@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.MonthlyTaskPlanMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan">
+    <id column="plan_id" property="planId" />
+    <result column="store_code" property="storeCode" />
+    <result column="department_code" property="departmentCode" />
+    <result column="task_code" property="taskCode" />
+    <result column="schedule_type" property="scheduleType" />
+    <result column="fixed_start_time" property="fixedStartTime" />
+    <result column="fixed_end_time" property="fixedEndTime" />
+    <result column="window_start_time" property="windowStartTime" />
+    <result column="window_end_time" property="windowEndTime" />
+    <result column="required_duration_minutes" property="requiredDurationMinutes" />
+    <result column="required_staff_count" property="requiredStaffCount" />
+    <result column="lane" property="lane" />
+    <result column="must_be_contiguous" property="mustBeContiguous" />
+    <result column="effective_from" property="effectiveFrom" />
+    <result column="effective_to" property="effectiveTo" />
+    <result column="priority" property="priority" />
+    <result column="note" property="note" />
+    <result column="active" property="active" />
+  </resultMap>
+
+  <sql id="Base_Column_List">
+    plan_id, store_code, department_code, task_code, schedule_type,
+    fixed_start_time, fixed_end_time, window_start_time, window_end_time,
+    required_duration_minutes, required_staff_count, lane, must_be_contiguous,
+    effective_from, effective_to, priority, note, active
+  </sql>
+
+  <!-- Qualified columns for selecting from alias p (with aliases back to base names) -->
+  <sql id="P_Select_Column_List">
+    p.plan_id as plan_id,
+    p.store_code as store_code,
+    p.department_code as department_code,
+    p.task_code as task_code,
+    p.schedule_type as schedule_type,
+    p.fixed_start_time as fixed_start_time,
+    p.fixed_end_time as fixed_end_time,
+    p.window_start_time as window_start_time,
+    p.window_end_time as window_end_time,
+    p.required_duration_minutes as required_duration_minutes,
+    p.required_staff_count as required_staff_count,
+    p.lane as lane,
+    p.must_be_contiguous as must_be_contiguous,
+    p.effective_from as effective_from,
+    p.effective_to as effective_to,
+    p.priority as priority,
+    p.note as note,
+    p.active as active
+  </sql>
+
+  <!-- Qualified columns for GROUP BY from alias p (no aliases) -->
+  <sql id="P_Group_Column_List">
+    p.plan_id, p.store_code, p.department_code, p.task_code, p.schedule_type,
+    p.fixed_start_time, p.fixed_end_time, p.window_start_time, p.window_end_time,
+    p.required_duration_minutes, p.required_staff_count, p.lane, p.must_be_contiguous,
+    p.effective_from, p.effective_to, p.priority, p.note, p.active
+  </sql>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan" useGeneratedKeys="true" keyProperty="planId">
+    insert into public.monthly_task_plan (
+      store_code, department_code, task_code, schedule_type,
+      fixed_start_time, fixed_end_time, window_start_time, window_end_time,
+      required_duration_minutes, required_staff_count, lane, must_be_contiguous,
+      effective_from, effective_to, priority, note, active
+    ) values (
+      #{storeCode}, #{departmentCode}, #{taskCode}, #{scheduleType},
+      #{fixedStartTime}, #{fixedEndTime}, #{windowStartTime}, #{windowEndTime},
+      #{requiredDurationMinutes}, #{requiredStaffCount}, #{lane}, #{mustBeContiguous},
+      #{effectiveFrom}, #{effectiveTo}, #{priority}, #{note}, #{active}
+    )
+  </insert>
+
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan">
+    update public.monthly_task_plan
+    set store_code = #{storeCode},
+        department_code = #{departmentCode},
+        task_code = #{taskCode},
+        schedule_type = #{scheduleType},
+        fixed_start_time = #{fixedStartTime},
+        fixed_end_time = #{fixedEndTime},
+        window_start_time = #{windowStartTime},
+        window_end_time = #{windowEndTime},
+        required_duration_minutes = #{requiredDurationMinutes},
+        required_staff_count = #{requiredStaffCount},
+        lane = #{lane},
+        must_be_contiguous = #{mustBeContiguous},
+        effective_from = #{effectiveFrom},
+        effective_to = #{effectiveTo},
+        priority = #{priority},
+        note = #{note},
+        active = #{active}
+    where plan_id = #{planId}
+  </update>
+
+  <delete id="deleteByPrimaryKey" parameterType="long">
+    delete from public.monthly_task_plan where plan_id = #{planId}
+  </delete>
+
+  <select id="selectByPrimaryKey" parameterType="long" resultMap="BaseResultMap">
+    select <include refid="Base_Column_List" /> from public.monthly_task_plan where plan_id = #{planId}
+  </select>
+
+  <!-- Child table operations -->
+  <insert id="insertDom">
+    insert into public.monthly_task_plan_dom(plan_id, day_of_month)
+    values (#{planId}, #{dayOfMonth})
+    on conflict do nothing
+  </insert>
+
+  <insert id="insertWom">
+    insert into public.monthly_task_plan_wom(plan_id, week_of_month, day_of_week)
+    values (#{planId}, #{weekOfMonth}, #{dayOfWeek})
+    on conflict do nothing
+  </insert>
+
+  <delete id="deleteDomByPlan">
+    delete from public.monthly_task_plan_dom where plan_id = #{planId}
+  </delete>
+
+  <delete id="deleteWomByPlan">
+    delete from public.monthly_task_plan_wom where plan_id = #{planId}
+  </delete>
+
+  <!-- Effective monthly plans on a specific date (DOM or WOM match) -->
+  <select id="selectEffectiveByStoreAndDate" resultMap="BaseResultMap">
+    select <include refid="P_Select_Column_List" />
+    from public.monthly_task_plan p
+    left join public.monthly_task_plan_dom dom on dom.plan_id = p.plan_id
+    left join public.monthly_task_plan_wom wom on wom.plan_id = p.plan_id
+    where p.store_code = #{storeCode}
+      and p.active = true
+      and (p.effective_from is null or p.effective_from &lt;= CAST(#{date} as date))
+      and (p.effective_to is null or CAST(#{date} as date) &lt;= p.effective_to)
+      and (
+          dom.day_of_month = extract(day from CAST(#{date} as date))::int
+          or (
+            wom.day_of_week = extract(isodow from CAST(#{date} as date))::int
+            and wom.week_of_month = ((extract(day from CAST(#{date} as date))::int - 1) / 7) + 1
+          )
+      )
+    group by <include refid="P_Group_Column_List" />
+    order by p.priority nulls last, p.plan_id
+  </select>
+</mapper>

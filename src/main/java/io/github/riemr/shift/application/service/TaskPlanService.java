@@ -1,9 +1,11 @@
 package io.github.riemr.shift.application.service;
 
 import io.github.riemr.shift.application.repository.TaskRepository;
+import io.github.riemr.shift.application.repository.MonthlyTaskPlanRepository;
 import io.github.riemr.shift.application.repository.TaskPlanRepository;
 import io.github.riemr.shift.infrastructure.persistence.entity.Task;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
+import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,11 +16,14 @@ import java.util.*;
 public class TaskPlanService {
     private final TaskPlanRepository planRepository;
     private final TaskRepository taskRepository;
+    private final MonthlyTaskPlanRepository monthlyRepository;
 
     public TaskPlanService(TaskPlanRepository planRepository,
-                           TaskRepository taskRepository) {
+                           TaskRepository taskRepository,
+                           MonthlyTaskPlanRepository monthlyRepository) {
         this.planRepository = planRepository;
         this.taskRepository = taskRepository;
+        this.monthlyRepository = monthlyRepository;
     }
 
     @Transactional
@@ -32,19 +37,11 @@ public class TaskPlanService {
                                    boolean replaceExisting) {
         Objects.requireNonNull(storeCode, "storeCode is required");
         Objects.requireNonNull(departmentCode, "departmentCode is required");
-        if (!"weekly".equalsIgnoreCase(mode) && !"special".equalsIgnoreCase(mode)) {
-            throw new IllegalArgumentException("mode must be weekly or special");
-        }
+        // Only weekly mode is supported (special removed)
 
         List<TaskPlan> sourcePlans;
-        if ("weekly".equalsIgnoreCase(mode)) {
-            if (sourceDayOfWeek == null) throw new IllegalArgumentException("dayOfWeek required for weekly mode");
-            sourcePlans = planRepository.listWeeklyByStoreAndDowAndDept(storeCode, sourceDayOfWeek, departmentCode);
-        } else {
-            if (sourceDate == null) throw new IllegalArgumentException("special date required for special mode");
-            Date sd = toDate(sourceDate);
-            sourcePlans = planRepository.selectSpecialByStoreAndDateAndDept(storeCode, sd, departmentCode);
-        }
+        if (sourceDayOfWeek == null) throw new IllegalArgumentException("dayOfWeek required for weekly mode");
+        sourcePlans = planRepository.listWeeklyByStoreAndDowAndDept(storeCode, sourceDayOfWeek, departmentCode);
 
         int created = 0;
         // Copy to weekly targets
@@ -57,28 +54,7 @@ public class TaskPlanService {
                 for (TaskPlan p : sourcePlans) {
                     TaskPlan copy = clonePlan(p);
                     copy.setPlanId(null);
-                    copy.setPlanKind("WEEKLY");
                     copy.setDayOfWeek(dow);
-                    copy.setSpecialDate(null);
-                    planRepository.save(copy);
-                    created++;
-                }
-            }
-        }
-        // Copy to special date targets
-        if (targetDates != null) {
-            for (LocalDate d : targetDates) {
-                if (d == null) continue;
-                Date dd = toDate(d);
-                if (replaceExisting) {
-                    planRepository.deleteSpecialByStoreDeptAndDate(storeCode, departmentCode, dd);
-                }
-                for (TaskPlan p : sourcePlans) {
-                    TaskPlan copy = clonePlan(p);
-                    copy.setPlanId(null);
-                    copy.setPlanKind("SPECIAL");
-                    copy.setSpecialDate(dd);
-                    copy.setDayOfWeek(null);
                     planRepository.save(copy);
                     created++;
                 }
@@ -123,12 +99,6 @@ public class TaskPlanService {
         ZoneId zone = ZoneId.systemDefault();
         Date fromDate = Date.from(from.atStartOfDay(zone).toInstant());
         Date toDate = Date.from(to.atStartOfDay(zone).toInstant());
-        List<TaskPlan> specials = planRepository.listSpecialByStoreAndRange(storeCode, fromDate, toDate);
-        Map<LocalDate, List<TaskPlan>> specialsByDate = new HashMap<>();
-        for (TaskPlan s : specials) {
-            LocalDate d = s.getSpecialDate().toInstant().atZone(zone).toLocalDate();
-            specialsByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(s);
-        }
 
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
             short dow = (short) d.getDayOfWeek().getValue(); // ISO 1..7
@@ -137,8 +107,10 @@ public class TaskPlanService {
             for (TaskPlan p : plans) {
                 created += createTasksFromPlan(storeCode, d, p, createdBy);
             }
-            for (TaskPlan s : specialsByDate.getOrDefault(d, Collections.emptyList())) {
-                created += createTasksFromSpecial(storeCode, d, s, createdBy);
+            // Monthly (DOM/WOM) plans
+            List<MonthlyTaskPlan> monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, Date.from(d.atStartOfDay(zone).toInstant()));
+            for (MonthlyTaskPlan mp : monthly) {
+                created += createTasksFromMonthly(storeCode, d, mp, createdBy);
             }
         }
         return created;
@@ -186,20 +158,22 @@ public class TaskPlanService {
         }
     }
 
-    private int createTasksFromSpecial(String storeCode, LocalDate date, TaskPlan s, String createdBy) {
-        if ("FIXED".equals(s.getScheduleType())) {
-            int count = Math.max(1, nvl(s.getRequiredStaffCount(), 1));
+    // Special-day generation removed; use monthly_task_plan
+
+    private int createTasksFromMonthly(String storeCode, LocalDate date, MonthlyTaskPlan p, String createdBy) {
+        if ("FIXED".equals(resolveType(p.getScheduleType()))) {
+            int count = Math.max(1, nvl(p.getRequiredStaffCount(), 1));
             for (int i = 0; i < count; i++) {
                 Task t = new Task();
                 t.setStoreCode(storeCode);
                 t.setWorkDate(toDate(date));
-                t.setName(s.getTaskCode());
-                t.setDescription("Special:" + s.getTaskCode());
+                t.setName(p.getTaskCode());
+                t.setDescription("Monthly:" + p.getTaskCode());
                 t.setScheduleType("FIXED");
-                t.setFixedStartAt(toDate(date.atTime(toLocalTime(s.getFixedStartTime()))));
-                t.setFixedEndAt(toDate(date.atTime(toLocalTime(s.getFixedEndTime()))));
+                t.setFixedStartAt(toDate(date.atTime(toLocalTime(p.getFixedStartTime()))));
+                t.setFixedEndAt(toDate(date.atTime(toLocalTime(p.getFixedEndTime()))));
                 t.setRequiredStaffCount(1);
-                t.setPriority(s.getPriority());
+                t.setPriority(p.getPriority());
                 t.setCreatedBy(createdBy);
                 t.setCreatedAt(new Date());
                 t.setUpdatedBy(createdBy);
@@ -211,14 +185,14 @@ public class TaskPlanService {
             Task t = new Task();
             t.setStoreCode(storeCode);
             t.setWorkDate(toDate(date));
-            t.setName(s.getTaskCode());
-            t.setDescription("Special:" + s.getTaskCode());
+            t.setName(p.getTaskCode());
+            t.setDescription("Monthly:" + p.getTaskCode());
             t.setScheduleType("FLEXIBLE");
-            t.setWindowStartAt(toDate(date.atTime(toLocalTime(s.getWindowStartTime()))));
-            t.setWindowEndAt(toDate(date.atTime(toLocalTime(s.getWindowEndTime()))));
-            t.setRequiredDurationMinutes(s.getRequiredDurationMinutes());
-            t.setPriority(s.getPriority());
-            t.setMustBeContiguous(s.getMustBeContiguous());
+            t.setWindowStartAt(toDate(date.atTime(toLocalTime(p.getWindowStartTime()))));
+            t.setWindowEndAt(toDate(date.atTime(toLocalTime(p.getWindowEndTime()))));
+            t.setRequiredDurationMinutes(p.getRequiredDurationMinutes());
+            t.setPriority(p.getPriority());
+            t.setMustBeContiguous(p.getMustBeContiguous());
             t.setCreatedBy(createdBy);
             t.setCreatedAt(new Date());
             t.setUpdatedBy(createdBy);
@@ -229,6 +203,7 @@ public class TaskPlanService {
     }
 
     private static String resolveType(TaskPlan p) { return p.getScheduleType() != null ? p.getScheduleType() : "FIXED"; }
+    private static String resolveType(String scheduleType) { return scheduleType != null ? scheduleType : "FIXED"; }
     private static int nvl(Integer v, int def) { return v == null ? def : v; }
     private static java.util.Date toDate(LocalDate d) { return java.util.Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
     private static java.util.Date toDate(LocalDateTime dt) { return java.util.Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }

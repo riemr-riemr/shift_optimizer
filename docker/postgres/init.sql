@@ -410,9 +410,9 @@ CREATE TABLE IF NOT EXISTS task_plan (
     store_code           VARCHAR(10) NOT NULL REFERENCES store(store_code),
     department_code      VARCHAR(32) NULL REFERENCES department_master(department_code),
     task_code            VARCHAR(32) NOT NULL,
-    plan_kind            VARCHAR(8) NOT NULL CHECK (plan_kind IN ('WEEKLY','SPECIAL')),
+    plan_kind            VARCHAR(8)  NOT NULL CHECK (plan_kind IN ('WEEKLY','SPECIAL')),
     day_of_week          SMALLINT NULL CHECK (day_of_week BETWEEN 1 AND 7),
-    special_date         DATE NULL,
+    special_date         DATE    NULL,
     schedule_type        VARCHAR(10) NULL CHECK (schedule_type IN ('FIXED','FLEXIBLE')),
     fixed_start_time     TIME,
     fixed_end_time       TIME,
@@ -428,9 +428,51 @@ CREATE TABLE IF NOT EXISTS task_plan (
     note                 TEXT,
     active               BOOLEAN NOT NULL DEFAULT TRUE
 );
-CREATE INDEX IF NOT EXISTS idx_task_plan_store_kind ON task_plan(store_code, plan_kind);
-CREATE INDEX IF NOT EXISTS idx_task_plan_weekly ON task_plan(store_code, plan_kind, day_of_week);
-CREATE INDEX IF NOT EXISTS idx_task_plan_special ON task_plan(store_code, plan_kind, special_date);
+CREATE INDEX IF NOT EXISTS idx_task_plan_store_dow ON task_plan(store_code, day_of_week);
+
+-- Monthly Task Plan (DOM/WOM patterns)
+-- DOM: specific days of month (1..31)
+-- WOM: week-of-month (1..5) x ISO day-of-week (1..7)
+CREATE TABLE IF NOT EXISTS monthly_task_plan (
+  plan_id               BIGSERIAL PRIMARY KEY,
+  store_code            VARCHAR(10) NOT NULL REFERENCES store(store_code),
+  department_code       VARCHAR(32) NULL REFERENCES department_master(department_code),
+  task_code             VARCHAR(32) NOT NULL,
+  schedule_type         VARCHAR(10) NULL CHECK (schedule_type IN ('FIXED','FLEXIBLE')),
+  fixed_start_time      TIME,
+  fixed_end_time        TIME,
+  window_start_time     TIME,
+  window_end_time       TIME,
+  required_duration_minutes INT,
+  required_staff_count  INT,
+  lane                  INT NULL,
+  must_be_contiguous    SMALLINT,
+  effective_from        DATE NULL,
+  effective_to          DATE NULL,
+  priority              INT,
+  note                  TEXT,
+  active                BOOLEAN NOT NULL DEFAULT TRUE
+);
+ALTER TABLE IF EXISTS monthly_task_plan
+  ADD CONSTRAINT IF NOT EXISTS fk_monthly_task_plan_task_master
+  FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code);
+
+-- Day-of-month selections (1..31)
+CREATE TABLE IF NOT EXISTS monthly_task_plan_dom (
+  plan_id        BIGINT NOT NULL REFERENCES monthly_task_plan(plan_id) ON DELETE CASCADE,
+  day_of_month   SMALLINT NOT NULL CHECK (day_of_month BETWEEN 1 AND 31),
+  PRIMARY KEY (plan_id, day_of_month)
+);
+CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_dom_plan ON monthly_task_plan_dom(plan_id);
+
+-- Week-of-month (1..5) x ISO day-of-week (1..7)
+CREATE TABLE IF NOT EXISTS monthly_task_plan_wom (
+  plan_id        BIGINT NOT NULL REFERENCES monthly_task_plan(plan_id) ON DELETE CASCADE,
+  week_of_month  SMALLINT NOT NULL CHECK (week_of_month BETWEEN 1 AND 5),
+  day_of_week    SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+  PRIMARY KEY (plan_id, week_of_month, day_of_week)
+);
+CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_wom_plan ON monthly_task_plan_wom(plan_id);
 
 -- days_master（UIで選択する「曜日/特異日」のマスタ）
 CREATE TABLE IF NOT EXISTS days_master (

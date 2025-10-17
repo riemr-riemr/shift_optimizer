@@ -15,6 +15,32 @@ public class SchemaInitializer {
     @PostConstruct
     public void ensureTables() {
         try {
+            // Department tables (ensure exist for batch imports)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS department_master (" +
+                    "department_code VARCHAR(32) PRIMARY KEY, " +
+                    "department_name TEXT NOT NULL, " +
+                    "display_order INTEGER, " +
+                    "is_active BOOLEAN NOT NULL DEFAULT TRUE, " +
+                    "is_register BOOLEAN NOT NULL DEFAULT FALSE" +
+                    ")");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS store_department (" +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code), " +
+                    "display_order INTEGER, " +
+                    "is_active BOOLEAN NOT NULL DEFAULT TRUE, " +
+                    "PRIMARY KEY (store_code, department_code)" +
+                    ")");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS employee_department (" +
+                    "employee_code VARCHAR(10) NOT NULL REFERENCES employee(employee_code), " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code), " +
+                    "PRIMARY KEY (employee_code, department_code)" +
+                    ")");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS employee_department_skill (" +
+                    "employee_code VARCHAR(10) NOT NULL REFERENCES employee(employee_code), " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code), " +
+                    "skill_level SMALLINT NOT NULL, " +
+                    "PRIMARY KEY (employee_code, department_code)" +
+                    ")");
             // Ensure department_master has register department '520' (legacy)
             jdbc.execute("INSERT INTO department_master(department_code, department_name, is_register) VALUES ('520','Register', TRUE) ON CONFLICT (department_code) DO NOTHING");
 
@@ -31,7 +57,7 @@ public class SchemaInitializer {
             // jdbc.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_task_master_department') THEN \n" +
             //         "ALTER TABLE task_master ADD CONSTRAINT fk_task_master_department FOREIGN KEY (department_code) REFERENCES department_master(department_code); END IF; END $$;");
 
-            // Ensure department_master.is_register exists
+            // Ensure department_master.is_register exists (for older DBs)
             jdbc.execute("ALTER TABLE IF EXISTS department_master ADD COLUMN IF NOT EXISTS is_register BOOLEAN NOT NULL DEFAULT FALSE");
             jdbc.execute("UPDATE department_master SET is_register = TRUE WHERE department_code = '520'");
 
@@ -95,6 +121,51 @@ public class SchemaInitializer {
                     ")");
             jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_work_demand_interval ON work_demand_interval (store_code, department_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_work_demand_interval_date ON work_demand_interval (store_code, department_code, target_date)");
+
+            // days_master (for legacy/special features; harmless if unused)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS days_master (" +
+                    "days_id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "kind VARCHAR(8) NOT NULL CHECK (kind IN ('WEEKLY','SPECIAL')), " +
+                    "day_of_week SMALLINT NULL CHECK (day_of_week BETWEEN 1 AND 7), " +
+                    "special_date DATE NULL, " +
+                    "label VARCHAR(64), " +
+                    "active BOOLEAN NOT NULL DEFAULT TRUE, " +
+                    "UNIQUE (store_code, kind, day_of_week, special_date)" +
+                    ")");
+
+            // Monthly task plan tables (DOM/WOM)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS monthly_task_plan (" +
+                    "plan_id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "department_code VARCHAR(32), " +
+                    "task_code VARCHAR(32) NOT NULL, " +
+                    "schedule_type VARCHAR(10) CHECK (schedule_type IN ('FIXED','FLEXIBLE')), " +
+                    "fixed_start_time TIME, fixed_end_time TIME, " +
+                    "window_start_time TIME, window_end_time TIME, " +
+                    "required_duration_minutes INT, required_staff_count INT, " +
+                    "lane INT, must_be_contiguous SMALLINT, " +
+                    "effective_from DATE, effective_to DATE, " +
+                    "priority INT, note TEXT, active BOOLEAN NOT NULL DEFAULT TRUE" +
+                    ")");
+            // Composite FK to task_master
+            try { jdbc.execute("ALTER TABLE monthly_task_plan DROP CONSTRAINT IF EXISTS fk_monthly_task_plan_task_master"); } catch (Exception ignore) {}
+            jdbc.execute("ALTER TABLE monthly_task_plan ADD CONSTRAINT fk_monthly_task_plan_task_master FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code)");
+
+            jdbc.execute("CREATE TABLE IF NOT EXISTS monthly_task_plan_dom (" +
+                    "plan_id BIGINT NOT NULL REFERENCES monthly_task_plan(plan_id) ON DELETE CASCADE, " +
+                    "day_of_month SMALLINT NOT NULL CHECK (day_of_month BETWEEN 1 AND 31), " +
+                    "PRIMARY KEY (plan_id, day_of_month)" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_dom_plan ON monthly_task_plan_dom(plan_id)");
+
+            jdbc.execute("CREATE TABLE IF NOT EXISTS monthly_task_plan_wom (" +
+                    "plan_id BIGINT NOT NULL REFERENCES monthly_task_plan(plan_id) ON DELETE CASCADE, " +
+                    "week_of_month SMALLINT NOT NULL CHECK (week_of_month BETWEEN 1 AND 5), " +
+                    "day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7), " +
+                    "PRIMARY KEY (plan_id, week_of_month, day_of_week)" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_wom_plan ON monthly_task_plan_wom(plan_id)");
 
             log.info("Schema checked/initialized: is_register column and employee_task_skill table ensured.");
         } catch (Exception e) {
