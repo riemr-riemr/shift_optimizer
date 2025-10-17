@@ -15,10 +15,14 @@ public class SkillMatrixForm {
     public List<EmployeeRegisterSkill> toEntityList() {
         List<EmployeeRegisterSkill> list = new ArrayList<>();
         for (String cell : cellList) {
-            // 形式: EMP001|REG01|3
+            // 形式: EMP001|1|3 (employeeCode|registerNo|skillLevel)
             String[] parts = cell.split("\\|");
             if (parts.length == 3) {
-                list.add(new EmployeeRegisterSkill(parts[0], parts[1], Integer.valueOf(parts[2])));
+                EmployeeRegisterSkill skill = new EmployeeRegisterSkill();
+                skill.setEmployeeCode(parts[0]);
+                skill.setRegisterNo(Integer.valueOf(parts[1]));
+                skill.setSkillLevel(Short.valueOf(parts[2]));
+                list.add(skill);
             }
         }
         return list;

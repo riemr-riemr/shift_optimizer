@@ -2,6 +2,7 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
 import io.github.riemr.shift.application.service.TaskMasterService;
+import io.github.riemr.shift.application.service.TaskCategoryMasterService;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,13 +16,16 @@ public class MonthlyTaskPlanPageController {
     private final StoreMapper storeMapper;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
     private final TaskMasterService taskMasterService;
+    private final TaskCategoryMasterService taskCategoryMasterService;
 
     public MonthlyTaskPlanPageController(StoreMapper storeMapper,
                                          DepartmentSkillMatrixService departmentSkillMatrixService,
-                                         TaskMasterService taskMasterService) {
+                                         TaskMasterService taskMasterService,
+                                         TaskCategoryMasterService taskCategoryMasterService) {
         this.storeMapper = storeMapper;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
         this.taskMasterService = taskMasterService;
+        this.taskCategoryMasterService = taskCategoryMasterService;
     }
 
     @GetMapping
@@ -33,6 +37,7 @@ public class MonthlyTaskPlanPageController {
         model.addAttribute("stores", storeMapper.selectByExample(null));
         model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
         model.addAttribute("masters", taskMasterService.list());
+        model.addAttribute("categories", taskCategoryMasterService.list());
         return "tasks/monthly";
     }
 }

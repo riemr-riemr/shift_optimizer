@@ -144,119 +144,90 @@ public class MonthlyTaskPlanController {
         return result;
     }
 
+    @DeleteMapping(path = "/delete/{id}")
+    public ResponseEntity<?> deletePlan(@PathVariable("id") Long planId) {
+        repository.delete(planId);
+        return ResponseEntity.ok().build();
+    }
+
     @PutMapping(path = "/update", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> updatePlan(@RequestBody UpdateRequest req) {
-        if (req.planId == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "planId is required"));
+    public ResponseEntity<?> updatePlan(@RequestBody MonthlyTaskPlan req) {
+        if (req.getPlanId() == null) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "planId is required"));
         }
-        
-        Optional<MonthlyTaskPlan> existing = repository.findById(req.planId);
-        if (existing.isEmpty()) {
+        MonthlyTaskPlan existing = repository.find(req.getPlanId());
+        if (existing == null) {
             return ResponseEntity.notFound().build();
         }
-        
-        MonthlyTaskPlan plan = existing.get();
-        if (req.scheduleType != null) plan.setScheduleType(req.scheduleType);
-        if (req.fixedStartTime != null) plan.setFixedStartTime(req.fixedStartTime);
-        if (req.fixedEndTime != null) plan.setFixedEndTime(req.fixedEndTime);
-        if (req.windowStartTime != null) plan.setWindowStartTime(req.windowStartTime);
-        if (req.windowEndTime != null) plan.setWindowEndTime(req.windowEndTime);
-        if (req.requiredDurationMinutes != null) plan.setRequiredDurationMinutes(req.requiredDurationMinutes);
-        if (req.requiredStaffCount != null) plan.setRequiredStaffCount(req.requiredStaffCount);
-        if (req.lane != null) plan.setLane(req.lane);
-        if (req.mustBeContiguous != null) plan.setMustBeContiguous(req.mustBeContiguous ? (short) 1 : (short) 0);
-        if (req.priority != null) plan.setPriority(req.priority);
-        if (req.active != null) plan.setActive(req.active);
-        if (req.effectiveFrom != null) plan.setEffectiveFrom(req.effectiveFrom);
-        if (req.effectiveTo != null) plan.setEffectiveTo(req.effectiveTo);
-        if (req.note != null) plan.setNote(req.note);
-        
-        // Normalize fields based on schedule type
-        if ("FIXED".equalsIgnoreCase(plan.getScheduleType())) {
-            plan.setWindowStartTime(null);
-            plan.setWindowEndTime(null);
-            plan.setRequiredDurationMinutes(null);
-        } else {
-            plan.setFixedStartTime(null);
-            plan.setFixedEndTime(null);
+        // Only overwrite fields that are provided (non-null) in request
+        if (req.getScheduleType() != null) existing.setScheduleType(req.getScheduleType());
+        if (req.getFixedStartTime() != null ||
+            ("FIXED".equalsIgnoreCase(existing.getScheduleType()) && req.getFixedStartTime() == null)) {
+            existing.setFixedStartTime(req.getFixedStartTime());
         }
-        
-        repository.save(plan);
-        return ResponseEntity.ok(Map.of("planId", plan.getPlanId()));
-    }
-
-    @DeleteMapping("/delete/{planId}")
-    public ResponseEntity<?> deletePlan(@PathVariable Long planId) {
-        Optional<MonthlyTaskPlan> existing = repository.findById(planId);
-        if (existing.isEmpty()) {
-            return ResponseEntity.notFound().build();
+        if (req.getFixedEndTime() != null ||
+            ("FIXED".equalsIgnoreCase(existing.getScheduleType()) && req.getFixedEndTime() == null)) {
+            existing.setFixedEndTime(req.getFixedEndTime());
         }
-        
-        repository.deleteById(planId);
-        return ResponseEntity.ok(Map.of("deleted", true, "planId", planId));
+        if (req.getWindowStartTime() != null ||
+            ("FLEXIBLE".equalsIgnoreCase(existing.getScheduleType()) && req.getWindowStartTime() == null)) {
+            existing.setWindowStartTime(req.getWindowStartTime());
+        }
+        if (req.getWindowEndTime() != null ||
+            ("FLEXIBLE".equalsIgnoreCase(existing.getScheduleType()) && req.getWindowEndTime() == null)) {
+            existing.setWindowEndTime(req.getWindowEndTime());
+        }
+        if (req.getRequiredDurationMinutes() != null ||
+            ("FLEXIBLE".equalsIgnoreCase(existing.getScheduleType()) && req.getRequiredDurationMinutes() == null)) {
+            existing.setRequiredDurationMinutes(req.getRequiredDurationMinutes());
+        }
+        if (req.getRequiredStaffCount() != null) existing.setRequiredStaffCount(req.getRequiredStaffCount());
+        if (req.getLane() != null) existing.setLane(req.getLane());
+        if (req.getMustBeContiguous() != null) existing.setMustBeContiguous(req.getMustBeContiguous());
+        if (req.getEffectiveFrom() != null) existing.setEffectiveFrom(req.getEffectiveFrom());
+        if (req.getEffectiveTo() != null) existing.setEffectiveTo(req.getEffectiveTo());
+        if (req.getPriority() != null) existing.setPriority(req.getPriority());
+        if (req.getNote() != null) existing.setNote(req.getNote());
+        if (req.getActive() != null) existing.setActive(req.getActive());
+        repository.update(existing);
+        return ResponseEntity.ok().build();
     }
 
-    public static class UpdateRequest {
-        public Long planId;
-        public String scheduleType;
-        @DateTimeFormat(pattern = "HH:mm") public Date fixedStartTime;
-        @DateTimeFormat(pattern = "HH:mm") public Date fixedEndTime;
-        @DateTimeFormat(pattern = "HH:mm") public Date windowStartTime;
-        @DateTimeFormat(pattern = "HH:mm") public Date windowEndTime;
-        public Integer requiredDurationMinutes;
-        public Integer requiredStaffCount;
-        public Integer lane;
-        public Boolean mustBeContiguous;
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) public Date effectiveFrom;
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) public Date effectiveTo;
-        public Integer priority;
-        public String note;
-        public Boolean active;
-    }
-
-    private static void validateCommon(String storeCode, String taskCode, String scheduleType) {
-        Objects.requireNonNull(storeCode, "storeCode required");
-        Objects.requireNonNull(taskCode, "taskCode required");
-        Objects.requireNonNull(scheduleType, "scheduleType required");
-        if (!"FIXED".equalsIgnoreCase(scheduleType) && !"FLEXIBLE".equalsIgnoreCase(scheduleType)) {
+    private void validateCommon(String storeCode, String taskCode, String scheduleType) {
+        if (storeCode == null || storeCode.isBlank()) {
+            throw new IllegalArgumentException("storeCode is required");
+        }
+        if (taskCode == null || taskCode.isBlank()) {
+            throw new IllegalArgumentException("taskCode is required");
+        }
+        if (scheduleType == null || (!scheduleType.equals("FIXED") && !scheduleType.equals("FLEXIBLE"))) {
             throw new IllegalArgumentException("scheduleType must be FIXED or FLEXIBLE");
         }
     }
 
-    private static MonthlyTaskPlan toPlan(String storeCode, String departmentCode, String taskCode, String scheduleType,
-                                          Date fixedStartTime, Date fixedEndTime,
-                                          Date windowStartTime, Date windowEndTime,
-                                          Integer requiredDurationMinutes, Integer requiredStaffCount,
-                                          Integer lane, Short mustBeContiguous,
-                                          Date effectiveFrom, Date effectiveTo,
-                                          Integer priority, String note, Boolean active) {
-        MonthlyTaskPlan p = new MonthlyTaskPlan();
-        p.setStoreCode(storeCode);
-        p.setDepartmentCode(departmentCode);
-        p.setTaskCode(taskCode);
-        p.setScheduleType(scheduleType);
-        p.setFixedStartTime(fixedStartTime);
-        p.setFixedEndTime(fixedEndTime);
-        p.setWindowStartTime(windowStartTime);
-        p.setWindowEndTime(windowEndTime);
-        p.setRequiredDurationMinutes(requiredDurationMinutes);
-        p.setRequiredStaffCount(requiredStaffCount);
-        p.setLane(lane);
-        p.setMustBeContiguous(mustBeContiguous);
-        p.setEffectiveFrom(effectiveFrom);
-        p.setEffectiveTo(effectiveTo);
-        p.setPriority(priority);
-        p.setNote(note);
-        p.setActive(active != null ? active : Boolean.TRUE);
-        // Normalize fields based on schedule type
-        if ("FIXED".equalsIgnoreCase(scheduleType)) {
-            p.setWindowStartTime(null);
-            p.setWindowEndTime(null);
-            p.setRequiredDurationMinutes(null);
-        } else {
-            p.setFixedStartTime(null);
-            p.setFixedEndTime(null);
-        }
-        return p;
+    private MonthlyTaskPlan toPlan(String storeCode, String departmentCode, String taskCode, String scheduleType,
+                                   Date fixedStartTime, Date fixedEndTime, Date windowStartTime, Date windowEndTime,
+                                   Integer requiredDurationMinutes, Integer requiredStaffCount, Integer lane, 
+                                   Short mustBeContiguous, Date effectiveFrom, Date effectiveTo, 
+                                   Integer priority, String note, Boolean active) {
+        MonthlyTaskPlan plan = new MonthlyTaskPlan();
+        plan.setStoreCode(storeCode);
+        plan.setDepartmentCode(departmentCode);
+        plan.setTaskCode(taskCode);
+        plan.setScheduleType(scheduleType);
+        plan.setFixedStartTime(fixedStartTime);
+        plan.setFixedEndTime(fixedEndTime);
+        plan.setWindowStartTime(windowStartTime);
+        plan.setWindowEndTime(windowEndTime);
+        plan.setRequiredDurationMinutes(requiredDurationMinutes);
+        plan.setRequiredStaffCount(requiredStaffCount);
+        plan.setLane(lane);
+        plan.setMustBeContiguous(mustBeContiguous);
+        plan.setEffectiveFrom(effectiveFrom);
+        plan.setEffectiveTo(effectiveTo);
+        plan.setPriority(priority);
+        plan.setNote(note);
+        plan.setActive(active);
+        return plan;
     }
 }

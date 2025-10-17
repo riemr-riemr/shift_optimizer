@@ -47,21 +47,33 @@
       </div>
 
       <div class="row g-3">
-        <div class="col-12 col-xl-4">
+        <!-- 作業選択列 -->
+        <div class="col-12 col-lg-4">
           <div class="card">
             <div class="card-header">
-              <h6 class="mb-0">作業とスケジュール</h6>
+              <h6 class="mb-0">作業選択</h6>
+            </div>
+            <div class="card-body p-0">
+              <div id="selectedTaskInfo" class="p-2 bg-light border-bottom">
+                <small class="text-muted">選択済み作業:</small>
+                <div id="selectedTaskDisplay" class="fw-semibold">未選択</div>
+              </div>
+              <div class="task-tree-container">
+                <div id="taskTreeList" class="list-group list-group-flush task-tree"></div>
+              </div>
+              <input type="hidden" id="selectedTaskCode" />
+              <input type="hidden" id="selectedDepartmentCode" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- スケジュール設定列 -->
+        <div class="col-12 col-lg-4">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">スケジュール設定</h6>
             </div>
             <div class="card-body">
-              <div class="mb-3">
-                <label class="form-label fw-semibold">作業</label>
-                <select class="form-select" id="taskSelect">
-                  <option value="">作業を選択してください</option>
-                  <option th:each="m : ${masters}"
-                          th:value="${m.taskCode} + '|' + ${m.departmentCode}"
-                          th:text="${m.departmentCode} + ' / ' + ${m.taskCode} + ' - ' + ${m.name}"></option>
-                </select>
-              </div>
               <div class="mb-3">
                 <label class="form-label fw-semibold">対象範囲</label>
                 <select class="form-select" id="targetType">
@@ -154,64 +166,72 @@
                 <label class="form-label fw-semibold">備考</label>
                 <input type="text" class="form-control" id="note" placeholder="備考を入力してください">
               </div>
+              
+              <!-- DOM/WOM設定セクション -->
+              <div class="border-top pt-3">
+                <h6 class="mb-3 text-primary">登録日程設定</h6>
+                
+                <!-- DOM設定 -->
+                <div id="domSection">
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">月の特定日 (DOM)</label>
+                    <div class="border rounded p-3 bg-light">
+                      <div class="d-flex flex-wrap gap-2" id="domDays"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- WOM設定 -->
+                <div id="womSection" style="display:none;">
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold">第n週</label>
+                      <div class="border rounded p-3 bg-light">
+                        <div class="d-flex flex-wrap gap-2" id="womWeeks"></div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold">曜日</label>
+                      <div class="border rounded p-3 bg-light">
+                        <div class="d-flex flex-wrap gap-2" id="womDows"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 追加ボタン -->
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-success btn-lg" id="btnAdd">
+                    <i class="bi bi-plus-circle"></i> 追加
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="col-12 col-xl-8">
-          <div class="card mb-3">
+        <!-- カレンダー列 -->
+        <div class="col-12 col-lg-4">
+          <div class="card">
             <div class="card-header">
-              <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
+              <div class="d-flex flex-column gap-2">
                 <h6 class="mb-0">カレンダー（登録済み月次作業）</h6>
-                <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
+                <div class="d-flex align-items-center gap-2">
                   <label class="form-label mb-0 text-nowrap">対象月:</label>
-                  <div class="d-flex gap-2">
-                    <input type="month" class="form-control form-control-sm" id="monthPicker" style="width: 150px;">
-                    <button class="btn btn-outline-secondary btn-sm" id="btnReloadCal">
-                      <i class="bi bi-arrow-clockwise"></i> 更新
-                    </button>
-                  </div>
+                  <input type="month" class="form-control form-control-sm" id="monthPicker" style="width: 130px;">
+                  <button class="btn btn-outline-secondary btn-sm" id="btnReloadCal">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
                 </div>
               </div>
             </div>
             <div class="card-body">
               <div id="calendar" class="calendar-grid"></div>
-            </div>
-          </div>
-          <div id="domSection" class="card mb-3">
-            <div class="card-header">
-              <h6 class="mb-0">DOM設定（1〜31日を選択）</h6>
-            </div>
-            <div class="card-body">
-              <div class="mb-3">
-                <div class="d-flex flex-wrap gap-2" id="domDays"></div>
-              </div>
-              <div class="d-flex justify-content-end">
-                <button class="btn btn-primary" id="btnSaveDom">
-                  <i class="bi bi-check-circle"></i> DOMで登録
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div id="womSection" class="card" style="display:none;">
-            <div class="card-header">
-              <h6 class="mb-0">WOM設定（第n週 × 曜日）</h6>
-            </div>
-            <div class="card-body">
-              <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                  <label class="form-label fw-semibold">第n週（複数選択可）</label>
-                  <div class="d-flex flex-wrap gap-2" id="womWeeks"></div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label fw-semibold">曜日（複数選択可）</label>
-                  <div class="d-flex flex-wrap gap-2" id="womDows"></div>
-                </div>
-              </div>
-              <div class="d-flex justify-content-end">
-                <button class="btn btn-primary" id="btnSaveWom">
-                  <i class="bi bi-check-circle"></i> WOMで登録
+              
+              <!-- 保存ボタン -->
+              <div class="d-flex justify-content-end mt-3 pt-3 border-top">
+                <button class="btn btn-primary btn-lg" id="btnSaveAll" disabled>
+                  <i class="bi bi-database"></i> 保存（データベースに反映）
                 </button>
               </div>
             </div>
@@ -249,9 +269,7 @@
       });
 
       function updateTargetVisibility() {
-        const v = targetType.value || 'dom';
-        if (v === 'dom') { domSection.style.display='block'; womSection.style.display='none'; }
-        else { domSection.style.display='none'; womSection.style.display='block'; }
+        syncDomWomContainers();
       }
       targetType.addEventListener('change', updateTargetVisibility);
       updateTargetVisibility();
@@ -291,24 +309,46 @@
           + '<label class="form-check-label" for="' + id + '">' + dowNames[d-1] + '</label>';
         womDows.appendChild(div);
       }
+      
+      // DOM/WOM切替でコンテナを同期
+      function syncDomWomContainers() {
+        const mainDomSection = document.getElementById('domSection');
+        const mainWomSection = document.getElementById('womSection');
+        const targetType = document.getElementById('targetType').value || 'dom';
+        
+        if (targetType === 'dom') {
+          mainDomSection.style.display = 'block';
+          mainWomSection.style.display = 'none';
+        } else {
+          mainDomSection.style.display = 'none';
+          mainWomSection.style.display = 'block';
+        }
+      }
 
       // Submit helpers
+      // 時刻文字列をISO形式に変換する関数
+      function timeToIsoDateTime(timeStr) {
+        if (!timeStr) return null;
+        // 今日の日付と組み合わせてISO形式にする
+        const today = new Date().toISOString().split('T')[0];
+        return today + 'T' + timeStr + ':00.000Z';
+      }
+
       function collectCommon() {
         const store = document.getElementById('storeSelect').value || '';
         const dept = document.getElementById('deptSelect').value || '';
-        const taskPair = (document.getElementById('taskSelect').value || '').split('|');
-        const taskCode = taskPair[0] || '';
-        const deptFromTask = taskPair[1] || dept || null;
+        const taskCode = document.getElementById('selectedTaskCode').value || '';
+        const deptFromTask = document.getElementById('selectedDepartmentCode').value || dept || null;
         const sch = document.getElementById('scheduleType').value;
         const payload = {
           storeCode: store,
           departmentCode: deptFromTask,
           taskCode: taskCode,
           scheduleType: sch,
-          fixedStartTime: document.getElementById('fixedStart').value || null,
-          fixedEndTime: document.getElementById('fixedEnd').value || null,
-          windowStartTime: document.getElementById('winStart').value || null,
-          windowEndTime: document.getElementById('winEnd').value || null,
+          fixedStartTime: timeToIsoDateTime(document.getElementById('fixedStart').value),
+          fixedEndTime: timeToIsoDateTime(document.getElementById('fixedEnd').value),
+          windowStartTime: timeToIsoDateTime(document.getElementById('winStart').value),
+          windowEndTime: timeToIsoDateTime(document.getElementById('winEnd').value),
           requiredDurationMinutes: toInt(document.getElementById('duration').value),
           requiredStaffCount: toInt(document.getElementById('staff').value) || 1,
           lane: toInt(document.getElementById('lane').value),
@@ -330,39 +370,146 @@
       function toInt(v){ const n = Number(v); return Number.isFinite(n) ? n : null; }
       function showMsg(kind, text){ msg.className = `alert alert-\${kind} mt-3`; msg.textContent = text; msg.classList.remove('d-none'); }
 
-      document.getElementById('btnSaveDom').addEventListener('click', async () => {
+      // UI追加ボタン（まずUIに追加）
+      // pendingTasks はグローバルスコープで定義済み
+      
+      document.getElementById('btnAdd').addEventListener('click', async () => {
         const payload = collectCommon();
-        const days = Array.from(document.querySelectorAll('#domDays input:checked')).map(x => Number(x.value));
+        const targetType = document.getElementById('targetType').value || 'dom';
+        
+        
         if (!payload.storeCode) return showMsg('danger','店舗を選択してください');
         if (!payload.taskCode) return showMsg('danger','作業を選択してください');
-        if (days.length === 0) return showMsg('danger','1〜31日のいずれかを選択してください');
-        payload.daysOfMonth = days;
-        try {
-          const res = await fetch('/tasks/api/monthly/dom', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
-          if (!res.ok) throw new Error(await res.text());
-          const j = await res.json();
-          showMsg('success', `DOMで登録しました（planId=\${j.planId} / days=\${j.daysCount}）。`);
-        } catch (e) { showMsg('danger', `登録に失敗しました: \${e}`); }
+        
+        let taskData;
+        
+        if (targetType === 'dom') {
+          const days = Array.from(document.querySelectorAll('#domDays input:checked')).map(x => Number(x.value));
+          if (days.length === 0) return showMsg('danger','1〜31日のいずれかを選択してください');
+          taskData = { ...payload, daysOfMonth: days, type: 'dom' };
+        } else {
+          const weeks = Array.from(document.querySelectorAll('#womWeeks input:checked')).map(x => Number(x.value));
+          const dows = Array.from(document.querySelectorAll('#womDows input:checked')).map(x => Number(x.value));
+          console.log('WOM weeks:', weeks, 'dows:', dows);
+          if (weeks.length === 0 || dows.length === 0) return showMsg('danger','第n週と曜日を選択してください');
+          taskData = { ...payload, weeksOfMonth: weeks, daysOfWeek: dows, type: 'wom' };
+        }
+        
+        // 一時的なIDを生成
+        taskData.tempId = 'temp_' + Date.now();
+        pendingTasks.push(taskData);
+        
+        console.log('taskData added:', taskData);
+        console.log('pendingTasks:', pendingTasks);
+        
+        showMsg('success', 'UIに追加しました。保存ボタンでデータベースに反映してください。');
+        
+        // 保存ボタンを有効化
+        document.getElementById('btnSaveAll').disabled = false;
+        
+        // カレンダーにプレビュー表示
+        console.log('Calling updateCalendarPreview');
+        updateCalendarPreview();
+        
+        // フォームをリセット
+        document.querySelectorAll('.task-tree .list-group-item.task.selected').forEach(el => 
+          el.classList.remove('selected'));
+        document.getElementById('selectedTaskCode').value = '';
+        document.getElementById('selectedDepartmentCode').value = '';
+        document.getElementById('selectedTaskInfo').classList.add('d-none');
+        document.querySelectorAll('#domDays input:checked').forEach(cb => cb.checked = false);
+        document.querySelectorAll('#womWeeks input:checked').forEach(cb => cb.checked = false);
+        document.querySelectorAll('#womDows input:checked').forEach(cb => cb.checked = false);
       });
+      
+      // 一括保存ボタン（DBに反映）
+      document.getElementById('btnSaveAll').addEventListener('click', async () => {
+        if (pendingTasks.length === 0) {
+          if (!pendingDeletes || pendingDeletes.length === 0) {
+            showMsg('info', '保存する項目がありません。');
+            return;
+          }
+        }
+        
+        try {
+          let savedCount = 0;
+          let deletedCount = 0;
+          let updatedCount = 0;
+          
+          // 先に削除を実行
+          if (pendingDeletes && pendingDeletes.length > 0) {
+            for (const id of pendingDeletes) {
+              const resDel = await fetch('/tasks/api/monthly/delete/' + id, { method: 'DELETE' });
+              if (!resDel.ok) throw new Error(await resDel.text());
+              deletedCount++;
+            }
+          }
 
-      document.getElementById('btnSaveWom').addEventListener('click', async () => {
-        const payload = collectCommon();
-        const weeks = Array.from(document.querySelectorAll('#womWeeks input:checked')).map(x => Number(x.value));
-        const dows = Array.from(document.querySelectorAll('#womDows input:checked')).map(x => Number(x.value));
-        if (!payload.storeCode) return showMsg('danger','店舗を選択してください');
-        if (!payload.taskCode) return showMsg('danger','作業を選択してください');
-        if (weeks.length === 0 || dows.length === 0) return showMsg('danger','第n週と曜日を選択してください');
-        payload.weeksOfMonth = weeks; payload.daysOfWeek = dows;
-        try {
-          const res = await fetch('/tasks/api/monthly/wom', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
-          if (!res.ok) throw new Error(await res.text());
-          const j = await res.json();
-          showMsg('success', `WOMで登録しました（planId=\${j.planId} / pairs=\${j.pairs}）。`);
-        } catch (e) { showMsg('danger', `登録に失敗しました: \${e}`); }
+          // 更新を実行
+          if (pendingUpdates && pendingUpdates.length > 0) {
+            for (const upd of pendingUpdates) {
+              const resUpd = await fetch('/tasks/api/monthly/update', { method: 'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(upd) });
+              if (!resUpd.ok) throw new Error(await resUpd.text());
+              updatedCount++;
+            }
+          }
+
+          // 追加を実行
+          for (const taskData of pendingTasks) {
+            let result;
+            
+            if (taskData.type === 'dom') {
+              const res = await fetch('/tasks/api/monthly/dom', { 
+                method:'POST', 
+                headers:{ 'Content-Type':'application/json' }, 
+                body: JSON.stringify(taskData) 
+              });
+              if (!res.ok) throw new Error(await res.text());
+              result = await res.json();
+            } else {
+              const res = await fetch('/tasks/api/monthly/wom', { 
+                method:'POST', 
+                headers:{ 'Content-Type':'application/json' }, 
+                body: JSON.stringify(taskData) 
+              });
+              if (!res.ok) throw new Error(await res.text());
+              result = await res.json();
+            }
+            savedCount++;
+          }
+          
+          const msgParts = [];
+          if (savedCount > 0) msgParts.push(savedCount + '件の追加');
+          if (deletedCount > 0) msgParts.push(deletedCount + '件の削除');
+          if (updatedCount > 0) msgParts.push(updatedCount + '件の更新');
+          showMsg('success', (msgParts.length ? msgParts.join('・') : '変更なし') + 'をデータベースに保存しました。');
+          
+          // 保存完了後の処理
+          pendingTasks = [];
+          pendingDeletes = [];
+          pendingUpdates = [];
+          document.getElementById('btnSaveAll').disabled = true;
+          
+          // カレンダーを更新
+          const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
+          loadCalendar(yy, mm);
+          
+        } catch (e) { 
+          showMsg('danger', `保存に失敗しました: ${e}`); 
+        }
       });
+      
+      // カレンダープレビュー更新
+      function updateCalendarPreview() {
+        // 既存のカレンダー表示に加えて、pendingTasksをプレビュー表示
+        console.log('updateCalendarPreview called, pendingTasks:', pendingTasks);
+        const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
+        console.log('Loading calendar for:', yy, mm);
+        loadCalendar(yy, mm);
+      }
     });
   </script>
-  <script>
+  <script th:inline="javascript">
     // Calendar styles and rendering
     const style = document.createElement('style');
     style.textContent = `
@@ -416,6 +563,24 @@
         transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       }
+      .cal-item.cal-preview {
+        border-left-color: #28a745 !important;
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
+        opacity: 0.8 !important;
+        cursor: pointer !important;
+        animation: pulse 2s infinite;
+      }
+      .cal-item.cal-preview:hover {
+        opacity: 1 !important;
+        background: linear-gradient(135deg, #c3e6cb 0%, #a3d9a5 100%) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      }
+      @keyframes pulse {
+        0% { opacity: 0.7; }
+        50% { opacity: 1; }
+        100% { opacity: 0.7; }
+      }
       .cal-empty { 
         color: #adb5bd; 
         font-size: 12px; 
@@ -466,6 +631,7 @@
         const res = await fetch('/tasks/api/monthly/calendar?store=' + encodeURIComponent(store) + '&dept=' + encodeURIComponent(dept) + '&month=' + year + '-' + String(month).padStart(2,'0'));
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
+        // 既存のデータを表示
         for (const [dateStr, items] of Object.entries(data)) {
           const d = new Date(dateStr);
           const day = d.getDate();
@@ -490,10 +656,97 @@
             }
           }
         }
+        
+        // 未保存のプレビューを表示
+        console.log('Checking pendingTasks:', typeof pendingTasks, pendingTasks);
+        if (typeof pendingTasks !== 'undefined' && pendingTasks.length > 0) {
+          console.log('Adding preview for', pendingTasks.length, 'tasks');
+          for (const task of pendingTasks) {
+            console.log('Adding preview for task:', task);
+            addPreviewToCalendar(task, year, month);
+          }
+        } else {
+          console.log('No pending tasks to preview');
+        }
+        
+        // 削除予定のアイテムをスタイリング
+        if (typeof pendingDeletes !== 'undefined' && pendingDeletes.length > 0) {
+          hideDeletedItemsFromUI();
+        }
       } catch (e) {
         cal.innerHTML = '<div class="text-danger">カレンダー読み込みに失敗しました: ' + e + '</div>';
       }
     }
+    
+    function addPreviewToCalendar(task, year, month) {
+      console.log('addPreviewToCalendar called with:', task, year, month);
+      const label = task.taskCode || '';
+      let time = '';
+      if (task.scheduleType === 'FIXED') {
+        time = (task.fixedStartTime || '') + '-' + (task.fixedEndTime || '');
+      } else {
+        time = (task.windowStartTime || '') + '-' + (task.windowEndTime || '') + ' (' + (task.requiredDurationMinutes || '?') + '分)';
+      }
+      
+      if (task.type === 'dom') {
+        console.log('Processing DOM task for days:', task.daysOfMonth);
+        for (const day of task.daysOfMonth) {
+          const container = document.getElementById('day-' + day);
+          console.log('Looking for container day-' + day, container);
+          if (container) {
+            // 既存の「—」を削除
+            const empty = container.querySelector('.cal-empty');
+            if (empty) empty.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'cal-item cal-preview';
+            div.textContent = label + ' ' + time;
+            div.style.cursor = 'pointer';
+            div.style.opacity = '0.7';
+            div.style.borderLeftColor = '#28a745';
+            div.title = '未保存（プレビュー）- 右クリックで編集';
+            div.dataset.tempId = task.tempId;
+            div.setAttribute('data-temp-id', task.tempId);
+            div.dataset.taskData = JSON.stringify(task);
+            container.appendChild(div);
+            console.log('Added preview to day', day);
+          } else {
+            console.log('Container not found for day', day);
+          }
+        }
+      } else if (task.type === 'wom') {
+        // WOMの場合、該当する日付を計算
+        const daysInMonth = new Date(year, month, 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+          const date = new Date(year, month - 1, day);
+          const weekOfMonth = Math.ceil(day / 7);
+          const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // ISO週（月=1）
+          
+          console.log(`Day ${day}: weekOfMonth=${weekOfMonth}, dayOfWeek=${dayOfWeek}`);
+          
+          if (task.weeksOfMonth.includes(weekOfMonth) && task.daysOfWeek.includes(dayOfWeek)) {
+            const container = document.getElementById('day-' + day);
+            if (container) {
+              // 既存の「—」を削除
+              const empty = container.querySelector('.cal-empty');
+              if (empty) empty.remove();
+              
+              const div = document.createElement('div');
+              div.className = 'cal-item cal-preview';
+              div.textContent = label + ' ' + time;
+              div.style.cursor = 'pointer';
+              div.style.opacity = '0.7';
+              div.style.borderLeftColor = '#28a745';
+              div.title = '未保存（プレビュー）- 右クリックで編集';
+              div.dataset.tempId = task.tempId;
+              div.dataset.taskData = JSON.stringify(task);
+              container.appendChild(div);
+            }
+          }
+        }
+      }
+    }
+    
     document.addEventListener('DOMContentLoaded', () => {
       const monthPicker = document.getElementById('monthPicker');
       const btnReloadCal = document.getElementById('btnReloadCal');
@@ -599,21 +852,265 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-danger" id="btnDelete">削除</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-          <button type="button" class="btn btn-primary" id="btnSaveEdit">保存</button>
+          <button type="button" class="btn btn-primary" id="btnSave">保存</button>
         </div>
       </div>
     </div>
   </div>
 
 
-  <script>
+  <!-- タスクツリーコンポーネント -->
+  <script th:src="@{/js/task-tree.js}"></script>
+  
+  <script th:inline="javascript">
+    // グローバルスコープで定義
+    let pendingTasks = [];
+    let pendingDeletes = [];
+    let pendingUpdates = [];
+    
     // モーダル機能
     document.addEventListener('DOMContentLoaded', () => {
       let currentTaskData = null;
+      let taskTree = null;
       const editModal = new bootstrap.Modal(document.getElementById('editModal'));
       const editScheduleType = document.getElementById('editScheduleType');
       const editFixedGroup = document.getElementById('editFixedGroup');
       const editFlexGroup = document.getElementById('editFlexGroup');
+
+      // 作業計画画面と同じ形式でデータを取得
+      const allMasters = /*[[${masters}]]*/ [];
+      const categories = /*[[${categories}]]*/ [];
+      const selectedDept = /*[[${dept}]]*/ '';
+      
+      console.log('All masters from server:', allMasters);
+      console.log('Categories from server:', categories);
+      console.log('Selected department:', selectedDept);
+      
+      // 部門でフィルタリング（作業計画画面と同様）
+      // 部門が選択されていない場合は全ての作業マスタを表示
+      const masters = selectedDept && selectedDept.trim() !== '' ? 
+        allMasters.filter(m => m.departmentCode === selectedDept) : 
+        allMasters;
+      
+      console.log('Filtered masters for department', selectedDept, ':', masters);
+      
+      // テスト用デバッグ - 先頭3件の部門コードを表示
+      if (allMasters.length > 0) {
+        console.log('First 3 masters department codes:', allMasters.slice(0, 3).map(m => m.departmentCode));
+      }
+      
+      // デバッグ情報を表示
+      if (!masters || masters.length === 0) {
+        console.warn('No masters found for department', selectedDept, '- this will show "作業マスタがありません" message');
+      }
+      if (!categories || categories.length === 0) {
+        console.warn('No categories found');
+      }
+      
+      // 作業計画画面のツリー機能を直接使用
+      function buildCategoryMap(list) {
+        const map = new Map();
+        if (!Array.isArray(list)) return [];
+        
+        const categoryLookup = new Map();
+        categories.forEach(cat => {
+          categoryLookup.set(cat.categoryCode, cat);
+        });
+        
+        list.forEach(m => {
+          const code = m.categoryCode || '__UNCAT__';
+          const categoryInfo = categoryLookup.get(code);
+          const name = categoryInfo ? categoryInfo.categoryName : (m.categoryName || '未分類');
+          const color = categoryInfo ? categoryInfo.color : '#6c757d';
+          const icon = categoryInfo ? categoryInfo.icon : '';
+          
+          let taskDisplayColor = color;
+          if (m.color && m.color.trim() !== '') {
+            taskDisplayColor = m.color;
+          }
+          
+          if (!map.has(code)) {
+            map.set(code, { 
+              name, 
+              color, 
+              icon, 
+              tasks: [], 
+              categoryCode: code 
+            });
+          }
+          map.get(code).tasks.push({
+            ...m,
+            displayColor: taskDisplayColor
+          });
+        });
+        
+        const sorted = Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name));
+        sorted.forEach(cat => cat.tasks.sort((a,b)=>a.name.localeCompare(b.name)));
+        return sorted;
+      }
+      
+      function renderTaskTree() {
+        const listEl = document.getElementById('taskTreeList');
+        if (!listEl) return;
+        
+        const currentMasters = window.masters || masters;
+        console.log('renderTaskTree called with masters:', currentMasters.length, 'categories:', categories.length);
+        
+        listEl.innerHTML = '';
+        const cats = buildCategoryMap(currentMasters);
+        
+        if (!cats || cats.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'list-group-item text-muted text-center py-4';
+          empty.innerHTML = '<i class="bi bi-exclamation-triangle"></i><br>作業マスタがありません<br><small>管理者にお問い合わせください</small>';
+          listEl.appendChild(empty);
+          return;
+        }
+        
+        cats.forEach(cat => {
+          const catItem = document.createElement('button');
+          catItem.type = 'button';
+          catItem.className = 'list-group-item list-group-item-action category';
+          catItem.style.borderLeft = '4px solid ' + (cat.color || '#6c757d');
+          
+          const chev = document.createElement('span'); 
+          chev.className = 'chev';
+          
+          if (cat.icon) {
+            const iconEl = document.createElement('i');
+            iconEl.className = cat.icon;
+            iconEl.style.marginRight = '8px';
+            catItem.appendChild(iconEl);
+          }
+          
+          const label = document.createElement('span'); 
+          label.textContent = cat.name;
+          catItem.appendChild(chev);
+          catItem.appendChild(label);
+
+          const ul = document.createElement('div');
+          ul.style.display = 'none';
+          
+          cat.tasks.forEach(t => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action task';
+            btn.style.borderLeft = '4px solid ' + t.displayColor;
+            btn.innerHTML = '<span class="task-code">' + t.taskCode + '</span> <span class="task-name">' + t.name + '</span>';
+            btn.dataset.taskCode = t.taskCode;
+            btn.dataset.categoryCode = cat.categoryCode;
+            btn.dataset.taskData = JSON.stringify(t);
+            
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              
+              // 選択状態を更新
+              document.querySelectorAll('.task-tree .list-group-item.task.selected').forEach(el => 
+                el.classList.remove('selected'));
+              btn.classList.add('selected');
+              
+              // 隠しフィールドに値を設定
+              document.getElementById('selectedTaskCode').value = t.taskCode;
+              document.getElementById('selectedDepartmentCode').value = t.departmentCode;
+              
+              // 選択表示を更新
+              const displayDiv = document.getElementById('selectedTaskDisplay');
+              if (displayDiv) displayDiv.textContent = (t.departmentCode || '') + ' / ' + t.taskCode + ' - ' + t.name;
+            });
+            
+            ul.appendChild(btn);
+          });
+          
+          listEl.appendChild(catItem);
+          listEl.appendChild(ul);
+          
+          catItem.addEventListener('click', () => {
+            const open = ul.style.display !== 'none';
+            ul.style.display = open ? 'none' : '';
+            chev.classList.toggle('open', !open);
+          });
+        });
+      }
+      
+      // ツリーを初期化
+      renderTaskTree();
+      
+      // 部門変更時にツリーを再構築
+      const deptSelectForTree = document.getElementById('deptSelect');
+      if (deptSelectForTree) {
+        deptSelectForTree.addEventListener('change', () => {
+          const newDept = deptSelectForTree.value;
+          console.log('Department changed to:', newDept);
+          
+          // mastersを再フィルタリング
+          window.masters = newDept && newDept.trim() !== '' ? 
+            allMasters.filter(m => m.departmentCode === newDept) : 
+            allMasters;
+          
+          console.log('Refiltered masters:', window.masters);
+          
+          // ツリーを再描画
+          renderTaskTree();
+          
+          // 選択状態をクリア
+          document.getElementById('selectedTaskCode').value = '';
+          document.getElementById('selectedDepartmentCode').value = '';
+          const selDisp = document.getElementById('selectedTaskDisplay');
+          if (selDisp) selDisp.textContent = '未選択';
+        });
+      }
+      
+      // ツリー用のスタイルを追加
+      const treeStyle = document.createElement('style');
+      treeStyle.textContent = `
+        .task-tree .list-group-item.category { 
+          font-weight: 600; 
+          cursor: pointer; 
+          display: flex; 
+          align-items: center; 
+          gap: 6px; 
+          background-color: #f8f9fa;
+          border-bottom: 1px solid #dee2e6;
+        }
+        .task-tree .list-group-item.task { 
+          padding-left: 28px; 
+          cursor: pointer; 
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          transition: background-color 0.15s ease;
+        }
+        .task-tree .list-group-item.task:hover {
+          background-color: #e9ecef;
+        }
+        .task-tree .list-group-item.task.selected { 
+          background: #0d6efd !important; 
+          color: #fff !important; 
+        }
+        .task-tree .task-code {
+          font-family: monospace;
+          font-size: 0.9em;
+          font-weight: 600;
+          min-width: 120px;
+        }
+        .task-tree .task-name {
+          flex: 1;
+        }
+        .chev { 
+          width: 0; 
+          height: 0; 
+          border-left: 5px solid transparent; 
+          border-right: 5px solid transparent; 
+          border-top: 6px solid #6c757d; 
+          display: inline-block; 
+          transform: rotate(-90deg); 
+          transition: transform .15s; 
+        }
+        .chev.open { 
+          transform: rotate(0deg); 
+        }
+      `;
+      document.head.appendChild(treeStyle);
 
       // スケジュールタイプ変更
       editScheduleType.addEventListener('change', () => {
@@ -633,6 +1130,15 @@
         if (target && target.dataset.taskData) {
           e.preventDefault();
           currentTaskData = JSON.parse(target.dataset.taskData);
+          
+          // 未保存作業かどうかを識別
+          if (target.dataset.tempId) {
+            currentTaskData.isTemp = true;
+            currentTaskData.tempId = target.dataset.tempId;
+          } else {
+            currentTaskData.isTemp = false;
+          }
+          
           populateEditForm(currentTaskData);
           editModal.show();
         }
@@ -661,31 +1167,58 @@
         editScheduleType.dispatchEvent(new Event('change'));
       }
 
-      // 保存
-      document.getElementById('btnSaveEdit').addEventListener('click', async () => {
-        await saveEdit();
-      });
-
-      // モーダルの削除ボタン
-      document.getElementById('btnDelete').addEventListener('click', async () => {
-        const planId = document.getElementById('editPlanId').value;
-        if (planId && confirm('この月次作業を削除しますか？')) {
-          await deleteTask(planId);
-          editModal.hide();
+      // 保存（更新は保留リストに追加）
+      document.getElementById('btnSave').addEventListener('click', () => {
+        if (currentTaskData && currentTaskData.isTemp) {
+          // 未保存作業の更新
+          updateTempTask();
+        } else {
+          // 既存作業の更新
+          const payload = collectEditPayload();
+          if (!payload || !payload.planId) { showMsg('danger','更新対象が不正です'); return; }
+          pendingUpdates.push(payload);
+          const saveBtn = document.getElementById('btnSaveAll');
+          if (saveBtn) saveBtn.disabled = false;
+          showMsg('warning','更新を保留リストに追加しました。保存ボタンで反映します。');
         }
+        editModal.hide();
       });
 
-      async function saveEdit() {
+      // モーダルの削除ボタン → 即時削除せずに保留リストへ
+      document.getElementById('btnDelete').addEventListener('click', () => {
+        if (currentTaskData && currentTaskData.isTemp) {
+          // 未保存作業の削除
+          deleteTempTask(currentTaskData.tempId);
+          showMsg('success', '未保存作業を削除しました。');
+        } else {
+          // 既存作業の削除
+          const planId = document.getElementById('editPlanId').value;
+          if (planId) {
+            if (!pendingDeletes.includes(planId)) pendingDeletes.push(planId);
+            showMsg('warning', '削除を保留リストに追加しました。保存ボタンで反映します。');
+            
+            // UIから該当アイテムを非表示にする
+            hideDeletedItemsFromUI();
+            
+            // 保存ボタンを有効化
+            const saveBtn = document.getElementById('btnSaveAll');
+            if (saveBtn) saveBtn.disabled = false;
+          }
+        }
+        editModal.hide();
+      });
+
+      function collectEditPayload() {
         const planId = document.getElementById('editPlanId').value;
         const payload = {
           planId: planId,
           scheduleType: document.getElementById('editScheduleType').value,
-          fixedStartTime: document.getElementById('editFixedStart').value || null,
-          fixedEndTime: document.getElementById('editFixedEnd').value || null,
-          windowStartTime: document.getElementById('editWinStart').value || null,
-          windowEndTime: document.getElementById('editWinEnd').value || null,
+          fixedStartTime: timeToIsoDateTime(document.getElementById('editFixedStart').value),
+          fixedEndTime: timeToIsoDateTime(document.getElementById('editFixedEnd').value),
+          windowStartTime: timeToIsoDateTime(document.getElementById('editWinStart').value),
+          windowEndTime: timeToIsoDateTime(document.getElementById('editWinEnd').value),
           requiredDurationMinutes: toInt(document.getElementById('editDuration').value),
-          mustBeContiguous: document.getElementById('editContiguous').value === '1',
+          mustBeContiguous: document.getElementById('editContiguous').value === '1' ? 1 : 0,
           requiredStaffCount: toInt(document.getElementById('editStaff').value),
           lane: toInt(document.getElementById('editLane').value),
           priority: toInt(document.getElementById('editPriority').value),
@@ -696,51 +1229,106 @@
         };
 
         // スケジュールタイプに応じてnull化
-        if (payload.scheduleType === 'FIXED') {
-          payload.windowStartTime = null;
-          payload.windowEndTime = null;
-          payload.requiredDurationMinutes = null;
-        } else {
-          payload.fixedStartTime = null;
-          payload.fixedEndTime = null;
-        }
-
-        try {
-          const res = await fetch('/tasks/api/monthly/update', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          
-          if (!res.ok) throw new Error(await res.text());
-          
-          showMsg('success', '月次作業を更新しました。');
-          editModal.hide();
-          
-          // カレンダーを再読み込み
-          const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
-          loadCalendar(yy, mm);
-        } catch (e) {
-          showMsg('danger', `更新に失敗しました: ${e}`);
-        }
+        if (payload.scheduleType === 'FIXED') { payload.windowStartTime = null; payload.windowEndTime = null; payload.requiredDurationMinutes = null; }
+        else { payload.fixedStartTime = null; payload.fixedEndTime = null; }
+        return payload;
       }
 
-      async function deleteTask(planId) {
-        try {
-          const res = await fetch('/tasks/api/monthly/delete/' + planId, {
-            method: 'DELETE'
+      // 未保存作業の更新
+      function updateTempTask() {
+        const tempId = currentTaskData.tempId;
+        const taskIndex = pendingTasks.findIndex(t => t.tempId === tempId);
+        
+        if (taskIndex === -1) {
+          showMsg('danger', '更新対象の未保存作業が見つかりません。');
+          return;
+        }
+        
+        // 編集フォームから新しい値を取得
+        const updatedTask = collectTempTaskData();
+        updatedTask.tempId = tempId; // tempIdを保持
+        updatedTask.type = pendingTasks[taskIndex].type; // typeを保持
+        
+        // DOM/WOMの特定データも保持
+        if (updatedTask.type === 'dom') {
+          updatedTask.daysOfMonth = pendingTasks[taskIndex].daysOfMonth;
+        } else {
+          updatedTask.weeksOfMonth = pendingTasks[taskIndex].weeksOfMonth;
+          updatedTask.daysOfWeek = pendingTasks[taskIndex].daysOfWeek;
+        }
+        
+        // 配列内の要素を置換
+        pendingTasks[taskIndex] = updatedTask;
+        
+        showMsg('success', '未保存作業を更新しました。');
+        updateCalendarPreview();
+      }
+      
+      // 未保存作業の削除
+      function deleteTempTask(tempId) {
+        const taskIndex = pendingTasks.findIndex(t => t.tempId === tempId);
+        if (taskIndex !== -1) {
+          // UIから即座に削除
+          document.querySelectorAll('.cal-item[data-temp-id="' + tempId + '"]').forEach(item => {
+            item.remove();
           });
           
-          if (!res.ok) throw new Error(await res.text());
+          // pendingTasksから削除
+          pendingTasks.splice(taskIndex, 1);
           
-          showMsg('success', '月次作業を削除しました。');
+          // 空になったセルに「—」を表示
+          document.querySelectorAll('.cal-cell').forEach(cell => {
+            const dayContainer = cell.querySelector('[id^="day-"]');
+            if (dayContainer && dayContainer.children.length === 0) {
+              const empty = document.createElement('div');
+              empty.className = 'cal-empty';
+              empty.textContent = '—';
+              dayContainer.appendChild(empty);
+            }
+          });
           
-          // カレンダーを再読み込み
-          const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
-          loadCalendar(yy, mm);
-        } catch (e) {
-          showMsg('danger', `削除に失敗しました: ${e}`);
+          // 保存ボタンの状態を更新
+          const saveBtn = document.getElementById('btnSaveAll');
+          if (saveBtn && pendingTasks.length === 0 && pendingDeletes.length === 0 && pendingUpdates.length === 0) {
+            saveBtn.disabled = true;
+          }
         }
+      }
+      
+      // 編集フォームから未保存作業のデータを収集
+      function collectTempTaskData() {
+        return {
+          storeCode: document.getElementById('storeSelect').value || '',
+          departmentCode: document.getElementById('selectedDepartmentCode').value || document.getElementById('deptSelect').value || '',
+          taskCode: document.getElementById('editTaskCode').value || '',
+          scheduleType: document.getElementById('editScheduleType').value,
+          fixedStartTime: timeToIsoDateTime(document.getElementById('editFixedStart').value),
+          fixedEndTime: timeToIsoDateTime(document.getElementById('editFixedEnd').value),
+          windowStartTime: timeToIsoDateTime(document.getElementById('editWinStart').value),
+          windowEndTime: timeToIsoDateTime(document.getElementById('editWinEnd').value),
+          requiredDurationMinutes: toInt(document.getElementById('editDuration').value),
+          requiredStaffCount: toInt(document.getElementById('editStaff').value) || 1,
+          lane: toInt(document.getElementById('editLane').value),
+          mustBeContiguous: toInt(document.getElementById('editContiguous').value),
+          effectiveFrom: document.getElementById('editEffFrom').value || null,
+          effectiveTo: document.getElementById('editEffTo').value || null,
+          priority: toInt(document.getElementById('editPriority').value),
+          note: document.getElementById('editNote').value || null,
+          active: document.getElementById('editActive').value === 'true'
+        };
+      }
+
+      // UIから削除対象アイテムを非表示にする関数
+      function hideDeletedItemsFromUI() {
+        document.querySelectorAll('.cal-item').forEach(item => {
+          const planId = item.dataset.planId;
+          if (planId && pendingDeletes.includes(planId)) {
+            item.style.opacity = '0.3';
+            item.style.textDecoration = 'line-through';
+            item.style.pointerEvents = 'none';
+            item.title = '削除予定（保存時に完全削除されます）';
+          }
+        });
       }
 
       function toInt(v) {
