@@ -71,17 +71,7 @@
             <div class="small text-muted">横軸: 時間 / 縦軸: 15レーン</div>
           </div>
         </div>
-        <div class="row g-2 align-items-end mb-2">
-          <div class="col-auto d-flex align-items-end">
-            <div>
-              <label class="form-label form-label-sm mb-1">作業マスタ</label>
-              <div class="small text-muted">左のツリーから選択</div>
-              <input type="hidden" id="gridTask" value="">
-              <div class="mt-1 small">選択中: <span id="selectedTaskLabel" class="fw-bold">未選択</span></div>
-            </div>
-          </div>
-          <!-- 日付/曜日選択は上部の検索フォームの値を使用（ここでは表示しない） -->
-        </div>
+        <!-- 選択表示は左側の共通コンポーネント内に集約 -->
 
         <style>
           .time-grid-wrapper { overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
@@ -118,9 +108,7 @@
           .chev.open { transform: rotate(0deg); }
         </style>
         <div class="grid-editor mt-2">
-          <div class="task-tree card shadow-sm">
-            <div class="list-group list-group-flush" id="taskTreeList"></div>
-          </div>
+          <div th:replace="~{fragments/task-selection :: taskSelection('gridTask','gridDept','selectedTaskLabel','taskTreeList','作業選択')}"></div>
           <div class="grid-pane flex-grow-1">
             <div class="time-grid-wrapper">
               <div id="timeGrid" class="time-grid"></div>
@@ -254,6 +242,8 @@
     </div>
   </div>
 
+  <!-- 共通タスクツリー -->
+  <script th:src="@{/js/task-tree.js}"></script>
   <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function() {
       const planForm = document.getElementById('planForm');
@@ -968,119 +958,27 @@
         });
       }
 
-      // ===== Task tree (always visible) =====
-      function buildCategoryMap(list) {
-        const map = new Map();
-        if (!Array.isArray(list)) return map;
-        
-        // Create category lookup map
-        const categoryLookup = new Map();
-        categories.forEach(cat => {
-          categoryLookup.set(cat.categoryCode, cat);
-        });
-        
-        list.forEach(m => {
-          const code = m.categoryCode || '__UNCAT__';
-          const categoryInfo = categoryLookup.get(code);
-          const name = categoryInfo ? categoryInfo.categoryName : (m.categoryName || '未分類');
-          const color = categoryInfo ? categoryInfo.color : '#6c757d';
-          const icon = categoryInfo ? categoryInfo.icon : '';
-          
-          // Determine task display color (task color or fallback to category color)
-          let taskDisplayColor = color; // Default to category color
-          if (m.color && m.color.trim() !== '') {
-            taskDisplayColor = m.color; // Use task color if available
-          }
-          
-          if (!map.has(code)) {
-            map.set(code, { code, name, color, icon, tasks: [] });
-          }
-          map.get(code).tasks.push({ 
-            code: m.taskCode, 
-            name: m.name, 
-            departmentCode: m.departmentCode,
-            categoryCode: code,
-            categoryColor: taskDisplayColor // Use the determined color
-          });
-        });
-        // sort categories by name, tasks by name
-        const sorted = Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name));
-        sorted.forEach(cat => cat.tasks.sort((a,b)=>a.name.localeCompare(b.name)));
-        return sorted;
-      }
-      function renderTaskTree() {
-        try {
-          const listEl = document.getElementById('taskTreeList');
-          if (!listEl) return;
-          listEl.innerHTML = '';
-          const cats = buildCategoryMap(masters);
-          if (!cats || cats.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'list-group-item text-muted';
-            empty.textContent = '作業マスタがありません';
-            listEl.appendChild(empty);
-            return;
-          }
-          cats.forEach(cat => {
-            const catItem = document.createElement('button');
-            catItem.type = 'button';
-            catItem.className = 'list-group-item list-group-item-action category';
-            catItem.style.borderLeft = `4px solid ${cat.color || '#6c757d'}`;
-            
-            const chev = document.createElement('span'); chev.className = 'chev';
-            
-            // Add icon if available
-            if (cat.icon) {
-              const iconEl = document.createElement('i');
-              iconEl.className = cat.icon;
-              iconEl.style.marginRight = '8px';
-              catItem.appendChild(iconEl);
-            }
-            
-            const label = document.createElement('span'); 
-            label.textContent = cat.name;
-            label.style.color = cat.color || '#495057';
-            
-            catItem.appendChild(chev); 
-            catItem.appendChild(label);
-            listEl.appendChild(catItem);
-            const ul = document.createElement('div'); ul.style.display = ''; // default open
-            cat.tasks.forEach(t => {
-              const btn = document.createElement('button');
-              btn.type = 'button';
-              btn.className = 'list-group-item list-group-item-action task';
-              btn.style.borderLeft = `3px solid ${t.categoryColor || '#6c757d'}`;
-              btn.style.paddingLeft = '20px';
-              btn.textContent = `${t.code} - ${t.name}`;
-              btn.dataset.taskCode = t.code;
-              btn.addEventListener('click', () => {
-                const hid = document.getElementById('gridTask');
-                if (hid) hid.value = t.code;
-                // highlight selection
-                document.querySelectorAll('.task-tree .list-group-item.task.selected').forEach(e => e.classList.remove('selected'));
-                btn.classList.add('selected');
-                const lbl = document.getElementById('selectedTaskLabel');
-                if (lbl) lbl.textContent = `${t.name} (${t.code})`;
-              });
-              ul.appendChild(btn);
-            });
-            listEl.appendChild(ul);
-            catItem.addEventListener('click', () => {
-              const open = ul.style.display !== 'none';
-              ul.style.display = open ? 'none' : '';
-              chev.classList.toggle('open', !open);
-            });
-            // default open chevron
-            chev.classList.add('open');
-          });
-        } catch (e) { console.warn('renderTaskPicker error', e); }
-      }
-      // Build task tree
-      renderTaskTree();
+      // 共通タスクツリーを初期化
+      const taskTree = new TaskTree({
+        container: document.getElementById('taskTreeList'),
+        masters,
+        categories,
+        onTaskSelect: (code, data) => {
+          const hid = document.getElementById('gridTask');
+          if (hid) hid.value = code || '';
+          const lbl = document.getElementById('selectedTaskLabel');
+          if (lbl) lbl.textContent = data ? `${data.name}` : '未選択';
+        }
+      });
+      taskTree.render();
+      // attach search and keyboard navigation
+      const searchEl = document.getElementById('taskTreeList-search');
+      if (searchEl) taskTree.attachSearch(searchEl);
+      taskTree.enableKeyboardNavigation();
 
       // Rebuild traditional selects to use optgroup hierarchy
       function rebuildTaskSelects() {
-        const cats = buildCategoryMap(masters);
+        const cats = taskTree.buildCategoryMap(masters);
         document.querySelectorAll('select.task-select').forEach(sel => {
           const current = sel.value;
           sel.innerHTML = '';
@@ -1088,7 +986,7 @@
           cats.forEach(cat => {
             const og = document.createElement('optgroup'); og.label = cat.name;
             cat.tasks.forEach(t => {
-              const opt = document.createElement('option'); opt.value = t.code; opt.textContent = `${t.code} - ${t.name}`;
+              const opt = document.createElement('option'); opt.value = t.taskCode; opt.textContent = `${t.name}`;
               og.appendChild(opt);
             });
             sel.appendChild(og);

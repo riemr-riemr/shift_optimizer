@@ -49,22 +49,7 @@
       <div class="row g-3">
         <!-- 作業選択列 -->
         <div class="col-12 col-lg-4">
-          <div class="card">
-            <div class="card-header">
-              <h6 class="mb-0">作業選択</h6>
-            </div>
-            <div class="card-body p-0">
-              <div id="selectedTaskInfo" class="p-2 bg-light border-bottom">
-                <small class="text-muted">選択済み作業:</small>
-                <div id="selectedTaskDisplay" class="fw-semibold">未選択</div>
-              </div>
-              <div class="task-tree-container">
-                <div id="taskTreeList" class="list-group list-group-flush task-tree"></div>
-              </div>
-              <input type="hidden" id="selectedTaskCode" />
-              <input type="hidden" id="selectedDepartmentCode" />
-            </div>
-          </div>
+          <div th:replace="~{fragments/task-selection :: taskSelection('selectedTaskCode','selectedDepartmentCode','selectedTaskDisplay','taskTreeList','作業選択')}"></div>
         </div>
         
         <!-- スケジュール設定列 -->
@@ -245,7 +230,6 @@
 
   <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', () => {
-      const stores = /*[[${stores}]]*/ [];
       const storeCode = /*[[${storeCode}]]*/ '';
       const dept = /*[[${dept}]]*/ '';
 
@@ -390,7 +374,6 @@
         } else {
           const weeks = Array.from(document.querySelectorAll('#womWeeks input:checked')).map(x => Number(x.value));
           const dows = Array.from(document.querySelectorAll('#womDows input:checked')).map(x => Number(x.value));
-          console.log('WOM weeks:', weeks, 'dows:', dows);
           if (weeks.length === 0 || dows.length === 0) return showMsg('danger','第n週と曜日を選択してください');
           taskData = { ...payload, weeksOfMonth: weeks, daysOfWeek: dows, type: 'wom' };
         }
@@ -399,8 +382,7 @@
         taskData.tempId = 'temp_' + Date.now();
         pendingTasks.push(taskData);
         
-        console.log('taskData added:', taskData);
-        console.log('pendingTasks:', pendingTasks);
+        
         
         showMsg('success', 'UIに追加しました。保存ボタンでデータベースに反映してください。');
         
@@ -408,7 +390,7 @@
         document.getElementById('btnSaveAll').disabled = false;
         
         // カレンダーにプレビュー表示
-        console.log('Calling updateCalendarPreview');
+        
         updateCalendarPreview();
         
         // フォームをリセット
@@ -502,9 +484,7 @@
       // カレンダープレビュー更新
       function updateCalendarPreview() {
         // 既存のカレンダー表示に加えて、pendingTasksをプレビュー表示
-        console.log('updateCalendarPreview called, pendingTasks:', pendingTasks);
         const [yy, mm] = document.getElementById('monthPicker').value.split('-').map(Number);
-        console.log('Loading calendar for:', yy, mm);
         loadCalendar(yy, mm);
       }
     });
@@ -643,7 +623,7 @@
             for (const it of items) {
               const div = document.createElement('div');
               div.className = 'cal-item';
-              const label = it.taskCode || '';
+              const label = (window.taskNameByCode && window.taskNameByCode[it.taskCode]) || '';
               let time = '';
               if (it.scheduleType === 'FIXED') { time = (it.fixedStartTime || '') + '-' + (it.fixedEndTime || ''); }
               else { time = (it.windowStartTime || '') + '-' + (it.windowEndTime || '') + ' (' + (it.requiredDurationMinutes || '?') + '分)'; }
@@ -658,15 +638,10 @@
         }
         
         // 未保存のプレビューを表示
-        console.log('Checking pendingTasks:', typeof pendingTasks, pendingTasks);
         if (typeof pendingTasks !== 'undefined' && pendingTasks.length > 0) {
-          console.log('Adding preview for', pendingTasks.length, 'tasks');
           for (const task of pendingTasks) {
-            console.log('Adding preview for task:', task);
             addPreviewToCalendar(task, year, month);
           }
-        } else {
-          console.log('No pending tasks to preview');
         }
         
         // 削除予定のアイテムをスタイリング
@@ -679,8 +654,7 @@
     }
     
     function addPreviewToCalendar(task, year, month) {
-      console.log('addPreviewToCalendar called with:', task, year, month);
-      const label = task.taskCode || '';
+      const label = (window.taskNameByCode && window.taskNameByCode[task.taskCode]) || '';
       let time = '';
       if (task.scheduleType === 'FIXED') {
         time = (task.fixedStartTime || '') + '-' + (task.fixedEndTime || '');
@@ -689,10 +663,9 @@
       }
       
       if (task.type === 'dom') {
-        console.log('Processing DOM task for days:', task.daysOfMonth);
+        
         for (const day of task.daysOfMonth) {
           const container = document.getElementById('day-' + day);
-          console.log('Looking for container day-' + day, container);
           if (container) {
             // 既存の「—」を削除
             const empty = container.querySelector('.cal-empty');
@@ -709,9 +682,6 @@
             div.setAttribute('data-temp-id', task.tempId);
             div.dataset.taskData = JSON.stringify(task);
             container.appendChild(div);
-            console.log('Added preview to day', day);
-          } else {
-            console.log('Container not found for day', day);
           }
         }
       } else if (task.type === 'wom') {
@@ -721,8 +691,6 @@
           const date = new Date(year, month - 1, day);
           const weekOfMonth = Math.ceil(day / 7);
           const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // ISO週（月=1）
-          
-          console.log(`Day ${day}: weekOfMonth=${weekOfMonth}, dayOfWeek=${dayOfWeek}`);
           
           if (task.weeksOfMonth.includes(weekOfMonth) && task.daysOfWeek.includes(dayOfWeek)) {
             const container = document.getElementById('day-' + day);
@@ -770,8 +738,9 @@
             <input type="hidden" id="editPlanId">
             <div class="row g-3">
               <div class="col-md-6">
-                <label class="form-label">作業コード</label>
-                <input type="text" class="form-control" id="editTaskCode" readonly>
+                <label class="form-label">作業名</label>
+                <input type="text" class="form-control" id="editTaskName" readonly>
+                <input type="hidden" id="editTaskCode">
               </div>
               <div class="col-md-6">
                 <label class="form-label">スケジュールタイプ</label>
@@ -882,9 +851,7 @@
       const categories = /*[[${categories}]]*/ [];
       const selectedDept = /*[[${dept}]]*/ '';
       
-      console.log('All masters from server:', allMasters);
-      console.log('Categories from server:', categories);
-      console.log('Selected department:', selectedDept);
+      // debug removed
       
       // 部門でフィルタリング（作業計画画面と同様）
       // 部門が選択されていない場合は全ての作業マスタを表示
@@ -892,166 +859,50 @@
         allMasters.filter(m => m.departmentCode === selectedDept) : 
         allMasters;
       
-      console.log('Filtered masters for department', selectedDept, ':', masters);
+      // debug removed
+
+      // 共通タスクツリーを初期化
+      const taskTreeContainer = document.getElementById('taskTreeList');
+      taskTree = new TaskTree({
+        container: taskTreeContainer,
+        masters,
+        categories,
+        onTaskSelect: (code, data) => {
+          document.getElementById('selectedTaskCode').value = code || '';
+          document.getElementById('selectedDepartmentCode').value = data && data.departmentCode ? data.departmentCode : '';
+          const displayDiv = document.getElementById('selectedTaskDisplay');
+          if (displayDiv) displayDiv.textContent = data ? `${data.name}` : '未選択';
+        }
+      });
+      taskTree.render();
+      // attach search and keyboard navigation
+      const searchEl = document.getElementById('taskTreeList-search');
+      if (searchEl) taskTree.attachSearch(searchEl);
+      taskTree.enableKeyboardNavigation();
+      
+      // 作業名参照用のグローバルマップ（カレンダー用）
+      window.taskNameByCode = {};
+      (allMasters || []).forEach(m => { window.taskNameByCode[m.taskCode] = m.name; });
       
       // テスト用デバッグ - 先頭3件の部門コードを表示
       if (allMasters.length > 0) {
-        console.log('First 3 masters department codes:', allMasters.slice(0, 3).map(m => m.departmentCode));
+      // debug removed
       }
       
       // デバッグ情報を表示
-      if (!masters || masters.length === 0) {
-        console.warn('No masters found for department', selectedDept, '- this will show "作業マスタがありません" message');
-      }
-      if (!categories || categories.length === 0) {
-        console.warn('No categories found');
-      }
+      // debug removed
       
-      // 作業計画画面のツリー機能を直接使用
-      function buildCategoryMap(list) {
-        const map = new Map();
-        if (!Array.isArray(list)) return [];
-        
-        const categoryLookup = new Map();
-        categories.forEach(cat => {
-          categoryLookup.set(cat.categoryCode, cat);
-        });
-        
-        list.forEach(m => {
-          const code = m.categoryCode || '__UNCAT__';
-          const categoryInfo = categoryLookup.get(code);
-          const name = categoryInfo ? categoryInfo.categoryName : (m.categoryName || '未分類');
-          const color = categoryInfo ? categoryInfo.color : '#6c757d';
-          const icon = categoryInfo ? categoryInfo.icon : '';
-          
-          let taskDisplayColor = color;
-          if (m.color && m.color.trim() !== '') {
-            taskDisplayColor = m.color;
-          }
-          
-          if (!map.has(code)) {
-            map.set(code, { 
-              name, 
-              color, 
-              icon, 
-              tasks: [], 
-              categoryCode: code 
-            });
-          }
-          map.get(code).tasks.push({
-            ...m,
-            displayColor: taskDisplayColor
-          });
-        });
-        
-        const sorted = Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name));
-        sorted.forEach(cat => cat.tasks.sort((a,b)=>a.name.localeCompare(b.name)));
-        return sorted;
-      }
-      
-      function renderTaskTree() {
-        const listEl = document.getElementById('taskTreeList');
-        if (!listEl) return;
-        
-        const currentMasters = window.masters || masters;
-        console.log('renderTaskTree called with masters:', currentMasters.length, 'categories:', categories.length);
-        
-        listEl.innerHTML = '';
-        const cats = buildCategoryMap(currentMasters);
-        
-        if (!cats || cats.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'list-group-item text-muted text-center py-4';
-          empty.innerHTML = '<i class="bi bi-exclamation-triangle"></i><br>作業マスタがありません<br><small>管理者にお問い合わせください</small>';
-          listEl.appendChild(empty);
-          return;
-        }
-        
-        cats.forEach(cat => {
-          const catItem = document.createElement('button');
-          catItem.type = 'button';
-          catItem.className = 'list-group-item list-group-item-action category';
-          catItem.style.borderLeft = '4px solid ' + (cat.color || '#6c757d');
-          
-          const chev = document.createElement('span'); 
-          chev.className = 'chev';
-          
-          if (cat.icon) {
-            const iconEl = document.createElement('i');
-            iconEl.className = cat.icon;
-            iconEl.style.marginRight = '8px';
-            catItem.appendChild(iconEl);
-          }
-          
-          const label = document.createElement('span'); 
-          label.textContent = cat.name;
-          catItem.appendChild(chev);
-          catItem.appendChild(label);
-
-          const ul = document.createElement('div');
-          ul.style.display = 'none';
-          
-          cat.tasks.forEach(t => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'list-group-item list-group-item-action task';
-            btn.style.borderLeft = '4px solid ' + t.displayColor;
-            btn.innerHTML = '<span class="task-code">' + t.taskCode + '</span> <span class="task-name">' + t.name + '</span>';
-            btn.dataset.taskCode = t.taskCode;
-            btn.dataset.categoryCode = cat.categoryCode;
-            btn.dataset.taskData = JSON.stringify(t);
-            
-            btn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              
-              // 選択状態を更新
-              document.querySelectorAll('.task-tree .list-group-item.task.selected').forEach(el => 
-                el.classList.remove('selected'));
-              btn.classList.add('selected');
-              
-              // 隠しフィールドに値を設定
-              document.getElementById('selectedTaskCode').value = t.taskCode;
-              document.getElementById('selectedDepartmentCode').value = t.departmentCode;
-              
-              // 選択表示を更新
-              const displayDiv = document.getElementById('selectedTaskDisplay');
-              if (displayDiv) displayDiv.textContent = (t.departmentCode || '') + ' / ' + t.taskCode + ' - ' + t.name;
-            });
-            
-            ul.appendChild(btn);
-          });
-          
-          listEl.appendChild(catItem);
-          listEl.appendChild(ul);
-          
-          catItem.addEventListener('click', () => {
-            const open = ul.style.display !== 'none';
-            ul.style.display = open ? 'none' : '';
-            chev.classList.toggle('open', !open);
-          });
-        });
-      }
-      
-      // ツリーを初期化
-      renderTaskTree();
+      // 既存の個別実装呼び出しは共通コンポーネントに置換済み
       
       // 部門変更時にツリーを再構築
       const deptSelectForTree = document.getElementById('deptSelect');
       if (deptSelectForTree) {
         deptSelectForTree.addEventListener('change', () => {
           const newDept = deptSelectForTree.value;
-          console.log('Department changed to:', newDept);
-          
-          // mastersを再フィルタリング
-          window.masters = newDept && newDept.trim() !== '' ? 
-            allMasters.filter(m => m.departmentCode === newDept) : 
-            allMasters;
-          
-          console.log('Refiltered masters:', window.masters);
-          
-          // ツリーを再描画
-          renderTaskTree();
-          
+          const mastersNew = newDept && newDept.trim() !== ''
+            ? allMasters.filter(m => m.departmentCode === newDept)
+            : allMasters;
+          taskTree.updateData(mastersNew, categories);
           // 選択状態をクリア
           document.getElementById('selectedTaskCode').value = '';
           document.getElementById('selectedDepartmentCode').value = '';
@@ -1060,57 +911,7 @@
         });
       }
       
-      // ツリー用のスタイルを追加
-      const treeStyle = document.createElement('style');
-      treeStyle.textContent = `
-        .task-tree .list-group-item.category { 
-          font-weight: 600; 
-          cursor: pointer; 
-          display: flex; 
-          align-items: center; 
-          gap: 6px; 
-          background-color: #f8f9fa;
-          border-bottom: 1px solid #dee2e6;
-        }
-        .task-tree .list-group-item.task { 
-          padding-left: 28px; 
-          cursor: pointer; 
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          transition: background-color 0.15s ease;
-        }
-        .task-tree .list-group-item.task:hover {
-          background-color: #e9ecef;
-        }
-        .task-tree .list-group-item.task.selected { 
-          background: #0d6efd !important; 
-          color: #fff !important; 
-        }
-        .task-tree .task-code {
-          font-family: monospace;
-          font-size: 0.9em;
-          font-weight: 600;
-          min-width: 120px;
-        }
-        .task-tree .task-name {
-          flex: 1;
-        }
-        .chev { 
-          width: 0; 
-          height: 0; 
-          border-left: 5px solid transparent; 
-          border-right: 5px solid transparent; 
-          border-top: 6px solid #6c757d; 
-          display: inline-block; 
-          transform: rotate(-90deg); 
-          transition: transform .15s; 
-        }
-        .chev.open { 
-          transform: rotate(0deg); 
-        }
-      `;
-      document.head.appendChild(treeStyle);
+      // スタイルは共通コンポーネント task-tree.js 側で注入
 
       // スケジュールタイプ変更
       editScheduleType.addEventListener('change', () => {
@@ -1147,7 +948,12 @@
       // フォームに値を設定
       function populateEditForm(data) {
         document.getElementById('editPlanId').value = data.planId || '';
+        // set hidden code and visible name for display
+        const nameMap = window.taskNameByCode || {};
         document.getElementById('editTaskCode').value = data.taskCode || '';
+        const nm = data.taskCode ? (nameMap[data.taskCode] || '') : '';
+        const nameEl = document.getElementById('editTaskName');
+        if (nameEl) nameEl.value = nm;
         document.getElementById('editScheduleType').value = data.scheduleType || 'FIXED';
         document.getElementById('editFixedStart').value = data.fixedStartTime || '';
         document.getElementById('editFixedEnd').value = data.fixedEndTime || '';

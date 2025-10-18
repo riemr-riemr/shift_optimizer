@@ -12,6 +12,10 @@ class TaskTree {
     this.mode = options.mode || 'single'; // 'single' or 'multi'
     this.selectedTasks = new Set();
     this.selectedTaskCode = null;
+    this.searchInput = options.searchInput || null;
+    this.filterText = '';
+    this.flatTaskButtons = [];
+    this.focusIndex = -1;
   }
 
   // カテゴリマップを構築
@@ -62,12 +66,16 @@ class TaskTree {
   // ツリーを描画
   render() {
     if (!this.containerElement) return;
-    
+    // make container focusable for keyboard navigation
+    this.containerElement.setAttribute('tabindex', '0');
+
     console.log('TaskTree render - masters:', this.masters);
     console.log('TaskTree render - categories:', this.categories);
     
     this.containerElement.innerHTML = '';
-    const cats = this.buildCategoryMap(this.masters);
+    // apply filter before building category map
+    const filtered = this.applyFilter(this.masters, this.filterText);
+    const cats = this.buildCategoryMap(filtered);
     
     console.log('TaskTree render - built categories:', cats);
     
@@ -79,6 +87,8 @@ class TaskTree {
       return;
     }
 
+    this.flatTaskButtons = [];
+    this.focusIndex = -1;
     cats.forEach(cat => {
       const catItem = document.createElement('button');
       catItem.type = 'button';
@@ -109,7 +119,7 @@ class TaskTree {
         btn.type = 'button';
         btn.className = 'list-group-item list-group-item-action task';
         btn.style.borderLeft = `4px solid ${t.displayColor}`;
-        btn.innerHTML = `<span class="task-code">${t.taskCode}</span> <span class="task-name">${t.name}</span>`;
+        btn.innerHTML = `<span class="task-name">${t.name}</span>`;
         btn.dataset.taskCode = t.taskCode;
         btn.dataset.categoryCode = cat.categoryCode;
         btn.dataset.taskData = JSON.stringify(t);
@@ -120,6 +130,7 @@ class TaskTree {
         });
         
         ul.appendChild(btn);
+        this.flatTaskButtons.push(btn);
       });
       
       this.containerElement.appendChild(catItem);
@@ -131,6 +142,90 @@ class TaskTree {
         chev.classList.toggle('open', !open);
       });
     });
+
+    // reset focus index if any tasks exist
+    if (this.flatTaskButtons.length > 0) {
+      this.focusIndex = 0;
+    }
+  }
+
+  // 検索フィルタの適用
+  applyFilter(list, text) {
+    if (!text || !text.trim()) return Array.isArray(list) ? list : [];
+    const q = text.trim().toLowerCase();
+    return (list || []).filter(m => {
+      const code = (m.taskCode || '').toLowerCase();
+      const name = (m.name || '').toLowerCase();
+      const cat = (m.categoryName || m.categoryCode || '').toLowerCase();
+      return code.includes(q) || name.includes(q) || cat.includes(q);
+    });
+  }
+
+  // 検索入力をバインド
+  attachSearch(inputEl) {
+    this.searchInput = inputEl;
+    if (!this.searchInput) return;
+    this.searchInput.addEventListener('input', () => {
+      this.filterText = this.searchInput.value || '';
+      this.render();
+    });
+    // ArrowDown from search box moves focus to first task
+    this.searchInput.addEventListener('keydown', (e) => {
+      const key = e.key;
+      if (key === 'ArrowDown' || key === 'Down') {
+        e.preventDefault();
+        // focus the list and move to first visible task
+        if (this.containerElement) {
+          this.containerElement.focus();
+          this.focusIndex = -1;
+          this.moveFocus(1);
+        }
+      }
+    });
+  }
+
+  // キーボード操作（↑↓で移動、Enter/Spaceで選択）
+  enableKeyboardNavigation() {
+    if (!this.containerElement) return;
+    this.containerElement.addEventListener('keydown', (e) => {
+      if (!this.flatTaskButtons || this.flatTaskButtons.length === 0) return;
+      const key = e.key;
+      if (key === 'ArrowDown' || key === 'Down') {
+        e.preventDefault();
+        this.moveFocus(1);
+      } else if (key === 'ArrowUp' || key === 'Up') {
+        e.preventDefault();
+        this.moveFocus(-1);
+      } else if (key === 'Enter' || key === ' ') {
+        e.preventDefault();
+        this.activateFocused();
+      }
+    });
+  }
+
+  moveFocus(delta) {
+    if (this.flatTaskButtons.length === 0) return;
+    if (this.focusIndex < 0) this.focusIndex = 0;
+    this.focusIndex = (this.focusIndex + delta + this.flatTaskButtons.length) % this.flatTaskButtons.length;
+    const btn = this.flatTaskButtons[this.focusIndex];
+    if (btn) {
+      btn.focus();
+      // visual cue
+      this.containerElement.querySelectorAll('.task-tree .list-group-item.task').forEach(e => e.classList.remove('hover'));
+      btn.classList.add('hover');
+    }
+  }
+
+  activateFocused() {
+    const btn = this.flatTaskButtons[this.focusIndex];
+    if (!btn) return;
+    const code = btn.dataset.taskCode;
+    try {
+      const data = btn.dataset.taskData ? JSON.parse(btn.dataset.taskData) : null;
+      this.selectTask(code, data || { taskCode: code });
+    } catch (_e) {
+      this.selectTask(code, { taskCode: code });
+    }
   }
 
   // タスク選択
