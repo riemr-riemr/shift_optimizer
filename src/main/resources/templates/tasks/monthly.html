@@ -48,17 +48,53 @@
 
       <div class="row g-3">
         <!-- 作業選択列 -->
-        <div class="col-12 col-lg-4">
+        <div class="col-12 col-lg-3">
           <div th:replace="~{fragments/task-selection :: taskSelection('selectedTaskCode','selectedDepartmentCode','selectedTaskDisplay','taskTreeList','作業選択')}"></div>
         </div>
         
-        <!-- スケジュール設定列 -->
-        <div class="col-12 col-lg-4">
+        <!-- カレンダー列（拡大） -->
+        <div class="col-12 col-lg-9">
           <div class="card">
-            <div class="card-header">
-              <h6 class="mb-0">スケジュール設定</h6>
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <div class="d-flex align-items-center gap-2">
+                <h6 class="mb-0">カレンダー（登録済み月次作業）</h6>
+                <label class="form-label mb-0 text-nowrap ms-3">対象月:</label>
+                <input type="month" class="form-control form-control-sm" id="monthPicker" style="width: 130px;">
+                <button class="btn btn-outline-secondary btn-sm" id="btnReloadCal" title="再読込">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addPlanModal">
+                  <i class="bi bi-plus-circle"></i> 新規追加
+                </button>
+              </div>
             </div>
             <div class="card-body">
+              <div id="calendar" class="calendar-grid"></div>
+              
+              <!-- 保存ボタン -->
+              <div class="d-flex justify-content-end mt-3 pt-3 border-top">
+                <button class="btn btn-primary btn-lg" id="btnSaveAll" disabled>
+                  <i class="bi bi-database"></i> 保存（データベースに反映）
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="alert mt-3 d-none" role="alert"></div>
+
+      <!-- 新規追加モーダル -->
+      <div class="modal fade" id="addPlanModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">月次作業の追加</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
               <div class="mb-3">
                 <label class="form-label fw-semibold">対象範囲</label>
                 <select class="form-select" id="targetType">
@@ -151,12 +187,8 @@
                 <label class="form-label fw-semibold">備考</label>
                 <input type="text" class="form-control" id="note" placeholder="備考を入力してください">
               </div>
-              
-              <!-- DOM/WOM設定セクション -->
               <div class="border-top pt-3">
                 <h6 class="mb-3 text-primary">登録日程設定</h6>
-                
-                <!-- DOM設定 -->
                 <div id="domSection">
                   <div class="mb-3">
                     <label class="form-label fw-semibold">月の特定日 (DOM)</label>
@@ -165,8 +197,6 @@
                     </div>
                   </div>
                 </div>
-                
-                <!-- WOM設定 -->
                 <div id="womSection" style="display:none;">
                   <div class="row g-3 mb-3">
                     <div class="col-md-6">
@@ -183,48 +213,15 @@
                     </div>
                   </div>
                 </div>
-                
-                <!-- 追加ボタン -->
-                <div class="d-flex justify-content-end">
-                  <button class="btn btn-success btn-lg" id="btnAdd">
-                    <i class="bi bi-plus-circle"></i> 追加
-                  </button>
-                </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- カレンダー列 -->
-        <div class="col-12 col-lg-4">
-          <div class="card">
-            <div class="card-header">
-              <div class="d-flex flex-column gap-2">
-                <h6 class="mb-0">カレンダー（登録済み月次作業）</h6>
-                <div class="d-flex align-items-center gap-2">
-                  <label class="form-label mb-0 text-nowrap">対象月:</label>
-                  <input type="month" class="form-control form-control-sm" id="monthPicker" style="width: 130px;">
-                  <button class="btn btn-outline-secondary btn-sm" id="btnReloadCal">
-                    <i class="bi bi-arrow-clockwise"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div class="card-body">
-              <div id="calendar" class="calendar-grid"></div>
-              
-              <!-- 保存ボタン -->
-              <div class="d-flex justify-content-end mt-3 pt-3 border-top">
-                <button class="btn btn-primary btn-lg" id="btnSaveAll" disabled>
-                  <i class="bi bi-database"></i> 保存（データベースに反映）
-                </button>
-              </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+              <button type="button" class="btn btn-success" id="btnAdd"><i class="bi bi-plus-circle"></i> 追加</button>
             </div>
           </div>
         </div>
       </div>
-
-      <div id="msg" class="alert mt-3 d-none" role="alert"></div>
     </div>
   </div>
 
@@ -390,8 +387,16 @@
         document.getElementById('btnSaveAll').disabled = false;
         
         // カレンダーにプレビュー表示
-        
         updateCalendarPreview();
+
+        // 追加モーダルを閉じる
+        try {
+          if (window.bootstrap) {
+            const modalEl = document.getElementById('addPlanModal');
+            const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            inst.hide();
+          }
+        } catch (_) { /* no-op */ }
         
         // フォームをリセット
         document.querySelectorAll('.task-tree .list-group-item.task.selected').forEach(el => 

@@ -225,7 +225,13 @@
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_PLAN)}">
                     <a th:href="@{/tasks/plan}">
                         <i class="bi bi-calendar-week"></i>
-                        作業計画
+                        曜日別作業計画
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_PLAN)}">
+                    <a th:href="@{/tasks/monthly}">
+                        <i class="bi bi-calendar-month"></i>
+                        月次作業計画
                     </a>
                 </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)}">
