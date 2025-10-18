@@ -303,8 +303,8 @@
       }
 
       // Submit helpers
-      // 時刻文字列をISO形式に変換する関数
-      function timeToIsoDateTime(timeStr) {
+      // 時刻文字列をISO形式に変換する関数（グローバルに公開）
+      window.timeToIsoDateTime = function(timeStr) {
         if (!timeStr) return null;
         // 今日の日付と組み合わせてISO形式にする
         const today = new Date().toISOString().split('T')[0];
@@ -322,10 +322,10 @@
           departmentCode: deptFromTask,
           taskCode: taskCode,
           scheduleType: sch,
-          fixedStartTime: timeToIsoDateTime(document.getElementById('fixedStart').value),
-          fixedEndTime: timeToIsoDateTime(document.getElementById('fixedEnd').value),
-          windowStartTime: timeToIsoDateTime(document.getElementById('winStart').value),
-          windowEndTime: timeToIsoDateTime(document.getElementById('winEnd').value),
+          fixedStartTime: window.timeToIsoDateTime(document.getElementById('fixedStart').value),
+          fixedEndTime: window.timeToIsoDateTime(document.getElementById('fixedEnd').value),
+          windowStartTime: window.timeToIsoDateTime(document.getElementById('winStart').value),
+          windowEndTime: window.timeToIsoDateTime(document.getElementById('winEnd').value),
           requiredDurationMinutes: toInt(document.getElementById('duration').value),
           requiredStaffCount: toInt(document.getElementById('staff').value) || 1,
           lane: toInt(document.getElementById('lane').value),
@@ -407,11 +407,11 @@
       
       // 一括保存ボタン（DBに反映）
       document.getElementById('btnSaveAll').addEventListener('click', async () => {
-        if (pendingTasks.length === 0) {
-          if (!pendingDeletes || pendingDeletes.length === 0) {
+        if ((pendingTasks.length === 0)
+            && (!pendingDeletes || pendingDeletes.length === 0)
+            && (!pendingUpdates || pendingUpdates.length === 0)) {
             showMsg('info', '保存する項目がありません。');
             return;
-          }
         }
         
         try {
@@ -543,6 +543,10 @@
         background: linear-gradient(135deg, #e3f2fd 0%, #d1ecf1 100%);
         transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .cal-item.cal-updated {
+        border-left-color: #fd7e14 !important;
+        background: linear-gradient(135deg, #fff4e6 0%, #ffe8cc 100%) !important;
       }
       .cal-item.cal-preview {
         border-left-color: #28a745 !important;
@@ -983,6 +987,8 @@
           const payload = collectEditPayload();
           if (!payload || !payload.planId) { showMsg('danger','更新対象が不正です'); return; }
           pendingUpdates.push(payload);
+          // カレンダーUIへ即時反映
+          applyEditedUpdateToCalendar(payload);
           const saveBtn = document.getElementById('btnSaveAll');
           if (saveBtn) saveBtn.disabled = false;
           showMsg('warning','更新を保留リストに追加しました。保存ボタンで反映します。');
@@ -1019,10 +1025,10 @@
         const payload = {
           planId: planId,
           scheduleType: document.getElementById('editScheduleType').value,
-          fixedStartTime: timeToIsoDateTime(document.getElementById('editFixedStart').value),
-          fixedEndTime: timeToIsoDateTime(document.getElementById('editFixedEnd').value),
-          windowStartTime: timeToIsoDateTime(document.getElementById('editWinStart').value),
-          windowEndTime: timeToIsoDateTime(document.getElementById('editWinEnd').value),
+          fixedStartTime: window.timeToIsoDateTime(document.getElementById('editFixedStart').value),
+          fixedEndTime: window.timeToIsoDateTime(document.getElementById('editFixedEnd').value),
+          windowStartTime: window.timeToIsoDateTime(document.getElementById('editWinStart').value),
+          windowEndTime: window.timeToIsoDateTime(document.getElementById('editWinEnd').value),
           requiredDurationMinutes: toInt(document.getElementById('editDuration').value),
           mustBeContiguous: document.getElementById('editContiguous').value === '1' ? 1 : 0,
           requiredStaffCount: toInt(document.getElementById('editStaff').value),
@@ -1038,6 +1044,103 @@
         if (payload.scheduleType === 'FIXED') { payload.windowStartTime = null; payload.windowEndTime = null; payload.requiredDurationMinutes = null; }
         else { payload.fixedStartTime = null; payload.fixedEndTime = null; }
         return payload;
+      }
+
+      // 編集の保留更新をカレンダーUIへ即時反映
+      function applyEditedUpdateToCalendar(payload) {
+        const id = String(payload.planId);
+        const isoToHM = (s) => {
+          if (!s) return '';
+          const m = String(s).match(/T(\d{2}:\d{2})/);
+          return m ? m[1] : String(s);
+        };
+        const items = document.querySelectorAll('.cal-item[data-plan-id="' + id + '"]');
+        items.forEach(item => {
+          try {
+            const data = item.dataset.taskData ? JSON.parse(item.dataset.taskData) : {};
+            const scheduleType = payload.scheduleType || data.scheduleType;
+            const fixedStart = isoToHM(payload.fixedStartTime) || data.fixedStartTime;
+            const fixedEnd = isoToHM(payload.fixedEndTime) || data.fixedEndTime;
+            const winStart = isoToHM(payload.windowStartTime) || data.windowStartTime;
+            const winEnd = isoToHM(payload.windowEndTime) || data.windowEndTime;
+            const dur = (payload.requiredDurationMinutes != null) ? payload.requiredDurationMinutes : data.requiredDurationMinutes;
+            const label = (window.taskNameByCode && data.taskCode) ? (window.taskNameByCode[data.taskCode] || '') : (data.taskCode || '');
+            let time = '';
+            if (scheduleType === 'FIXED') {
+              time = (fixedStart || '') + '-' + (fixedEnd || '');
+            } else {
+              time = (winStart || '') + '-' + (winEnd || '') + (dur ? (' (' + dur + '分)') : '');
+            }
+            item.textContent = label + ' ' + time;
+            const updated = {
+              ...data,
+              scheduleType,
+              fixedStartTime: fixedStart,
+              fixedEndTime: fixedEnd,
+              windowStartTime: winStart,
+              windowEndTime: winEnd,
+              requiredDurationMinutes: dur,
+              note: (payload.note != null ? payload.note : data.note),
+              active: (payload.active != null ? payload.active : data.active),
+              lane: (payload.lane != null ? payload.lane : data.lane),
+              requiredStaffCount: (payload.requiredStaffCount != null ? payload.requiredStaffCount : data.requiredStaffCount),
+              priority: (payload.priority != null ? payload.priority : data.priority),
+              effectiveFrom: (payload.effectiveFrom != null ? payload.effectiveFrom : data.effectiveFrom),
+              effectiveTo: (payload.effectiveTo != null ? payload.effectiveTo : data.effectiveTo)
+            };
+            item.dataset.taskData = JSON.stringify(updated);
+            item.classList.add('cal-updated');
+          } catch (e) {}
+        });
+      }
+
+      // 編集の保留更新をカレンダーUIへ即時反映
+      function applyEditedUpdateToCalendar(payload) {
+        const id = String(payload.planId);
+        const isoToHM = (s) => {
+          if (!s) return '';
+          const m = String(s).match(/T(\d{2}:\d{2})/);
+          return m ? m[1] : String(s);
+        };
+        const items = document.querySelectorAll('.cal-item[data-plan-id="' + id + '"]');
+        items.forEach(item => {
+          try {
+            const data = item.dataset.taskData ? JSON.parse(item.dataset.taskData) : {};
+            const scheduleType = payload.scheduleType || data.scheduleType;
+            const fixedStart = isoToHM(payload.fixedStartTime) || data.fixedStartTime;
+            const fixedEnd = isoToHM(payload.fixedEndTime) || data.fixedEndTime;
+            const winStart = isoToHM(payload.windowStartTime) || data.windowStartTime;
+            const winEnd = isoToHM(payload.windowEndTime) || data.windowEndTime;
+            const dur = (payload.requiredDurationMinutes != null) ? payload.requiredDurationMinutes : data.requiredDurationMinutes;
+            const label = (window.taskNameByCode && data.taskCode) ? (window.taskNameByCode[data.taskCode] || '') : (data.taskCode || '');
+            let time = '';
+            if (scheduleType === 'FIXED') {
+              time = (fixedStart || '') + '-' + (fixedEnd || '');
+            } else {
+              time = (winStart || '') + '-' + (winEnd || '') + (dur ? (' (' + dur + '分)') : '');
+            }
+            item.textContent = label + ' ' + time;
+            // dataset.taskData を更新
+            const updated = {
+              ...data,
+              scheduleType,
+              fixedStartTime: fixedStart,
+              fixedEndTime: fixedEnd,
+              windowStartTime: winStart,
+              windowEndTime: winEnd,
+              requiredDurationMinutes: dur,
+              note: (payload.note != null ? payload.note : data.note),
+              active: (payload.active != null ? payload.active : data.active),
+              lane: (payload.lane != null ? payload.lane : data.lane),
+              requiredStaffCount: (payload.requiredStaffCount != null ? payload.requiredStaffCount : data.requiredStaffCount),
+              priority: (payload.priority != null ? payload.priority : data.priority),
+              effectiveFrom: (payload.effectiveFrom != null ? payload.effectiveFrom : data.effectiveFrom),
+              effectiveTo: (payload.effectiveTo != null ? payload.effectiveTo : data.effectiveTo)
+            };
+            item.dataset.taskData = JSON.stringify(updated);
+            item.classList.add('cal-updated');
+          } catch (e) { /* ignore */ }
+        });
       }
 
       // 未保存作業の更新
@@ -1108,10 +1211,10 @@
           departmentCode: document.getElementById('selectedDepartmentCode').value || document.getElementById('deptSelect').value || '',
           taskCode: document.getElementById('editTaskCode').value || '',
           scheduleType: document.getElementById('editScheduleType').value,
-          fixedStartTime: timeToIsoDateTime(document.getElementById('editFixedStart').value),
-          fixedEndTime: timeToIsoDateTime(document.getElementById('editFixedEnd').value),
-          windowStartTime: timeToIsoDateTime(document.getElementById('editWinStart').value),
-          windowEndTime: timeToIsoDateTime(document.getElementById('editWinEnd').value),
+          fixedStartTime: window.timeToIsoDateTime(document.getElementById('editFixedStart').value),
+          fixedEndTime: window.timeToIsoDateTime(document.getElementById('editFixedEnd').value),
+          windowStartTime: window.timeToIsoDateTime(document.getElementById('editWinStart').value),
+          windowEndTime: window.timeToIsoDateTime(document.getElementById('editWinEnd').value),
           requiredDurationMinutes: toInt(document.getElementById('editDuration').value),
           requiredStaffCount: toInt(document.getElementById('editStaff').value) || 1,
           lane: toInt(document.getElementById('editLane').value),
@@ -1128,7 +1231,8 @@
       function hideDeletedItemsFromUI() {
         document.querySelectorAll('.cal-item').forEach(item => {
           const planId = item.dataset.planId;
-          if (planId && pendingDeletes.includes(planId)) {
+          const marked = pendingDeletes && pendingDeletes.some(x => (typeof x === 'object' ? x.planId : x) == planId);
+          if (planId && marked) {
             item.style.opacity = '0.3';
             item.style.textDecoration = 'line-through';
             item.style.pointerEvents = 'none';
