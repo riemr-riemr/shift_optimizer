@@ -46,13 +46,13 @@
           </div>
           <div class="col-md-3">
             <div class="btn-group w-100" role="group">
-              <button id="btnPrevDay" class="btn btn-outline-secondary">
+              <button id="btnPrevDay" class="btn btn-outline-primary">
                 <i class="bi bi-chevron-left"></i> 前日
               </button>
               <button id="btnSearch" class="btn btn-primary">
                 <i class="bi bi-search"></i> 検索
               </button>
-              <button id="btnNextDay" class="btn btn-outline-secondary">
+              <button id="btnNextDay" class="btn btn-outline-primary">
                 翌日 <i class="bi bi-chevron-right"></i>
               </button>
             </div>
@@ -99,7 +99,7 @@
       </div>
       <div class="card-body p-0">
         <div class="table-responsive" id="staffingBalanceContainer" style="max-height: 250px; overflow-x: auto; overflow-y: auto;">
-          <div id="staffingBalanceGrid" class="shift-grid-container"></div>
+          <div id="staffingBalanceGrid" class="grid-container"></div>
         </div>
       </div>
     </div>
@@ -117,7 +117,7 @@
       </div>
       <div class="card-body p-0">
         <div class="table-responsive" id="workModelContainer" style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-          <div id="workModelGrid" class="shift-grid-container"></div>
+          <div id="workModelGrid" class="grid-container"></div>
         </div>
       </div>
     </div>
@@ -146,12 +146,14 @@
       </div>
       <div class="card-body p-0">
         <div class="alert alert-info m-3" id="dragDropHelp">
-          <div class="d-flex align-items-center">
-            <i class="bi bi-info-circle me-2"></i>
+          <div class="d-flex align-items-start">
+            <i class="bi bi-info-circle me-2 mt-1"></i>
             <div>
-              <strong>使い方:</strong> 
-              <strong>ドラッグ:</strong> 割り当て済みセルを他の従業員の同じ時間にドラッグして移動 |
-              <strong>右クリック:</strong> セルを右クリックで割り当て・変更・解除メニュー
+              <strong>使い方:</strong><br>
+              <div class="mt-2">
+                <span class="badge bg-primary me-2">ドラッグ</span> 割り当て済みセルを他の従業員の同じ時間にドラッグして移動<br>
+                <span class="badge bg-success me-2">右クリック</span> セルを右クリックで割り当て・変更・解除メニュー
+              </div>
             </div>
           </div>
         </div>
@@ -161,7 +163,7 @@
           <p class="mb-0">日付を選択して検索ボタンを押してください</p>
         </div>
         <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto; display: none;" id="tableContainer">
-          <div id="shiftGrid" class="shift-grid-container"></div>
+          <div id="shiftGrid" class="grid-container shift-grid-container"></div>
         </div>
       </div>
     </div>
@@ -169,118 +171,13 @@
 </div>
 
 <style>
+  /* Shift-specific grid layout */
   .shift-grid-container {
-    display: grid;
     grid-template-columns: 120px repeat(96, 50px);
-    gap: 1px;
-    border: 1px solid #dee2e6;
     min-width: 4920px; /* 120px + (96 * 50px) + gaps */
-    width: max-content;
   }
   
-  .grid-header, .grid-cell {
-    padding: 8px 4px;
-    text-align: center;
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
-    white-space: nowrap;
-    font-size: 0.75rem;
-  }
-  
-  .grid-header.time-slot {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-  }
-  
-  .grid-row-header {
-    font-weight: 700;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    position: sticky;
-    left: 0;
-    z-index: 1;
-  }
-  
-  .grid-cell.assigned {
-    font-weight: 600;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  }
-  
-  .grid-cell.assigned.color-0 { background: linear-gradient(135deg, #28a745, #20c997); }
-  .grid-cell.assigned.color-1 { background: linear-gradient(135deg, #007bff, #6610f2); }
-  .grid-cell.assigned.color-2 { background: linear-gradient(135deg, #ffc107, #fd7e14); }
-  .grid-cell.assigned.color-3 { background: linear-gradient(135deg, #dc3545, #e83e8c); }
-  .grid-cell.assigned.color-4 { background: linear-gradient(135deg, #6c757d, #495057); }
-  
-  /* 部門タスクの表示 */
-  .grid-cell.task-assigned {
-    background: linear-gradient(135deg, #17a2b8, #6f42c1);
-    color: white;
-    font-weight: 600;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  }
-  
-  /* 勤務時間（レジ未割当も含む）の背景色 */
-  .work-hours-cell.working {
-    background: #fff3cd;   /* light amber */
-    color: #856404;
-    border: 1px solid #ffeaa7;
-  }
-  
-  .employee-shift-cell {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-  
-  .grid-cell.assigned[draggable="true"] {
-    cursor: grab;
-    position: relative;
-  }
-  
-  .grid-cell.assigned[draggable="true"]:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transform: translateY(-1px);
-  }
-  
-  .grid-cell.assigned.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-    transform: rotate(3deg) scale(0.95);
-    z-index: 1000;
-  }
-  
-  .grid-cell.assigned[draggable="true"]:hover::after {
-    content: "\\f47a"; /* Bootstrap grip icon */
-    font-family: "Bootstrap Icons";
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    font-size: 0.6rem;
-    color: rgba(255,255,255,0.7);
-  }
-  
-  .drop-zone {
-    transition: all 0.2s ease;
-  }
-  
-  .drop-zone.drag-over {
-    background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
-    border: 2px dashed #4caf50;
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
-  }
-  
-  .drop-zone.modified {
-    border: 2px solid #28a745;
-    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
-  }
-  
+  /* Register selector (shift-specific) */
   .register-selector {
     position: absolute;
     top: 50%;
@@ -299,170 +196,15 @@
     display: block;
   }
   
-  .context-menu {
+  /* Drag grip icon */
+  .grid-cell.assigned[draggable="true"]:hover::after {
+    content: "\\f47a"; /* Bootstrap grip icon */
+    font-family: "Bootstrap Icons";
     position: absolute;
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 1500;
-    min-width: 150px;
-    padding: 4px 0;
-    display: none;
-  }
-  
-  .context-menu.show {
-    display: block;
-  }
-  
-  .context-menu-item {
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    color: #495057;
-    border: none;
-    background: none;
-    width: 100%;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .context-menu-item:hover {
-    background: #f8f9fa;
-    color: #0d6efd;
-  }
-  
-  .context-menu-item.danger {
-    color: #dc3545;
-  }
-  
-  .context-menu-item.danger:hover {
-    background: #f8f9fa;
-    color: #dc3545;
-  }
-  
-  .context-menu-divider {
-    height: 1px;
-    background: #dee2e6;
-    margin: 4px 0;
-  }
-  
-  .employee-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: white;
-    line-height: 1.2;
-  }
-  
-  .employee-code {
-    font-size: 0.7rem;
-    color: rgba(255,255,255,0.8);
-    margin-top: 2px;
-  }
-  
-  .work-model-cell {
-    position: relative;
-    padding: 2px;
-    height: 35px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 600;
-    border: 1px solid #dee2e6;
-  }
-  
-  .work-model-cell.register-needed {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    border: 1px solid #1e7e34;
-  }
-  
-  .work-model-cell.register-needed.has-employee {
-    background: linear-gradient(135deg, #007bff, #0056b3);
-    border: 1px solid #0056b3;
-    color: white;
-    font-weight: 600;
-    font-size: 0.65rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-  }
-  
-  .work-model-cell-empty {
-    background: transparent;
-    border: none;
-    height: 35px;
-  }
-  
-  
-  .staffing-balance-cell {
-    position: relative;
-    padding: 4px;
-    height: 35px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 600;
-    border: 1px solid #dee2e6;
-    background: #f8f9fa;
-  }
-  
-  .staffing-balance-cell.shortage {
-    background: linear-gradient(135deg, #dc3545, #c82333);
-    color: white;
-    border: 1px solid #c82333;
-  }
-  
-  .staffing-balance-cell.excess {
-    background: linear-gradient(135deg, #ffc107, #e0a800);
-    color: #212529;
-    border: 1px solid #e0a800;
-  }
-  
-  .staffing-balance-cell.balanced {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    color: white;
-    border: 1px solid #20c997;
-  }
-  
-  .balance-value {
+    top: 2px;
+    right: 2px;
     font-size: 0.6rem;
-    font-weight: 700;
-  }
-  
-  .balance-detail {
-    font-size: 0.5rem;
-    opacity: 0.8;
-  }
-  
-  .work-hours-cell {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    color: #6c757d;
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-align: center;
-    padding: 2px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .break-assigned {
-    background: linear-gradient(135deg, #17a2b8, #138496);
-    color: white;
-    border: 1px solid #138496;
-  }
-  
-  .break-assigned::before {
-    content: "休";
-    font-size: 0.7rem;
-    font-weight: 700;
+    color: rgba(255,255,255,0.7);
   }
 </style>
 
@@ -1442,14 +1184,14 @@ async function loadStaffingBalance(dateString) {
               if (headerText === '必要人数') {
                 cell.textContent = required;
                 if (required > 0) {
-                  cell.style.background = '#e3f2fd';
-                  cell.style.color = '#1565c0';
+                  cell.style.background = '#4ecdc4';
+                  cell.style.color = 'white';
                 }
               } else if (headerText === '配置人数') {
                 cell.textContent = assigned;
                 if (assigned > 0) {
-                  cell.style.background = '#f3e5f5';
-                  cell.style.color = '#7b1fa2';
+                  cell.style.background = '#45b7d1';
+                  cell.style.color = 'white';
                 }
               } else if (headerText === '過不足') {
                 if (balance < 0) {
@@ -1478,6 +1220,7 @@ async function loadStaffingBalance(dateString) {
       const sbCols = Math.floor(1440 / RES_MIN);
       staffingGrid.style.gridTemplateColumns = `120px repeat(${sbCols}, 50px)`;
       staffingGrid.style.gridTemplateRows = 'repeat(3, 35px)';
+      staffingGrid.classList.add('shift-grid-container');
     } else {
       staffingCard.style.display = 'none';
     }
@@ -1611,6 +1354,7 @@ async function loadWorkModel(dateString, shiftData) {
       
       // 作業モデル用のCSSグリッドを設定（15分間隔と同じ）
       workModelGrid.style.gridTemplateColumns = '120px repeat(96, 50px)';
+      workModelGrid.classList.add('shift-grid-container');
     } else {
       workModelCard.style.display = 'none';
     }
@@ -1753,8 +1497,8 @@ function updateStaffingBalance() {
       if (assignedCell) {
         assignedCell.textContent = assigned;
         if (assigned > 0) {
-          assignedCell.style.background = '#f3e5f5';
-          assignedCell.style.color = '#7b1fa2';
+          assignedCell.style.background = '#45b7d1';
+          assignedCell.style.color = 'white';
         } else {
           assignedCell.style.background = '#f8f9fa';
           assignedCell.style.color = '#6c757d';

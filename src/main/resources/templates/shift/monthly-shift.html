@@ -3,13 +3,7 @@
 <head>
     <title>月間シフト</title>
     <style>
-        .search-card {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 2rem;
-        }
-        
+        /* Monthly shift specific styles - using common.css base */
         .shift-table {
             width: 100%;
             border-collapse: collapse;
@@ -18,7 +12,7 @@
         }
         
         .shift-table th {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: var(--color-register);
             color: white;
             padding: 8px 6px;
             text-align: center;
@@ -41,7 +35,7 @@
         }
         
         .shift-table th.employee-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--color-header-dark);
             min-width: 150px;
             text-align: left;
             position: sticky;
@@ -73,102 +67,22 @@
             transition: background-color 0.2s ease;
         }
         
-        .shift-time {
-            display: block;
-            font-size: 0.75rem;
-            color: #495057;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .employee-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .employee-name {
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        .employee-code {
-            font-size: 0.75rem;
-            color: #6c757d;
-            background: #e9ecef;
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-        
-        .day-off {
-            background-color: #f8f9fa !important;
-            color: #6c757d;
-            font-style: italic;
-        }
-        
-        .table-container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            max-height: 70vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .table-header {
-            border-radius: 10px 10px 0 0;
-            border-bottom: 1px solid #dee2e6;
-            flex-shrink: 0;
-            z-index: 20;
-        }
-        
-        .table-body {
-            overflow: auto;
-            flex-grow: 1;
-        }
-        
-        .search-form {
-            padding: 1.5rem;
-        }
-        
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 1px solid #ced4da;
-            padding: 0.75rem;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            border-radius: 8px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 500;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
         .weekend-header {
-            background: linear-gradient(135deg, #ff8a80 0%, #ff5722 100%) !important;
+            background: var(--color-weekend) !important;
         }
         
         .weekend-cell {
-            background: #fff5f5;
+            background: var(--color-weekend-light);
         }
         
         .today-cell {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            background: var(--color-today);
             color: #d63384;
             font-weight: bold;
         }
         
         .staffing-summary-row th {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            background: var(--color-stock);
             color: white;
             padding: 8px 6px;
             font-size: 0.75rem;
@@ -179,7 +93,7 @@
             min-width: 80px;
         }
         
-        
+        /* Balance hours styling */
         .balance-hours {
             font-size: 0.7rem;
             font-weight: 600;
@@ -189,20 +103,41 @@
         }
         
         .balance-hours.shortage {
-            background-color: rgba(220, 53, 69, 0.8);
+            background-color: var(--color-danger);
             color: white;
         }
         
         .balance-hours.excess {
-            background-color: rgba(40, 167, 69, 0.8);
+            background-color: var(--color-success);
             color: white;
         }
         
         .balance-hours.balanced {
-            background-color: rgba(23, 162, 184, 0.8);
+            background-color: var(--color-info);
             color: white;
         }
         
+        /* Employee info styling */
+        .employee-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            color: var(--color-dark);
+        }
+        
+        .employee-code {
+            font-size: 0.75rem;
+            color: var(--color-dark);
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        /* Shift time styling */
         .shift-time {
             display: block;
             font-size: 0.75rem;
@@ -285,8 +220,8 @@
     </div>
 
     <!-- 月次シフト一覧表 -->
-    <div class="card table-container">
-        <div class="card-header table-header d-flex justify-content-between align-items-center">
+    <div class="card grid-container">
+        <div class="card-header grid-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-calendar3"></i> 
                 <span th:text="${year}"></span>年<span th:text="${month}"></span>月 月次シフト
@@ -314,7 +249,7 @@
                 選択された店舗には従業員が登録されていません。
             </span>
         </div>
-        <div th:if="${!#lists.isEmpty(employees)}" class="table-body">
+        <div th:if="${!#lists.isEmpty(employees)}" class="grid-body">
             <table class="shift-table">
             <thead>
                 <tr>
