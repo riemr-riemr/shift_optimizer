@@ -1220,7 +1220,8 @@ async function loadResult(dateString){
     return;
   }
 
-  // 15分間隔の時間ヘッダーを作成
+  // 時間ヘッダーを作成（解像度単位）
+  const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
   const timeHeaderRow = document.createElement('div');
   timeHeaderRow.className = 'grid-row';
   timeHeaderRow.style.gridColumn = '1 / -1';
@@ -1232,7 +1233,7 @@ async function loadResult(dateString){
   timeHeaderRow.appendChild(emptyHeader);
 
   for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 15) {
+    for (let m = 0; m < 60; m += RES_MIN) {
       const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
       const timeHeader = document.createElement('div');
       timeHeader.className = 'grid-header time-slot';
@@ -1256,7 +1257,7 @@ async function loadResult(dateString){
 
     // シフト割り当てセル
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 15) {
+      for (let m = 0; m < 60; m += RES_MIN) {
         const cell = document.createElement('div');
         cell.className = 'grid-cell employee-shift-cell drop-zone';
         cell.dataset.employee = employee.employeeCode;
@@ -1284,7 +1285,7 @@ async function loadResult(dateString){
     
     // 勤務時間表示セル
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 15) {
+      for (let m = 0; m < 60; m += RES_MIN) {
         const workHoursCell = document.createElement('div');
         workHoursCell.className = 'grid-cell work-hours-cell';
         workHoursCell.dataset.employee = employee.employeeCode;
@@ -1319,7 +1320,7 @@ async function loadResult(dateString){
         const targetTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
         const cell = document.querySelector(`.work-hours-cell[data-employee="${shift.employeeCode}"][data-time="${targetTime}"]`);
         if (cell) cell.classList.add('working');
-        cur.setMinutes(cur.getMinutes() + 15);
+        cur.setMinutes(cur.getMinutes() + RES_MIN);
       }
     });
   } else {
@@ -1333,7 +1334,7 @@ async function loadResult(dateString){
       const end = new Date(assignment.endAt);
       const colorClass = getEmployeeColorClass(assignment.employeeName);
 
-      // 15分間隔でセルを塗りつぶし
+      // 解像度単位でセルを塗りつぶし
       let currentTime = new Date(start);
       while (currentTime < end) {
         const hour = currentTime.getHours();
@@ -1379,7 +1380,7 @@ async function loadResult(dateString){
           const employeeName = assignment.employeeName || cell.dataset.employeeName;
           cell.dataset.assignedEmployeeName = employeeName;
         }
-        currentTime.setMinutes(currentTime.getMinutes() + 15);
+        currentTime.setMinutes(currentTime.getMinutes() + RES_MIN);
       }
     });
   }
@@ -1415,9 +1416,9 @@ async function loadStaffingBalance(dateString) {
         rowHeader.textContent = headerText;
         staffingGrid.appendChild(rowHeader);
         
-        // 15分間隔の時間スロット
+        // 時間スロット（解像度単位）
         for (let h = 0; h < 24; h++) {
-          for (let m = 0; m < 60; m += 15) {
+          for (let m = 0; m < 60; m += RES_MIN) {
             const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
             
             // 該当する時間帯のデータを検索
@@ -1473,8 +1474,9 @@ async function loadStaffingBalance(dateString) {
         }
       });
       
-      // 人時過不足用のCSSグリッドを設定（15分間隔と同じ）
-      staffingGrid.style.gridTemplateColumns = '120px repeat(96, 50px)';
+      // 人時過不足用のCSSグリッドを設定（解像度に応じて）
+      const sbCols = Math.floor(1440 / RES_MIN);
+      staffingGrid.style.gridTemplateColumns = `120px repeat(${sbCols}, 50px)`;
       staffingGrid.style.gridTemplateRows = 'repeat(3, 35px)';
     } else {
       staffingCard.style.display = 'none';
@@ -1505,7 +1507,7 @@ async function loadWorkModel(dateString, shiftData) {
     if (workModelData && workModelData.length > 0) {
       workModelCard.style.display = 'block';
       
-      // 15分間隔の時間ヘッダーを作成（シフト表示と同じ）
+      // 時間ヘッダーを作成（シフト表示と同じ解像度）
       const timeHeaderRow = document.createElement('div');
       timeHeaderRow.className = 'grid-row';
       timeHeaderRow.style.gridColumn = '1 / -1';
@@ -1517,7 +1519,7 @@ async function loadWorkModel(dateString, shiftData) {
       timeHeaderRow.appendChild(emptyHeader);
 
       for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 15) {
+        for (let m = 0; m < 60; m += RES_MIN) {
           const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           const timeHeader = document.createElement('div');
           timeHeader.className = 'grid-header time-slot';
@@ -1533,7 +1535,7 @@ async function loadWorkModel(dateString, shiftData) {
       // 各時間帯での需要データを事前に処理
       const demandByTime = new Map();
       for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 15) {
+        for (let m = 0; m < 60; m += RES_MIN) {
           const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
           const quarterData = workModelData.find(d => {
             if (!d.slotTime) return false;
@@ -1557,14 +1559,14 @@ async function loadWorkModel(dateString, shiftData) {
           const employeeName = assignment.employeeName || assignment.employeeCode;
           const registerNo = assignment.registerNo;
           
-          // 15分間隔でマッピングを作成
+          // 解像度単位でマッピングを作成
           let currentTime = new Date(start);
           while (currentTime < end) {
             const hour = currentTime.getHours();
             const minute = currentTime.getMinutes();
             const key = `${hour}_${minute}_${registerNo}`;
             employeeByTimeRegister.set(key, employeeName);
-            currentTime.setMinutes(currentTime.getMinutes() + 15);
+            currentTime.setMinutes(currentTime.getMinutes() + RES_MIN);
           }
         });
       }
@@ -1577,7 +1579,7 @@ async function loadWorkModel(dateString, shiftData) {
         workModelGrid.appendChild(registerRowHeader);
 
         for (let h = 0; h < 24; h++) {
-          for (let m = 0; m < 60; m += 15) {
+          for (let m = 0; m < 60; m += RES_MIN) {
             const demandCount = demandByTime.get(`${h}_${m}`) || 0;
             
             // この時間帯にこのレジ番号が必要な場合のみセルを作成

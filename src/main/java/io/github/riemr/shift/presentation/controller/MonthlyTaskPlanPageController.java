@@ -34,6 +34,12 @@ public class MonthlyTaskPlanPageController {
                         Model model) {
         model.addAttribute("storeCode", storeCode);
         model.addAttribute("dept", departmentCode);
+        try {
+            io.github.riemr.shift.application.service.AppSettingService svc =
+                    org.springframework.web.context.ContextLoader.getCurrentWebApplicationContext()
+                            .getBean(io.github.riemr.shift.application.service.AppSettingService.class);
+            model.addAttribute("timeResolutionMinutes", svc.getTimeResolutionMinutes());
+        } catch (Exception ignored) { model.addAttribute("timeResolutionMinutes", 15); }
         model.addAttribute("stores", storeMapper.selectByExample(null));
         model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
         model.addAttribute("masters", taskMasterService.list());
@@ -41,4 +47,3 @@ public class MonthlyTaskPlanPageController {
         return "tasks/monthly";
     }
 }
-

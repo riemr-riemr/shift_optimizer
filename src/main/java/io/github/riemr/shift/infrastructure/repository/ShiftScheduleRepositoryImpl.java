@@ -68,8 +68,15 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<Register> registers = registerMapper.selectAll();
 
         // Register demand: read interval rows for the cycle range [start, end), then split to quarters
+        int minutesPerSlot = 15; // default; TODO inject from AppSettingService if needed in optimization scope
+        try {
+            minutesPerSlot = org.springframework.web.context.ContextLoader.getCurrentWebApplicationContext()
+                    .getBean(io.github.riemr.shift.application.service.AppSettingService.class)
+                    .getTimeResolutionMinutes();
+        } catch (Exception ignore) {}
+
         List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
-        List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows);
+        List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows, minutesPerSlot);
         List<RegisterDemandQuarter> demands = new ArrayList<>(quarterSlots.size());
         for (QuarterSlot qs : quarterSlots) {
             RegisterDemandQuarter ent = new RegisterDemandQuarter();
@@ -143,7 +150,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                         wq.setTaskCode(di.getTaskCode());
                         wq.setRequiredUnits(di.getDemand());
                         tmp.add(wq);
-                        t = t.plusMinutes(15);
+                        t = t.plusMinutes(minutesPerSlot);
                     }
                 }
             }

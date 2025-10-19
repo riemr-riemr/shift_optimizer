@@ -63,10 +63,10 @@
 
 
 
-      <!-- グリッドUI: 15分×15行の簡易エディタ -->
+      <!-- グリッドUI: [[${timeResolutionMinutes}]]分×15行の簡易エディタ -->
       <div class="mt-4" th:if="${storeCode} != null">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="fw-bold">グリッド編集（1セル=15分/1人）</div>
+          <div class="fw-bold">グリッド編集（1セル=[[${timeResolutionMinutes}]]分/1人）</div>
           <div class="d-flex align-items-center gap-2">
             <div class="small text-muted">横軸: 時間 / 縦軸: 15レーン</div>
           </div>
@@ -117,7 +117,7 @@
             <div class="d-flex justify-content-end mt-2">
               <button id="gridSaveBtn" type="button" class="btn btn-sm btn-success">保存</button>
             </div>
-            <div class="form-text mt-1">ドラッグで範囲選択して登録します（1セル=15分）。作業・部門を選択のうえ操作してください。</div>
+            <div class="form-text mt-1">ドラッグで範囲選択して登録します（1セル=[[${timeResolutionMinutes}]]分）。作業・部門を選択のうえ操作してください。</div>
           </div>
         </div>
       </div>
@@ -154,24 +154,24 @@
 
                 <div class="col-6 fixed-group">
                   <label class="form-label">開始</label>
-                  <input type="time" class="form-control" id="editStart" step="900">
+                  <input type="time" class="form-control" id="editStart" th:attr="step=${timeResolutionMinutes*60}">
                 </div>
                 <div class="col-6 fixed-group">
                   <label class="form-label">終了</label>
-                  <input type="time" class="form-control" id="editEnd" step="900">
+                  <input type="time" class="form-control" id="editEnd" th:attr="step=${timeResolutionMinutes*60}">
                 </div>
 
                 <div class="col-4 flexible-group" style="display:none;">
                   <label class="form-label">窓開始</label>
-                  <input type="time" class="form-control" id="editWinStart" step="900">
+                  <input type="time" class="form-control" id="editWinStart" th:attr="step=${timeResolutionMinutes*60}">
                 </div>
                 <div class="col-4 flexible-group" style="display:none;">
                   <label class="form-label">窓終了</label>
-                  <input type="time" class="form-control" id="editWinEnd" step="900">
+                  <input type="time" class="form-control" id="editWinEnd" th:attr="step=${timeResolutionMinutes*60}">
                 </div>
                 <div class="col-4 flexible-group" style="display:none;">
                   <label class="form-label">所要(分)</label>
-                  <input type="number" min="0" step="15" class="form-control" id="editDuration">
+                  <input type="number" min="0" class="form-control" id="editDuration" th:attr="step=${timeResolutionMinutes}">
                 </div>
 
                 <div class="col-6 d-flex align-items-end">
@@ -258,6 +258,7 @@
       // === Grid builder ===
       const storeCode = /*[[${storeCode}]]*/ '';
       const mode = 'weekly';
+      const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
       const selectedDow = /*[[${day}]]*/ 1;
       const selectedDate = null;
       const selectedDept = /*[[${dept}]]*/ '';
@@ -302,13 +303,13 @@
         conflicted: false
       };
       if (grid && storeCode) {
-        const cols = 96; // 24h * 4 (15min)
+        const cols = Math.floor(1440 / RES_MIN); // 24h * (60 / RES_MIN)
         const rows = 15; // lanes
         // Build template columns: 1 sticky label + 96 slots
         grid.style.gridTemplateColumns = `60px repeat(${cols}, 50px)`;
 
         // Common metrics for pixel positioning
-        const SLOT_PX = 50;   // per 15-min slot
+        const SLOT_PX = 50;   // per slot
         const LABEL_PX = 60;  // left sticky label width
         const ROW_PX = 28;    // row height
         const HEADER_PX = 28; // header row height
@@ -321,7 +322,7 @@
         for (let h = 0; h < 24; h++) {
           const hourCell = document.createElement('div');
           hourCell.className = 'header header-hour';
-          hourCell.style.gridColumn = `span 4`;
+          hourCell.style.gridColumn = `span ${60/RES_MIN}`;
           hourCell.textContent = `${String(h).padStart(2,'0')}:00`;
           grid.appendChild(hourCell);
         }
@@ -583,7 +584,7 @@
               // Stage an update for existing plan (FIXED or FLEXIBLE duration)
               const plan = planMap[pid] || {};
               if (plan.scheduleType === 'FLEXIBLE') {
-                const durationMin = (resizeState.endCol - resizeState.startCol) * 15;
+                const durationMin = (resizeState.endCol - resizeState.startCol) * RES_MIN;
                 pendingUpdates.push({ planId: pid, scheduleType: 'FLEXIBLE', requiredDurationMinutes: durationMin, requiredStaffCount: resizeState.staff, lane: row + 1, active: true });
               } else {
                 pendingUpdates.push({ planId: pid, scheduleType: 'FIXED', fixedStartTime: times.start, fixedEndTime: times.end, requiredStaffCount: resizeState.staff, lane: row + 1, active: true });
@@ -592,7 +593,7 @@
             // Update planMap projected values
             const p = planMap[pid] || {};
             if (p.scheduleType === 'FLEXIBLE') {
-              p.requiredDurationMinutes = (resizeState.endCol - resizeState.startCol) * 15;
+              p.requiredDurationMinutes = (resizeState.endCol - resizeState.startCol) * RES_MIN;
             } else {
               p.scheduleType = 'FIXED';
               p.fixedStartTime = times.start; p.fixedEndTime = times.end;
@@ -699,7 +700,7 @@
             if (!el || el.dataset.planId !== pid) break;
             start = c;
           }
-          for (let c = col + 1; c < 96; c++) {
+          for (let c = col + 1; c < cols; c++) {
             const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
             if (!el || el.dataset.planId !== pid) break;
             end = c + 1;
@@ -794,7 +795,7 @@
                 // clamp rows by staff
                 targetBaseRow = Math.max(0, Math.min(15 - moveState.staff, targetBaseRow));
                 // clamp columns
-                const cols = 96;
+                const cols = Math.floor(1440 / RES_MIN);
                 targetStart = Math.max(0, Math.min(cols - widthSlots, targetStart));
                 let targetEnd = targetStart + widthSlots;
                 if (isFlexible) {
@@ -945,7 +946,7 @@
             const winStartSlot = timeToSlot(plan.windowStartTime);
             const winEndSlot = timeToSlot(plan.windowEndTime);
             const durationMin = Number(plan.requiredDurationMinutes || 0);
-            const durationSlots = Math.max(1, Math.ceil(durationMin / 15));
+            const durationSlots = Math.max(1, Math.ceil(durationMin / RES_MIN));
             if (winStartSlot >= 0 && winEndSlot > winStartSlot) {
               createOrUpdateWindow(baseRow, plan.planId, winStartSlot, winEndSlot, staffCnt, taskColorClass, plan.taskCode);
               const blockStart = winStartSlot;
@@ -1027,7 +1028,7 @@
             hours = d.getHours();
             minutes = d.getMinutes();
           }
-          return Math.floor((hours * 60 + minutes) / 15);
+          return Math.floor((hours * 60 + minutes) / RES_MIN);
         } catch (e) {
           console.warn(`timeToSlot error for ${timeStr}:`, e);
           return -1;
@@ -1381,9 +1382,9 @@
               let durationMin = Number(duration || '0');
               // If duration not specified, carry over from start/end
               if ((!durationMin || isNaN(durationMin)) && winStartSlot >= 0 && winEndSlot > winStartSlot) {
-                durationMin = (winEndSlot - winStartSlot) * 15;
+                durationMin = (winEndSlot - winStartSlot) * RES_MIN;
               }
-              const durationSlots = Math.max(1, Math.ceil(durationMin / 15));
+              const durationSlots = Math.max(1, Math.ceil(durationMin / RES_MIN));
               if (winStartSlot >= 0 && winEndSlot > winStartSlot) {
                 createOrUpdateWindow(row, pid, winStartSlot, winEndSlot, Number(staff || '1'), colorClass, taskCode);
                 const blockStart = winStartSlot;
@@ -1503,14 +1504,14 @@
       }
 
       function timeLabelFromSlot(slot) {
-        const startMin = slot * 15;
+        const startMin = slot * RES_MIN;
         const h = Math.floor(startMin / 60);
         const m = startMin % 60;
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
       }
       function timesFromRange(startSlot, endSlotExclusive) {
-        const startMin = startSlot * 15;
-        const endMinRaw = endSlotExclusive * 15; // could be 1440 when reaching 24:00
+        const startMin = startSlot * RES_MIN;
+        const endMinRaw = endSlotExclusive * RES_MIN; // could be 1440 when reaching 24:00
         const endMin = Math.min(endMinRaw, 1439); // clamp to 23:59 to avoid 24:00 parse issues
         const sh = Math.floor(startMin / 60), sm = startMin % 60;
         const eh = Math.floor(endMin / 60), em = endMin % 60;
@@ -1594,8 +1595,8 @@
         return { header, token };
       }
 
-      // Snap helpers for 15-minute increments
-      function snapTimeTo15(hhmm) {
+      // Snap helpers for configurable-minute increments
+      function snapTimeToRes(hhmm) {
         if (!hhmm) return hhmm;
         try {
           const parts = hhmm.split(':');
@@ -1604,34 +1605,35 @@
           let m = Number(parts[1]);
           if (isNaN(h) || isNaN(m)) return hhmm;
           let total = h * 60 + m;
-          // Round to nearest 15
-          total = Math.round(total / 15) * 15;
-          // Clamp to 0..(24h - 15)
+          // Round to nearest resolution
+          total = Math.round(total / RES_MIN) * RES_MIN;
+          // Clamp to 0..(24h - RES_MIN)
           if (total < 0) total = 0;
-          const max = (24 * 60) - 15;
+          const max = (24 * 60) - RES_MIN;
           if (total > max) total = max;
           const nh = Math.floor(total / 60);
           const nm = total % 60;
           return `${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
         } catch { return hhmm; }
       }
-      function snapDurationTo15(minStr) {
+      function snapDurationToRes(minStr) {
         const n = Number(minStr);
         if (isNaN(n)) return minStr;
         if (n <= 0) return '0';
-        return String(Math.round(n / 15) * 15);
+        return String(Math.round(n / RES_MIN) * RES_MIN);
       }
 
       // Attach snapping to all time/duration inputs
       function attachSnapListeners() {
         document.querySelectorAll('input[type="time"]').forEach(inp => {
-          inp.addEventListener('change', () => { inp.value = snapTimeTo15(inp.value); });
-          inp.addEventListener('blur', () => { inp.value = snapTimeTo15(inp.value); });
+          inp.addEventListener('change', () => { inp.value = snapTimeToRes(inp.value); });
+          inp.addEventListener('blur', () => { inp.value = snapTimeToRes(inp.value); });
         });
-        document.querySelectorAll('input[type="number"][step="15"]').forEach(inp => {
-          inp.addEventListener('change', () => { inp.value = snapDurationTo15(inp.value); });
-          inp.addEventListener('blur', () => { inp.value = snapDurationTo15(inp.value); });
-        });
+        const dur = document.getElementById('editDuration');
+        if (dur) {
+          dur.addEventListener('change', () => { dur.value = snapDurationToRes(dur.value); });
+          dur.addEventListener('blur', () => { dur.value = snapDurationToRes(dur.value); });
+        }
       }
       attachSnapListeners();
 

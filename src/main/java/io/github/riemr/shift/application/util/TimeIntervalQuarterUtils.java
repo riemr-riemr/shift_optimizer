@@ -14,13 +14,15 @@ import java.util.stream.Collectors;
 public final class TimeIntervalQuarterUtils {
     private TimeIntervalQuarterUtils() {}
 
-    public static boolean isAligned(LocalTime t) {
-        return t.getMinute() % 15 == 0 && t.getSecond() == 0 && t.getNano() == 0;
+    public static boolean isAligned(LocalTime t) { return isAligned(t, 15); }
+    public static boolean isAligned(LocalTime t, int minutesPerSlot) {
+        return t.getMinute() % minutesPerSlot == 0 && t.getSecond() == 0 && t.getNano() == 0;
     }
 
-    public static LocalTime normalizeToQuarter(LocalTime t, RoundingMode mode) {
+    public static LocalTime normalizeToQuarter(LocalTime t, RoundingMode mode) { return normalizeToSlot(t, 15, mode); }
+    public static LocalTime normalizeToSlot(LocalTime t, int minutesPerSlot, RoundingMode mode) {
         int totalMinutes = t.getHour() * 60 + t.getMinute();
-        int rem = totalMinutes % 15;
+        int rem = totalMinutes % minutesPerSlot;
         if (rem == 0 && t.getSecond() == 0 && t.getNano() == 0) return t.withSecond(0).withNano(0);
 
         int base = totalMinutes - rem;
@@ -30,13 +32,14 @@ public final class TimeIntervalQuarterUtils {
                 rounded = base;
                 break;
             case UP: {
-                rounded = base + 15;
+                rounded = base + minutesPerSlot;
                 break;
             }
             case HALF_UP:
             case HALF_EVEN:
             case HALF_DOWN: {
-                rounded = (rem >= 8 ? base + 15 : base);
+                int half = (minutesPerSlot + 1) / 2;
+                rounded = (rem >= half ? base + minutesPerSlot : base);
                 break;
             }
             default:
@@ -45,27 +48,32 @@ public final class TimeIntervalQuarterUtils {
         if (rounded >= 24 * 60) {
             // cap at 24:00 -> 00:00 next day not representable in LocalTime, so return 23:59:59.999999999 or 00:00.
             // For our usage, cap to 23:45 to keep [from, to) within day.
-            rounded = 23 * 60 + 45;
+            rounded = 24 * 60 - minutesPerSlot;
         }
         return LocalTime.of(rounded / 60, rounded % 60);
     }
 
-    public static int toQuarterIndex(LocalTime t) {
-        if (!isAligned(t)) throw new IllegalArgumentException("Time not 15-min aligned: " + t);
-        return t.getHour() * 4 + t.getMinute() / 15;
+    public static int toQuarterIndex(LocalTime t) { return toSlotIndex(t, 15); }
+    public static int toSlotIndex(LocalTime t, int minutesPerSlot) {
+        if (!isAligned(t, minutesPerSlot)) throw new IllegalArgumentException("Time not aligned to " + minutesPerSlot + ": " + t);
+        return (t.getHour() * 60 + t.getMinute()) / minutesPerSlot;
     }
 
-    public static LocalTime fromQuarterIndex(int idx) {
-        if (idx < 0 || idx > 95) throw new IllegalArgumentException("Quarter index out of range: " + idx);
-        return LocalTime.of(idx / 4, (idx % 4) * 15);
+    public static LocalTime fromQuarterIndex(int idx) { return fromSlotIndex(idx, 15); }
+    public static LocalTime fromSlotIndex(int idx, int minutesPerSlot) {
+        int max = (24 * 60 / minutesPerSlot) - 1;
+        if (idx < 0 || idx > max) throw new IllegalArgumentException("Slot index out of range: " + idx);
+        int total = idx * minutesPerSlot;
+        return LocalTime.of(total / 60, total % 60);
     }
 
-    public static List<QuarterSlot> split(DemandIntervalDto interval) {
+    public static List<QuarterSlot> split(DemandIntervalDto interval) { return split(interval, 15); }
+    public static List<QuarterSlot> split(DemandIntervalDto interval, int minutesPerSlot) {
         Objects.requireNonNull(interval, "interval");
         LocalTime from = interval.getFrom();
         LocalTime to = interval.getTo();
         if (from == null || to == null) throw new IllegalArgumentException("from/to required");
-        if (!isAligned(from) || !isAligned(to)) throw new IllegalArgumentException("from/to must be 15-min aligned");
+        if (!isAligned(from, minutesPerSlot) || !isAligned(to, minutesPerSlot)) throw new IllegalArgumentException("from/to must be aligned");
         if (!to.isAfter(from)) throw new IllegalArgumentException("to must be after from");
 
         List<QuarterSlot> res = new ArrayList<>();
@@ -79,17 +87,18 @@ public final class TimeIntervalQuarterUtils {
                     .demand(interval.getDemand())
                     .taskCode(interval.getTaskCode())
                     .build());
-            cur = cur.plusMinutes(15);
+            cur = cur.plusMinutes(minutesPerSlot);
         }
         return res;
     }
 
-    public static List<QuarterSlot> splitAll(Collection<DemandIntervalDto> intervals) {
+    public static List<QuarterSlot> splitAll(Collection<DemandIntervalDto> intervals) { return splitAll(intervals, 15); }
+    public static List<QuarterSlot> splitAll(Collection<DemandIntervalDto> intervals, int minutesPerSlot) {
         if (intervals == null || intervals.isEmpty()) return List.of();
 
         Map<Key, Integer> agg = new HashMap<>();
         for (DemandIntervalDto dto : intervals) {
-            for (QuarterSlot qs : split(dto)) {
+            for (QuarterSlot qs : split(dto, minutesPerSlot)) {
                 Key k = new Key(qs.getStoreCode(), qs.getDepartmentCode(), qs.getDate(), qs.getStart(), qs.getTaskCode());
                 agg.merge(k, Optional.ofNullable(qs.getDemand()).orElse(0), Integer::sum);
             }
@@ -111,7 +120,8 @@ public final class TimeIntervalQuarterUtils {
                 .toList();
     }
 
-    public static List<TimeInterval> merge(Collection<QuarterSlot> quarters) {
+    public static List<TimeInterval> merge(Collection<QuarterSlot> quarters) { return merge(quarters, 15); }
+    public static List<TimeInterval> merge(Collection<QuarterSlot> quarters, int minutesPerSlot) {
         if (quarters == null || quarters.isEmpty()) return List.of();
 
         // Group by non-time keys and demand value
@@ -132,13 +142,13 @@ public final class TimeIntervalQuarterUtils {
             LocalTime prev = runStart;
             for (int i = 1; i < sorted.size(); i++) {
                 LocalTime cur = sorted.get(i).getStart();
-                if (!cur.equals(prev.plusMinutes(15))) {
-                    res.add(TimeInterval.builder().date(entry.getKey().date).from(runStart).to(prev.plusMinutes(15)).build());
+                if (!cur.equals(prev.plusMinutes(minutesPerSlot))) {
+                    res.add(TimeInterval.builder().date(entry.getKey().date).from(runStart).to(prev.plusMinutes(minutesPerSlot)).build());
                     runStart = cur;
                 }
                 prev = cur;
             }
-            res.add(TimeInterval.builder().date(entry.getKey().date).from(runStart).to(prev.plusMinutes(15)).build());
+            res.add(TimeInterval.builder().date(entry.getKey().date).from(runStart).to(prev.plusMinutes(minutesPerSlot)).build());
         }
         // Stable order
         return res.stream()
@@ -152,4 +162,3 @@ public final class TimeIntervalQuarterUtils {
 
     private record MergeKey(String storeCode, String departmentCode, LocalDate date, String taskCode, int demand) {}
 }
-

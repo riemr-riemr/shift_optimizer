@@ -89,11 +89,16 @@ public class RegisterDemandHourService {
      * Build quarter-level demand array (size 96) from intervals.
      */
     public int[] getQuarterDemands(String storeCode, LocalDate targetDate) {
+        return getQuarterDemands(storeCode, targetDate, 15);
+    }
+
+    public int[] getQuarterDemands(String storeCode, LocalDate targetDate, int minutesPerSlot) {
         var intervals = intervalMapper.selectByStoreAndDate(storeCode, targetDate);
-        var quarters = TimeIntervalQuarterUtils.splitAll(intervals);
-        int[] arr = new int[96];
+        var quarters = TimeIntervalQuarterUtils.splitAll(intervals, minutesPerSlot);
+        int slotCount = 1440 / minutesPerSlot;
+        int[] arr = new int[slotCount];
         for (var qs : quarters) {
-            int idx = TimeIntervalQuarterUtils.toQuarterIndex(qs.getStart());
+            int idx = TimeIntervalQuarterUtils.toSlotIndex(qs.getStart(), minutesPerSlot);
             arr[idx] = qs.getDemand() == null ? 0 : qs.getDemand();
         }
         return arr;
@@ -104,19 +109,22 @@ public class RegisterDemandHourService {
      */
     @Transactional
     public void saveQuarterDemands(String storeCode, LocalDate targetDate, List<Integer> quarterDemands) {
-        if (quarterDemands == null || quarterDemands.size() != 96) {
-            throw new IllegalArgumentException("quarterDemands must have 96 entries");
+        if (quarterDemands == null || quarterDemands.isEmpty()) {
+            throw new IllegalArgumentException("quarterDemands must not be empty");
         }
+        int slots = quarterDemands.size();
+        if (1440 % slots != 0) throw new IllegalArgumentException("invalid slot count: " + slots);
+        int minutesPerSlot = 1440 / slots;
         intervalMapper.deleteByStoreAndDate(storeCode, targetDate);
         int prev = -1;
         int startIdx = 0;
-        for (int i = 0; i <= 96; i++) {
-            int cur = (i < 96) ? Math.max(0, quarterDemands.get(i)) : -1; // sentinel
+        for (int i = 0; i <= slots; i++) {
+            int cur = (i < slots) ? Math.max(0, quarterDemands.get(i)) : -1; // sentinel
             if (i == 0) { prev = cur; startIdx = 0; continue; }
             if (cur != prev) {
                 if (prev > 0) {
-                    LocalTime from = TimeIntervalQuarterUtils.fromQuarterIndex(startIdx);
-                    LocalTime to = TimeIntervalQuarterUtils.fromQuarterIndex(i);
+                    LocalTime from = TimeIntervalQuarterUtils.fromSlotIndex(startIdx, minutesPerSlot);
+                    LocalTime to = TimeIntervalQuarterUtils.fromSlotIndex(i, minutesPerSlot);
                     DemandIntervalDto dto = DemandIntervalDto.builder()
                             .storeCode(storeCode)
                             .targetDate(targetDate)

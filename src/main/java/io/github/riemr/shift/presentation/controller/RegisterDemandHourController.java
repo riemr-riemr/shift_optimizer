@@ -35,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 class RegisterDemandHourController {
 
     private final RegisterDemandHourService service;
+    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
     private final StoreMapper storeMapper;
     private final RegisterMapper registerMapper;
 
@@ -55,7 +56,9 @@ class RegisterDemandHourController {
                 ? storeCode
                 : (stores.isEmpty() ? null : stores.get(0).getStoreCode());
 
-        int[] quarterDemands = effectiveStore == null ? new int[96] : service.getQuarterDemands(effectiveStore, target);
+        int res = appSettingService.getTimeResolutionMinutes();
+        int slotCount = 1440 / res;
+        int[] quarterDemands = effectiveStore == null ? new int[slotCount] : service.getQuarterDemands(effectiveStore, target, res);
         var registers = (effectiveStore == null) ? java.util.List.<io.github.riemr.shift.infrastructure.persistence.entity.Register>of()
                 : registerMapper.selectByStoreCode(effectiveStore);
         registers.sort(java.util.Comparator.comparing(io.github.riemr.shift.infrastructure.persistence.entity.Register::getRegisterNo));
@@ -66,6 +69,8 @@ class RegisterDemandHourController {
         model.addAttribute("selectedStoreCode", effectiveStore);
         model.addAttribute("registers", registers);
         model.addAttribute("quarterDemands", java.util.Arrays.stream(quarterDemands).boxed().toList());
+        model.addAttribute("timeResolutionMinutes", res);
+        model.addAttribute("slotCount", slotCount);
         return "registerDemand/form";
     }
 

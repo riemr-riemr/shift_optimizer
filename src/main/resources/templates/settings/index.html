@@ -41,6 +41,31 @@
         </div>
       </div>
     </div>
+
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0">シフト粒度（分）</h5></div>
+        <div class="card-body">
+          <form method="post" th:action="@{/settings/time-resolution}">
+            <div class="mb-2">スロット幅を選択してください（10分 または 15分）</div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="timeResolutionMinutes" id="res10" value="10"
+                     th:checked="${timeResolutionMinutes == 10}">
+              <label class="form-check-label" for="res10">10分</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="timeResolutionMinutes" id="res15" value="15"
+                     th:checked="${timeResolutionMinutes == 15}">
+              <label class="form-check-label" for="res15">15分</label>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> 保存</button>
+            </div>
+            <div class="form-text mt-2">現在の設定: <span th:text="${timeResolutionMinutes}">15</span> 分</div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 </body>

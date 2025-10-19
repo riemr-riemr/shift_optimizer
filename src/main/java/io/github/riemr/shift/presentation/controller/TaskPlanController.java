@@ -6,6 +6,7 @@ import io.github.riemr.shift.application.repository.DaysMasterRepository;
 import io.github.riemr.shift.infrastructure.persistence.entity.DaysMaster;
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
 import io.github.riemr.shift.application.service.TaskMasterService;
+import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
@@ -37,6 +38,7 @@ public class TaskPlanController {
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
     private final StoreMapper storeMapper;
     private final TaskCategoryMasterMapper taskCategoryMasterMapper;
+    private final AppSettingService appSettingService;
 
     public TaskPlanController(TaskPlanRepository planRepository,
                               TaskPlanService planService,
@@ -44,7 +46,8 @@ public class TaskPlanController {
                               DaysMasterRepository daysMasterRepository,
                               DepartmentSkillMatrixService departmentSkillMatrixService,
                               StoreMapper storeMapper,
-                              TaskCategoryMasterMapper taskCategoryMasterMapper) {
+                              TaskCategoryMasterMapper taskCategoryMasterMapper,
+                              AppSettingService appSettingService) {
         this.planRepository = planRepository;
         this.planService = planService;
         this.taskMasterService = taskMasterService;
@@ -52,6 +55,7 @@ public class TaskPlanController {
         this.departmentSkillMatrixService = departmentSkillMatrixService;
         this.storeMapper = storeMapper;
         this.taskCategoryMasterMapper = taskCategoryMasterMapper;
+        this.appSettingService = appSettingService;
     }
 
     @InitBinder
@@ -78,6 +82,11 @@ public class TaskPlanController {
                             @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                             @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                             Model model) {
+        // Inject time resolution for UI
+        try {
+            int res = (appSettingService != null) ? appSettingService.getTimeResolutionMinutes() : 15;
+            model.addAttribute("timeResolutionMinutes", res);
+        } catch (Exception ignored) { model.addAttribute("timeResolutionMinutes", 15); }
         model.addAttribute("storeCode", storeCode);
         model.addAttribute("mode", mode);
         model.addAttribute("day", dayOfWeek);
@@ -160,6 +169,11 @@ public class TaskPlanController {
         // Set safe defaults for quick grid posts
         if (form.getActive() == null) form.setActive(Boolean.TRUE);
         if (form.getRequiredStaffCount() == null) form.setRequiredStaffCount(1);
+        // Normalize to configured resolution (server-side safety)
+        try {
+            int res = (appSettingService != null) ? appSettingService.getTimeResolutionMinutes() : 15;
+            normalizeFormTimes(form, res);
+        } catch (Exception ignored) {}
         // weekly のみサポート
         if (!"weekly".equalsIgnoreCase(mode)) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", "weekly mode only"));
@@ -232,6 +246,11 @@ public class TaskPlanController {
         if (lane != null) p.setLane(lane);
         if (note != null) p.setNote(note);
         if (active != null) p.setActive(active);
+        // Normalize to configured resolution (server-side safety)
+        try {
+            int res = (appSettingService != null) ? appSettingService.getTimeResolutionMinutes() : 15;
+            normalizeFormTimes(p, res);
+        } catch (Exception ignored) {}
         planRepository.update(p);
         String redirect = "redirect:/tasks/plan?store=" + storeCode + "&mode=" + mode;
         if ("weekly".equalsIgnoreCase(mode)) {
@@ -305,4 +324,33 @@ public class TaskPlanController {
     }
 
     // 適用処理は月次シフト最適化のタイミングで実行します
+
+    private void normalizeFormTimes(TaskPlan p, int resMin) {
+        if (resMin <= 0) return;
+        if (p.getFixedStartTime() != null) p.setFixedStartTime(roundToResolution(p.getFixedStartTime(), resMin));
+        if (p.getFixedEndTime() != null) p.setFixedEndTime(roundToResolution(p.getFixedEndTime(), resMin));
+        if (p.getWindowStartTime() != null) p.setWindowStartTime(roundToResolution(p.getWindowStartTime(), resMin));
+        if (p.getWindowEndTime() != null) p.setWindowEndTime(roundToResolution(p.getWindowEndTime(), resMin));
+        if (p.getRequiredDurationMinutes() != null) p.setRequiredDurationMinutes(roundMinutes(p.getRequiredDurationMinutes(), resMin));
+    }
+
+    private Date roundToResolution(Date date, int resMin) {
+        try {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.setTime(date);
+            int total = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
+            int rounded = Math.max(0, Math.min(24 * 60 - resMin, Math.round((float) total / resMin) * resMin));
+            cal.set(java.util.Calendar.HOUR_OF_DAY, rounded / 60);
+            cal.set(java.util.Calendar.MINUTE, rounded % 60);
+            cal.set(java.util.Calendar.SECOND, 0);
+            cal.set(java.util.Calendar.MILLISECOND, 0);
+            return cal.getTime();
+        } catch (Exception e) { return date; }
+    }
+
+    private Integer roundMinutes(Integer minutes, int resMin) {
+        if (minutes == null) return null;
+        int m = Math.max(0, minutes);
+        return Math.round((float) m / resMin) * resMin;
+    }
 }

@@ -16,10 +16,12 @@ public class SettingController {
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String view(Model model) {
         int startDay = appSettingService.getShiftCycleStartDay();
+        int timeRes = appSettingService.getTimeResolutionMinutes();
         java.time.LocalDate now = java.time.LocalDate.now();
         java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
         java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
+        model.addAttribute("timeResolutionMinutes", timeRes);
         model.addAttribute("cycleStart", cycleStart);
         model.addAttribute("cycleEnd", cycleEnd);
         return "settings/index";
@@ -30,13 +32,32 @@ public class SettingController {
     public String update(@RequestParam("startDay") int day, Model model) {
         appSettingService.updateShiftCycleStartDay(day);
         int startDay = appSettingService.getShiftCycleStartDay();
+        int timeRes = appSettingService.getTimeResolutionMinutes();
         java.time.LocalDate now = java.time.LocalDate.now();
         java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
         java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
+        model.addAttribute("timeResolutionMinutes", timeRes);
         model.addAttribute("cycleStart", cycleStart);
         model.addAttribute("cycleEnd", cycleEnd);
         model.addAttribute("success", "保存しました");
+        return "settings/index";
+    }
+
+    @PostMapping("/time-resolution")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    public String updateTimeResolution(@RequestParam("timeResolutionMinutes") int minutes, Model model) {
+        appSettingService.updateTimeResolutionMinutes(minutes);
+        int startDay = appSettingService.getShiftCycleStartDay();
+        int timeRes = appSettingService.getTimeResolutionMinutes();
+        java.time.LocalDate now = java.time.LocalDate.now();
+        java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
+        java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
+        model.addAttribute("startDay", startDay);
+        model.addAttribute("timeResolutionMinutes", timeRes);
+        model.addAttribute("cycleStart", cycleStart);
+        model.addAttribute("cycleEnd", cycleEnd);
+        model.addAttribute("success", "シフト粒度を更新しました");
         return "settings/index";
     }
 

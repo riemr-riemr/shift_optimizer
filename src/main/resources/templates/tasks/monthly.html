@@ -110,11 +110,11 @@
                 <div class="row g-2">
                   <div class="col-6">
                     <label class="form-label fw-semibold">開始時間</label>
-                    <input type="time" class="form-control" id="fixedStart" step="900">
+                    <input type="time" class="form-control" id="fixedStart" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold">終了時間</label>
-                    <input type="time" class="form-control" id="fixedEnd" step="900">
+                    <input type="time" class="form-control" id="fixedEnd" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                 </div>
               </div>
@@ -122,15 +122,15 @@
                 <div class="row g-2">
                   <div class="col-6">
                     <label class="form-label fw-semibold">窓開始</label>
-                    <input type="time" class="form-control" id="winStart" step="900">
+                    <input type="time" class="form-control" id="winStart" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold">窓終了</label>
-                    <input type="time" class="form-control" id="winEnd" step="900">
+                    <input type="time" class="form-control" id="winEnd" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold">所要時間（分）</label>
-                    <input type="number" min="0" step="15" class="form-control" id="duration">
+                    <input type="number" min="0" class="form-control" id="duration" th:attr="step=${timeResolutionMinutes}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold">連続必須</label>
@@ -757,11 +757,11 @@
                 <div class="row g-2">
                   <div class="col-6">
                     <label class="form-label">開始時間</label>
-                    <input type="time" class="form-control" id="editFixedStart" step="900">
+                    <input type="time" class="form-control" id="editFixedStart" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label">終了時間</label>
-                    <input type="time" class="form-control" id="editFixedEnd" step="900">
+                    <input type="time" class="form-control" id="editFixedEnd" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                 </div>
               </div>
@@ -769,15 +769,15 @@
                 <div class="row g-2">
                   <div class="col-6">
                     <label class="form-label">窓開始</label>
-                    <input type="time" class="form-control" id="editWinStart" step="900">
+                    <input type="time" class="form-control" id="editWinStart" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label">窓終了</label>
-                    <input type="time" class="form-control" id="editWinEnd" step="900">
+                    <input type="time" class="form-control" id="editWinEnd" th:attr="step=${timeResolutionMinutes*60}">
                   </div>
                   <div class="col-6">
                     <label class="form-label">所要時間（分）</label>
-                    <input type="number" class="form-control" id="editDuration" min="0" step="15">
+                    <input type="number" class="form-control" id="editDuration" min="0" th:attr="step=${timeResolutionMinutes}">
                   </div>
                   <div class="col-6">
                     <label class="form-label">連続必須</label>
@@ -837,6 +837,7 @@
   
   <script th:inline="javascript">
     // グローバルスコープで定義
+    const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
     let pendingTasks = [];
     let pendingDeletes = [];
     let pendingUpdates = [];
@@ -928,6 +929,20 @@
           editFlexGroup.style.display = 'block';
         }
       });
+
+      // 分数を解像度単位にスナップ
+      function snapDurationToRes(minStr) {
+        const n = Number(minStr);
+        if (isNaN(n)) return minStr;
+        if (n <= 0) return '0';
+        return String(Math.round(n / RES_MIN) * RES_MIN);
+      }
+      [document.getElementById('duration'), document.getElementById('editDuration')]
+        .filter(Boolean)
+        .forEach(inp => {
+          inp.addEventListener('change', () => { inp.value = snapDurationToRes(inp.value); });
+          inp.addEventListener('blur', () => { inp.value = snapDurationToRes(inp.value); });
+        });
 
       // 作業項目右クリックでモーダル表示
       document.addEventListener('contextmenu', (e) => {

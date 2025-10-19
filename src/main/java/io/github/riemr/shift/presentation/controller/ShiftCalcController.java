@@ -60,7 +60,8 @@ public class ShiftCalcController {
 
     @GetMapping("/calc")
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
-    public String view() {
+    public String view(Model model) {
+        model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
         return "shift/calc";
     }
 
@@ -134,7 +135,8 @@ public class ShiftCalcController {
                                                                  @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, date);
-        var quarters = TimeIntervalQuarterUtils.splitAll(intervals);
+        int resMin = appSettingService.getTimeResolutionMinutes();
+        var quarters = TimeIntervalQuarterUtils.splitAll(intervals, resMin);
         List<RegisterDemandQuarter> result = new ArrayList<>(quarters.size());
         for (QuarterSlot qs : quarters) {
             RegisterDemandQuarter ent = new RegisterDemandQuarter();
@@ -155,6 +157,7 @@ public class ShiftCalcController {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, date);
         List<WorkDemandQuarter> result = new ArrayList<>();
+        int resMin = appSettingService.getTimeResolutionMinutes();
         for (DemandIntervalDto di : intervals) {
             var t = di.getFrom();
             while (t.isBefore(di.getTo())) {
@@ -166,7 +169,7 @@ public class ShiftCalcController {
                 wq.setTaskCode(di.getTaskCode());
                 wq.setRequiredUnits(di.getDemand());
                 result.add(wq);
-                t = t.plusMinutes(15);
+                t = t.plusMinutes(resMin);
             }
         }
         // sort by time and task for stable output

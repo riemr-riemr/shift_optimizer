@@ -63,6 +63,8 @@ public class SchemaInitializer {
 
             // task_plan: add department_code for per-department plans and ensure composite FK to task_master
             jdbc.execute("ALTER TABLE IF EXISTS task_plan ADD COLUMN IF NOT EXISTS department_code VARCHAR(32)");
+            // task_plan: drop obsolete plan_kind column if exists
+            try { jdbc.execute("ALTER TABLE IF EXISTS task_plan DROP COLUMN IF EXISTS plan_kind"); } catch (Exception ignore) {}
             try {
                 jdbc.execute("ALTER TABLE task_plan DROP CONSTRAINT IF EXISTS task_plan_task_code_fkey");
                 jdbc.execute("ALTER TABLE task_plan DROP CONSTRAINT IF EXISTS fk_task_plan_task_master");
