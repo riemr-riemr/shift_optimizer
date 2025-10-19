@@ -169,6 +169,25 @@ public class SchemaInitializer {
                     ")");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_wom_plan ON monthly_task_plan_wom(plan_id)");
 
+            // Non-register tasks table (expanded from weekly/monthly plans)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS task (" +
+                    "task_id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "work_date DATE NOT NULL, " +
+                    "name VARCHAR(100) NOT NULL, " +
+                    "description TEXT, " +
+                    "schedule_type VARCHAR(10) CHECK (schedule_type IN ('FIXED','FLEXIBLE')), " +
+                    "fixed_start_at TIMESTAMP, fixed_end_at TIMESTAMP, " +
+                    "window_start_at TIMESTAMP, window_end_at TIMESTAMP, " +
+                    "required_duration_minutes INT, " +
+                    "required_skill_code VARCHAR(32), " +
+                    "required_staff_count INT, " +
+                    "priority INT, must_be_contiguous SMALLINT, " +
+                    "created_by VARCHAR(64) DEFAULT 'auto', created_at TIMESTAMPTZ DEFAULT now(), " +
+                    "updated_by VARCHAR(64) DEFAULT 'auto', updated_at TIMESTAMPTZ DEFAULT now()" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date)");
+
             log.info("Schema checked/initialized: is_register column and employee_task_skill table ensured.");
         } catch (Exception e) {
             log.warn("Schema initialization failed: {}", e.getMessage());
