@@ -10,6 +10,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignmen
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -83,6 +84,10 @@ public class ShiftSchedule {
     @ProblemFactCollectionProperty
     private List<EmployeeDepartmentSkill> employeeDepartmentSkillList = new java.util.ArrayList<>();
 
+    /** 従業員曜日別勤務設定 */
+    @ProblemFactCollectionProperty
+    private List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList = new java.util.ArrayList<>();
+
     /* === Planning entities === */
 
     /** 15分×レジ × 日付 × シフトを割り当てる単位 */
@@ -112,6 +117,7 @@ public class ShiftSchedule {
                          List<RegisterAssignment> previousAssignmentList,
                          List<EmployeeRegisterSkill> employeeRegisterSkillList,
                          List<EmployeeDepartmentSkill> employeeDepartmentSkillList,
+                         List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList,
                          List<ShiftAssignmentPlanningEntity> assignmentList) {
         this.problemId = problemId;
         this.month = month;
@@ -126,6 +132,7 @@ public class ShiftSchedule {
         this.previousAssignmentList = previousAssignmentList;
         this.employeeRegisterSkillList = employeeRegisterSkillList;
         this.employeeDepartmentSkillList = employeeDepartmentSkillList;
+        this.employeeWeeklyPreferenceList = employeeWeeklyPreferenceList;
         this.assignmentList = assignmentList;
     }
 }

@@ -43,6 +43,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final EmployeeDepartmentMapper    employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
     private final DepartmentMasterMapper departmentMasterMapper;
+    private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -94,6 +95,15 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<EmployeeDepartmentSkill> deptSkills = departmentCode != null
                 ? employeeDepartmentSkillMapper.selectByDepartment(departmentCode)
                 : java.util.Collections.emptyList();
+
+        // 従業員曜日別勤務設定を取得
+        List<EmployeeWeeklyPreference> weeklyPreferences = new ArrayList<>();
+        for (Employee emp : employees) {
+            weeklyPreferences.addAll(employeeWeeklyPreferenceMapper.selectByEmployee(emp.getEmployeeCode()));
+        }
+
+        // 従業員レジスキルを取得
+        List<EmployeeRegisterSkill> employeeRegisterSkills = skillMapper.selectByExample(null);
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -172,6 +182,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setDepartmentCode(departmentCode);
         schedule.setWorkDemandList(workDemands);
         schedule.setEmployeeDepartmentSkillList(deptSkills);
+        schedule.setEmployeeWeeklyPreferenceList(weeklyPreferences);
+        schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
         return schedule;
     }
 

@@ -5,6 +5,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.entity.WorkKind;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
@@ -23,8 +24,23 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * シフト最適化の制約定義クラス
+ * OptaPlannerの制約ベース最適化において、ハード制約（必須条件）とソフト制約（最適化目標）を定義
+ * 
+ * 制約の種類：
+ * - ハード制約: 労働基準法、スキル要件、希望休日など（絶対に満たす必要がある条件）
+ * - ソフト制約: 需要充足、負荷分散、効率性など（できるだけ満たしたい条件）
+ */
 public class ShiftScheduleConstraintProvider implements ConstraintProvider {
 
+    /**
+     * 全制約の定義メソッド
+     * OptaPlannerが最適化時に評価する制約の配列を返す
+     * 
+     * @param factory 制約作成用のファクトリ
+     * @return 全制約の配列（ハード制約とソフト制約を含む）
+     */
     @Override
     public Constraint[] defineConstraints(ConstraintFactory factory) {
         return new Constraint[] {
@@ -39,12 +55,16 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             enforceLunchBreak(factory),
             
             ensureWeeklyRestDays(factory),
+            forbidWorkOnOffDays(factory),
+            enforceMandatoryWorkDays(factory),
+            forbidWorkOutsideBaseHours(factory),
 
             // Soft constraints
             satisfyRegisterDemand(factory),
             satisfyWorkDemand(factory),
             preferHigherSkillLevel(factory),
             preferDepartmentHigherSkill(factory),
+            preferWorkWithinBaseHours(factory),
             
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
@@ -55,6 +75,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         };
     }
 
+    /**
+     * 部門作業の低スキル従業員配置禁止制約（ハード制約）
+     * スキルレベル0（自動割当無効）または1（割当禁止）の従業員を部門作業に配置することを禁止
+     * 
+     * @param f 制約ファクトリ
+     * @return 部門低スキル配置禁止制約
+     */
     private Constraint forbidDepartmentLowSkill(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK)
@@ -66,6 +93,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Forbidden department assignment (skill 0/1)");
     }
 
+    /**
+     * 部門作業の高スキル従業員優先制約（ソフト制約）
+     * スキルレベルが高い従業員を部門作業に優先的に配置する
+     * スキルレベル2以上の従業員に対して、レベルに応じた報酬を付与
+     * 
+     * @param f 制約ファクトリ
+     * @return 部門高スキル優先制約
+     */
     private Constraint preferDepartmentHigherSkill(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK)
@@ -77,6 +112,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Prefer higher department skill");
     }
 
+    /**
+     * レジ需要充足制約（ソフト制約）
+     * 各時間帯のレジ需要に対する人員配置の過不足を最小化
+     * 人員不足は重いペナルティ、人員過多は軽いペナルティを課す
+     * 
+     * @param f 制約ファクトリ
+     * @return レジ需要バランス制約
+     */
     private Constraint satisfyRegisterDemand(ConstraintFactory f) {
         return f.forEach(RegisterDemandQuarter.class)
                 .join(ShiftAssignmentPlanningEntity.class,
@@ -98,6 +141,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Register demand balance");
     }
 
+    /**
+     * 部門作業需要充足制約（ソフト制約）
+     * 各時間帯の部門作業需要に対する人員配置の過不足を最小化
+     * レジ需要と同様に不足と過多でペナルティ重み付けを変える
+     * 
+     * @param f 制約ファクトリ
+     * @return 部門作業需要バランス制約
+     */
     private Constraint satisfyWorkDemand(ConstraintFactory f) {
         return f.forEach(WorkDemandQuarter.class)
                 .join(ShiftAssignmentPlanningEntity.class,
@@ -117,6 +168,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Work demand balance");
     }
 
+    /**
+     * レジ低スキル従業員配置禁止制約（ハード制約）
+     * スキルレベル0（自動割当無効）または1（割当禁止）の従業員をレジに配置することを禁止
+     * 労働安全と業務品質確保のための必須制約
+     * 
+     * @param f 制約ファクトリ
+     * @return レジ低スキル配置禁止制約
+     */
     private Constraint forbidZeroSkill(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -150,6 +209,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Prefer higher skill level assignment");
     }
 
+    /**
+     * 従業員重複配置禁止制約（ハード制約）
+     * 同一従業員が同じ日の同じ時刻に複数の場所に配置されることを禁止
+     * 物理的に不可能な配置を防ぐ基本的な制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 従業員重複配置禁止制約
+     */
     private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
         return f.forEachUniquePair(ShiftAssignmentPlanningEntity.class,
                 Joiners.equal(ShiftAssignmentPlanningEntity::getAssignedEmployee),
@@ -159,6 +226,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Employee double booked");
     }
 
+    /**
+     * 日次最大労働時間制約（ハード制約）
+     * 各従業員の1日の労働時間が設定値（max_work_minutes_day）を超えることを禁止
+     * 労働基準法遵守のための重要な制約（休憩時間を除く実労働時間で計算）
+     * 
+     * @param f 制約ファクトリ
+     * @return 日次最大労働時間制約
+     */
     private Constraint maxWorkMinutesPerDay(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -177,6 +252,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Exceed daily minutes excluding breaks");
     }
 
+    /**
+     * 月次最大勤務日数制約（ハード制約）
+     * 各従業員の月間勤務日数が設定値（max_work_days_month）を超えることを禁止
+     * 過労防止と労働時間管理のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 月次最大勤務日数制約
+     */
     private Constraint maxWorkDaysPerMonth(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -188,6 +271,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Exceed monthly workdays");
     }
 
+    /**
+     * 連続勤務日数制限制約（ハード制約）
+     * 従業員が5日以上連続で勤務することを禁止
+     * 疲労蓄積防止と労働基準法遵守のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 連続勤務日数制限制約
+     */
     private Constraint maxConsecutiveDays(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -198,6 +289,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("More than 4 consecutive days");
     }
 
+    /**
+     * 指定された日付セットに指定長以上の連続日があるかをチェック
+     * 
+     * @param dates 勤務日の集合
+     * @param limit 連続日数の上限
+     * @return 上限以上の連続日がある場合true
+     */
     private static boolean hasRunLength(Set<LocalDate> dates, int limit) {
         LocalDate prev = null; int run = 0;
         for (LocalDate d : dates) {
@@ -208,6 +306,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return false;
     }
 
+    /**
+     * 希望休日配置禁止制約（ハード制約）
+     * 従業員が事前に申請した休暇日（request_kind='off'）への勤務配置を禁止
+     * 従業員の希望を尊重し、労働者の権利を保護する制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 希望休日配置禁止制約
+     */
     private Constraint forbidRequestedDayOff(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -229,6 +335,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Assigned on requested day off");
     }
 
+    /**
+     * 昼食休憩強制制約（ハード制約）
+     * 6時間以上の連続勤務時に1時間以上の休憩時間を強制
+     * 労働基準法第34条（休憩時間）の遵守のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 昼食休憩強制制約
+     */
     private Constraint enforceLunchBreak(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -239,6 +353,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("No 1h break");
     }
 
+    /**
+     * 6時間以上の連続勤務で1時間以上の休憩がない勤務があるかをチェック
+     * 労働基準法第34条の休憩時間規定に基づく判定
+     * 
+     * @param list 同一従業員・同一日の勤務割り当てリスト
+     * @return 6時間以上連続勤務で適切な休憩がない場合true
+     */
     private static boolean exceedsSixHoursWithoutBreak(List<ShiftAssignmentPlanningEntity> list) {
         if (list.isEmpty()) return false;
         list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
@@ -266,6 +387,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return false;
     }
 
+    /**
+     * 日次勤務者数最小化制約（ソフト制約）
+     * 各日の勤務者数を最小化して人件費を抑制
+     * 効率的な人員配置を促進する経営効率化制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 日次勤務者数最小化制約
+     */
     private Constraint minimizeDailyWorkers(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -276,6 +405,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Minimize daily workers");
     }
 
+    /**
+     * 労働負荷均等化制約（ソフト制約）
+     * 従業員間の勤務時間数の偏りを最小化
+     * 公平な労働分担と従業員満足度向上のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 労働負荷均等化制約
+     */
     private Constraint balanceWorkload(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -284,12 +421,26 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Balance workload");
     }
 
+    /**
+     * 数値リストの分散を計算してペナルティ値として返す（未使用メソッド）
+     * 
+     * @param counts 数値のリスト
+     * @return 分散値に基づくペナルティ
+     */
     private static int variancePenalty(List<Long> counts) {
         double avg = counts.stream().mapToLong(Long::longValue).average().orElse(0);
         double var = counts.stream().mapToDouble(c -> (c - avg) * (c - avg)).sum();
         return (int) Math.round(var);
     }
 
+    /**
+     * 連続勤務時間推奨制約（ソフト制約）
+     * 同一従業員の1日の勤務時間を連続化し、細切れ勤務を回避
+     * 業務効率向上と従業員の利便性向上のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 連続勤務時間推奨制約
+     */
     private Constraint assignContiguously(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -300,6 +451,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Fragmented blocks");
     }
 
+    /**
+     * 同一従業員の1日の勤務における時間的な隙間（ギャップ）の数をカウント
+     * 連続していない勤務時間スロット間の隙間を数える
+     * 
+     * @param list 同一従業員・同一日の勤務割り当てリスト
+     * @return 勤務時間の隙間数
+     */
     private static int countGaps(List<ShiftAssignmentPlanningEntity> list) {
         list.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
         int gaps = 0;
@@ -312,6 +470,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     /**
      * 休憩時間を除いた実労働時間を計算する
      * 連続6時間労働の場合は1時間の休憩を差し引く
+     * 
+     * @param list 同一従業員・同一日の勤務割り当てリスト
+     * @return 休憩時間を除いた実労働時間（分）
      */
     private static int calculateWorkMinutesExcludingBreaks(List<ShiftAssignmentPlanningEntity> list) {
         if (list.isEmpty()) return 0;
@@ -333,8 +494,12 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     // preferBaseWorkTimes は曜日別の週間設定へ置換予定（未実装）
 
     /**
-     * 週に2日以上の休日を保証するハード制約
+     * 週休二日保証制約（ハード制約）
      * 各従業員について、1週間（月曜日から日曜日）のうち最低2日は休日でなければならない
+     * 労働基準法の週休二日制遵守のための重要な制約
+     * 
+     * @param f 制約ファクトリ
+     * @return 週休二日保証制約
      */
     private Constraint ensureWeeklyRestDays(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
@@ -351,6 +516,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     /**
      * 指定された日付の週の開始日（月曜日）を取得
      * ISO 8601標準に従い、週は月曜日から始まる
+     * 
+     * @param date 基準となる日付
+     * @return その日が含まれる週の月曜日
      */
     private static LocalDate getWeekStart(LocalDate date) {
         // DayOfWeek.MONDAY = 1, SUNDAY = 7
@@ -360,9 +528,12 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
+     * 月次人員配置分散最小化制約（ソフト制約）
      * 計算月全体の人員過不足の分散を最小化する制約
-     * 各日の需要と実際の配置人員の差の分散を抑えることで、
-     * 月全体での人員配置の均等化を図る
+     * 各日の需要と実際の配置人員の差の分散を抑えることで、月全体での人員配置の均等化を図る
+     * 
+     * @param f 制約ファクトリ
+     * @return 月次人員配置分散最小化制約
      */
     private Constraint minimizeStaffingVariance(ConstraintFactory f) {
         return f.forEach(RegisterDemandQuarter.class)
@@ -387,6 +558,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     /**
      * 人員過不足リストの分散を計算してペナルティ値を返す
      * 分散が大きいほど高いペナルティを課す
+     * 
+     * @param staffingDifferences 各時間帯の人員過不足の絶対値リスト
+     * @return 分散に基づくペナルティ値
      */
     private static int calculateVariancePenalty(List<Integer> staffingDifferences) {
         if (staffingDifferences.isEmpty()) return 0;
@@ -412,8 +586,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
+     * レジ切り替え最小化制約（ソフト制約）
      * レジ種別間の切り替わり頻度を最小化する制約
      * 同一従業員が一日の中で異なるレジ番号に頻繁に切り替わることを避ける
+     * 業務効率向上と従業員の作業負荷軽減のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return レジ切り替え最小化制約
      */
     private Constraint minimizeRegisterSwitching(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
@@ -427,8 +606,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
+     * レジ一貫性優先制約（ソフト制約）
      * 同一レジ種別での連続勤務を優先する制約
      * 従業員が同じレジで連続して勤務することを推奨
+     * 業務精度向上と従業員の作業効率向上のための制約
+     * 
+     * @param f 制約ファクトリ
+     * @return レジ一貫性優先制約
      */
     private Constraint preferConsistentRegisterAssignment(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
@@ -444,6 +628,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     /**
      * 一日の中でのレジ種別切り替え回数をカウント
      * 時間順にソートして、隣接するタイムスロット間でレジ番号が変わる回数を数える
+     * 
+     * @param assignments 同一従業員・同一日の勤務割り当てリスト
+     * @return レジ種別切り替え回数
      */
     private static int countRegisterSwitches(List<ShiftAssignmentPlanningEntity> assignments) {
         if (assignments.size() <= 1) return 0;
@@ -468,6 +655,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     /**
      * 同一レジでの連続勤務ブロック数をカウント
      * より多くの連続ブロックを持つことで一貫性を評価
+     * 
+     * @param assignments 同一従業員・同一日の勤務割り当てリスト
+     * @return 同一レジでの連続勤務ブロック数
      */
     private static int countConsistentRegisterBlocks(List<ShiftAssignmentPlanningEntity> assignments) {
         if (assignments.isEmpty()) return 0;
@@ -508,5 +698,129 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         }
         
         return blocks;
+    }
+
+    /**
+     * 曜日別勤務設定でOFFが設定されている日の勤務を禁止するハード制約
+     * employee_weekly_preferenceでwork_style='OFF'の曜日は該当従業員は休日
+     */
+    private Constraint forbidWorkOnOffDays(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeWeeklyPreference.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeWeeklyPreference::getEmployeeCode),
+                        Joiners.equal(sa -> sa.getShiftDate().getDayOfWeek().getValue(), 
+                                     pref -> pref.getDayOfWeek().intValue()))
+                .filter((sa, pref) -> {
+                    boolean isOffDay = "OFF".equalsIgnoreCase(pref.getWorkStyle());
+                    if (isOffDay) {
+                        System.out.println("CONSTRAINT VIOLATION: Employee " + sa.getAssignedEmployee().getEmployeeCode() + 
+                                         " assigned on OFF day: " + sa.getShiftDate() + " (" + sa.getShiftDate().getDayOfWeek() + ")");
+                    }
+                    return isOffDay;
+                })
+                .penalize(HardSoftScore.of(10000, 0))
+                .asConstraint("Assigned on weekly OFF day");
+    }
+
+    /**
+     * 曜日別勤務設定でMANDATORYが設定されている日は必ず出勤させるソフト制約
+     * employee_weekly_preferenceでwork_style='MANDATORY'の曜日は該当従業員は必須出勤
+     * 該当曜日に勤務していない場合にペナルティを課す
+     */
+    private Constraint enforceMandatoryWorkDays(ConstraintFactory f) {
+        return f.forEach(EmployeeWeeklyPreference.class)
+                .filter(pref -> "MANDATORY".equalsIgnoreCase(pref.getWorkStyle()))
+                .join(ShiftAssignmentPlanningEntity.class,
+                        Joiners.equal(EmployeeWeeklyPreference::getEmployeeCode, 
+                                     sa -> sa.getAssignedEmployee() != null ? sa.getAssignedEmployee().getEmployeeCode() : null),
+                        Joiners.equal(pref -> pref.getDayOfWeek().intValue(),
+                                     sa -> sa.getShiftDate().getDayOfWeek().getValue()))
+                .groupBy((pref, sa) -> pref, 
+                         (pref, sa) -> sa.getShiftDate(),
+                         ConstraintCollectors.countBi())
+                .filter((pref, date, assignmentCount) -> assignmentCount == 0) // 該当日に勤務がない場合
+                .penalize(HardSoftScore.ofSoft(5000)) // 高いソフトペナルティ
+                .asConstraint("Missing mandatory work day");
+    }
+
+    /**
+     * 曜日別基本勤務時間外への勤務を禁止するハード制約
+     * employee_weekly_preferenceのbase_start_time/base_end_time範囲外の勤務を禁止
+     * OPTIONALまたはMANDATORYで時間設定がある場合のみ適用
+     */
+    private Constraint forbidWorkOutsideBaseHours(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeWeeklyPreference.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeWeeklyPreference::getEmployeeCode),
+                        Joiners.equal(sa -> sa.getShiftDate().getDayOfWeek().getValue(), 
+                                     pref -> pref.getDayOfWeek().intValue()))
+                .filter((sa, pref) -> {
+                    // OFFの場合は他の制約で処理済み、時間設定がない場合は制約適用なし
+                    if ("OFF".equalsIgnoreCase(pref.getWorkStyle()) || 
+                        pref.getBaseStartTime() == null || pref.getBaseEndTime() == null) {
+                        return false;
+                    }
+                    
+                    // 勤務時間がbase_start_time/base_end_time範囲外かチェック
+                    LocalTime shiftStartTime = sa.getStartAt().toInstant()
+                            .atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalTime shiftEndTime = sa.getEndAt().toInstant()
+                            .atZone(ZoneId.systemDefault()).toLocalTime();
+                    
+                    LocalTime baseStart = pref.getBaseStartTime().toLocalTime();
+                    LocalTime baseEnd = pref.getBaseEndTime().toLocalTime();
+                    
+                    // シフト時間が基本勤務時間範囲外の場合は違反
+                    boolean isOutsideRange = shiftStartTime.isBefore(baseStart) || 
+                                           shiftEndTime.isAfter(baseEnd);
+                    
+                    if (isOutsideRange) {
+                        System.out.println("CONSTRAINT VIOLATION: Employee " + sa.getAssignedEmployee().getEmployeeCode() + 
+                                         " assigned outside base hours on " + sa.getShiftDate().getDayOfWeek() + 
+                                         ": shift(" + shiftStartTime + "-" + shiftEndTime + 
+                                         ") vs base(" + baseStart + "-" + baseEnd + ")");
+                    }
+                    
+                    return isOutsideRange;
+                })
+                .penalize(HardSoftScore.of(8000, 0)) // 高いハードペナルティ
+                .asConstraint("Assigned outside base work hours");
+    }
+
+    /**
+     * 基本勤務時間内での勤務を推奨するソフト制約
+     * employee_weekly_preferenceのbase_start_time/base_end_time範囲内の勤務を優遇
+     * 時間設定がある場合、その時間内での勤務にボーナスを与える
+     */
+    private Constraint preferWorkWithinBaseHours(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeWeeklyPreference.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeWeeklyPreference::getEmployeeCode),
+                        Joiners.equal(sa -> sa.getShiftDate().getDayOfWeek().getValue(), 
+                                     pref -> pref.getDayOfWeek().intValue()))
+                .filter((sa, pref) -> {
+                    // OFFでなく、時間設定がある場合のみ適用
+                    if ("OFF".equalsIgnoreCase(pref.getWorkStyle()) || 
+                        pref.getBaseStartTime() == null || pref.getBaseEndTime() == null) {
+                        return false;
+                    }
+                    
+                    // 勤務時間がbase_start_time/base_end_time範囲内かチェック
+                    LocalTime shiftStartTime = sa.getStartAt().toInstant()
+                            .atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalTime shiftEndTime = sa.getEndAt().toInstant()
+                            .atZone(ZoneId.systemDefault()).toLocalTime();
+                    
+                    LocalTime baseStart = pref.getBaseStartTime().toLocalTime();
+                    LocalTime baseEnd = pref.getBaseEndTime().toLocalTime();
+                    
+                    // シフト時間が基本勤務時間範囲内の場合は報酬対象
+                    return !shiftStartTime.isBefore(baseStart) && !shiftEndTime.isAfter(baseEnd);
+                })
+                .reward(HardSoftScore.ofSoft(100)) // 基本時間内勤務への報酬
+                .asConstraint("Prefer work within base hours");
     }
 }
