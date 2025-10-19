@@ -31,12 +31,8 @@
             <td class="text-end" th:text="${e.maxWorkMinutesDay}"></td>
             <td class="text-end" th:text="${e.maxWorkDaysMonth}"></td>
             <td>
-              <button class="btn btn-sm btn-outline-primary me-1 edit-btn"
-                      th:data-employee-code="${e.employeeCode}"
-                      th:data-employee-name="${e.employeeName}"
-                      th:data-store-code="${e.storeCode}"
-                      th:data-max-work-minutes-day="${e.maxWorkMinutesDay}"
-                      th:data-max-work-days-month="${e.maxWorkDaysMonth}">編集</button>
+              <a class="btn btn-sm btn-outline-primary me-1"
+                 th:href="@{'/employees/' + ${e.employeeCode}}">編集</a>
               <form th:action="@{'/employees/' + ${e.employeeCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('従業員「' + '[[${e.employeeName}]]' + '」を削除しますか？');">
                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <button class="btn btn-sm btn-outline-danger">削除</button>
@@ -169,29 +165,7 @@
 
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const employeeCode = this.getAttribute('data-employee-code');
-          const employeeName = this.getAttribute('data-employee-name');
-          const storeCode = this.getAttribute('data-store-code');
-          const maxWorkMinutesDay = this.getAttribute('data-max-work-minutes-day');
-          const maxWorkDaysMonth = this.getAttribute('data-max-work-days-month');
-          
-          document.getElementById('editEmployeeCode').value = employeeCode;
-          document.getElementById('editEmployeeName').value = employeeName;
-          document.getElementById('editStoreCode').value = storeCode;
-          document.getElementById('editMaxWorkMinutesDay').value = maxWorkMinutesDay || '';
-          document.getElementById('editMaxWorkDaysMonth').value = maxWorkDaysMonth || '';
-          
-          document.getElementById('editForm').action = '/employees/' + employeeCode + '/update';
-          
-          new bootstrap.Modal(document.getElementById('editModal')).show();
-        });
-      });
-    });
-  </script>
+  <script></script>
 </main>
 </body>
 </html>
