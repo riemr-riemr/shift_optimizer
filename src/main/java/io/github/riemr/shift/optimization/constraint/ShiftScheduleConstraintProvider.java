@@ -772,9 +772,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     LocalTime baseStart = pref.getBaseStartTime().toLocalTime();
                     LocalTime baseEnd = pref.getBaseEndTime().toLocalTime();
                     
-                    // シフト時間が基本勤務時間範囲外の場合は違反
-                    boolean isOutsideRange = shiftStartTime.isBefore(baseStart) || 
-                                           shiftEndTime.isAfter(baseEnd);
+                    // 許容トレランス（システム解像度に合わせて1スロット=15分を許容）
+                    int toleranceMin = 15;
+                    LocalTime tolerantStart = baseStart.minusMinutes(toleranceMin);
+                    LocalTime tolerantEnd = baseEnd.plusMinutes(toleranceMin);
+                    // シフト時間が（許容込みの）基本勤務時間範囲外の場合は違反
+                    boolean isOutsideRange = shiftStartTime.isBefore(tolerantStart) ||
+                                             shiftEndTime.isAfter(tolerantEnd);
                     
                     if (isOutsideRange) {
                         System.out.println("CONSTRAINT VIOLATION: Employee " + sa.getAssignedEmployee().getEmployeeCode() + 
@@ -785,7 +789,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     
                     return isOutsideRange;
                 })
-                .penalize(HardSoftScore.of(8000, 0)) // 高いハードペナルティ
+                .penalize(HardSoftScore.of(8000, 0)) // 高いハードペナルティ（±1スロットは許容）
                 .asConstraint("Assigned outside base work hours");
     }
 

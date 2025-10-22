@@ -206,6 +206,19 @@
     font-size: 0.6rem;
     color: rgba(255,255,255,0.7);
   }
+  /* Department task (non-register) assignment style */
+  .grid-cell.task-assigned {
+    background: #6c757d;
+    color: #fff;
+    font-weight: 600;
+    border-left: 3px solid #495057;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
 </style>
 
 <script>
@@ -964,6 +977,8 @@ async function loadResult(dateString){
 
   // 時間ヘッダーを作成（解像度単位）
   const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
+  const deptCodeForGrid = $('departmentCode').value || '';
+  const IS_REGISTER_DEPT = (!deptCodeForGrid || deptCodeForGrid === '520');
   const timeHeaderRow = document.createElement('div');
   timeHeaderRow.className = 'grid-row';
   timeHeaderRow.style.gridColumn = '1 / -1';
@@ -1007,11 +1022,13 @@ async function loadResult(dateString){
         cell.dataset.time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         cell.dataset.originalRegister = '';
         
-        // イベントを追加
-        cell.addEventListener('dragover', handleDragOver);
-        cell.addEventListener('drop', handleDrop);
-        cell.addEventListener('dragleave', handleDragLeave);
-        cell.addEventListener('contextmenu', handleRightClick);
+        // レジ部門のみドラッグ＆ドロップ/右クリックメニューを有効化
+        if (IS_REGISTER_DEPT) {
+          cell.addEventListener('dragover', handleDragOver);
+          cell.addEventListener('drop', handleDrop);
+          cell.addEventListener('dragleave', handleDragLeave);
+          cell.addEventListener('contextmenu', handleRightClick);
+        }
         
         shiftGrid.appendChild(cell);
       }
@@ -1110,12 +1127,16 @@ async function loadResult(dateString){
             cell.dataset.currentRegister = assignment.registerNo;
             }
             
-            // 割り当てセルをドラッグ可能にする（重複イベント防止）
-            cell.draggable = true;
-            cell.removeEventListener('dragstart', handleAssignmentDragStart);
-            cell.removeEventListener('dragend', handleAssignmentDragEnd);
-            cell.addEventListener('dragstart', handleAssignmentDragStart);
-            cell.addEventListener('dragend', handleAssignmentDragEnd);
+            if (IS_REGISTER_DEPT) {
+              // レジ割り当てのみドラッグ可能
+              cell.draggable = true;
+              cell.removeEventListener('dragstart', handleAssignmentDragStart);
+              cell.removeEventListener('dragend', handleAssignmentDragEnd);
+              cell.addEventListener('dragstart', handleAssignmentDragStart);
+              cell.addEventListener('dragend', handleAssignmentDragEnd);
+            } else {
+              cell.draggable = false;
+            }
           }
           
           // 従業員名を正しく設定（APIからの名前またはセルの従業員名を使用）
@@ -1132,6 +1153,18 @@ async function loadResult(dateString){
   
   // 勤務時間を計算・表示（勤務行の背景・合計時間ラベルなど）
   updateWorkHours();
+
+  // レジ以外の場合は保存・キャンセルを隠して読み取り専用表示
+  (function toggleEditButtons() {
+    const departmentCode = $('departmentCode').value || '';
+    const isRegisterDept = (!departmentCode || departmentCode === '520');
+    const saveBtn = $('saveChangesBtn');
+    const cancelBtn = $('cancelChangesBtn');
+    const help = $('dragDropHelp');
+    if (saveBtn) saveBtn.style.display = isRegisterDept ? 'inline-block' : 'none';
+    if (cancelBtn) cancelBtn.style.display = isRegisterDept ? 'inline-block' : 'none';
+    if (help) help.style.display = isRegisterDept ? 'block' : 'none';
+  })();
 }
 
 async function loadStaffingBalance(dateString) {

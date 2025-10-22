@@ -21,4 +21,9 @@ public interface WorkDemandIntervalMapper {
     int deleteById(@Param("id") Long id);
 
     int deleteAll();
+
+    int deleteByStoreDeptAndRange(@Param("storeCode") String storeCode,
+                                  @Param("departmentCode") String departmentCode,
+                                  @Param("from") LocalDate from,
+                                  @Param("to") LocalDate to);
 }

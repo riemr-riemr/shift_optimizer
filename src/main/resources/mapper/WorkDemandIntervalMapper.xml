@@ -44,4 +44,12 @@
     DELETE FROM work_demand_interval
   </delete>
 
+  <delete id="deleteByStoreDeptAndRange">
+    DELETE FROM work_demand_interval
+    WHERE store_code = #{storeCode}
+      AND department_code = #{departmentCode}
+      AND target_date &gt;= #{from}
+      AND target_date &lt;  #{to}
+  </delete>
+
 </mapper>

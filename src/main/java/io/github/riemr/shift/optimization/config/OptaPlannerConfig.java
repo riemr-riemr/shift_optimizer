@@ -47,8 +47,8 @@ public class OptaPlannerConfig {
     
     private TerminationConfig terminationConfig() {
         return new TerminationConfig()
-                // アプリ設定に合わせる（例: PT2M, PT5M 等）
-                .withSpentLimit(solverSpentLimit);
+                // 時間制限を無制限に設定（ハード制約を満たすまで実行）
+                .withBestScoreLimit("0hard/*soft");
     }
     
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
@@ -58,11 +58,11 @@ public class OptaPlannerConfig {
     private LocalSearchPhaseConfig localSearchPhaseConfig() {
         return new LocalSearchPhaseConfig()
                 .withTerminationConfig(new TerminationConfig()
-                        // Local Searchフェーズで45秒間スコア改善がない場合にアーリーストッピング
-                        .withUnimprovedSpentLimit(Duration.ofSeconds(45))
+                        // Local Searchフェーズで120秒間スコア改善がない場合にアーリーストッピング
+                        .withUnimprovedSpentLimit(Duration.ofSeconds(120))
                         // フェーズレベルでも最大時間制限を設定（保険）
-                        .withSpentLimit(solverSpentLimit.minus(Duration.ofSeconds(45)).isNegative()
+                        .withSpentLimit(solverSpentLimit.minus(Duration.ofSeconds(180)).isNegative()
                                 ? solverSpentLimit
-                                : solverSpentLimit.minus(Duration.ofSeconds(45))));
+                                : solverSpentLimit.minus(Duration.ofSeconds(180))));
     }
 }

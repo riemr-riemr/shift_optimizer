@@ -6,6 +6,10 @@ import io.github.riemr.shift.application.repository.TaskPlanRepository;
 import io.github.riemr.shift.infrastructure.persistence.entity.Task;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
 import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
+import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
+import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +21,19 @@ public class TaskPlanService {
     private final TaskPlanRepository planRepository;
     private final TaskRepository taskRepository;
     private final MonthlyTaskPlanRepository monthlyRepository;
+    private final DepartmentTaskAssignmentMapper deptTaskAssignmentMapper;
+    private final WorkDemandIntervalMapper workDemandIntervalMapper;
 
     public TaskPlanService(TaskPlanRepository planRepository,
                            TaskRepository taskRepository,
-                           MonthlyTaskPlanRepository monthlyRepository) {
+                           MonthlyTaskPlanRepository monthlyRepository,
+                           DepartmentTaskAssignmentMapper deptTaskAssignmentMapper,
+                           WorkDemandIntervalMapper workDemandIntervalMapper) {
         this.planRepository = planRepository;
         this.taskRepository = taskRepository;
         this.monthlyRepository = monthlyRepository;
+        this.deptTaskAssignmentMapper = deptTaskAssignmentMapper;
+        this.workDemandIntervalMapper = workDemandIntervalMapper;
     }
 
     @Transactional
@@ -63,6 +73,83 @@ public class TaskPlanService {
         return created;
     }
 
+    /**
+     * 週次・月次の作業計画から、指定範囲の DepartmentTaskAssignment を再生成する（従業員未割当）。
+     * - FIXED: 指定開始/終了で requiredStaffCount 件を作成
+     * - FLEXIBLE: 窓全体を1件（requiredStaffCount 件）として作成（所要は反映せず）
+     */
+    @Transactional
+    public int materializeDepartmentAssignments(String storeCode,
+                                                String departmentCode,
+                                                java.time.LocalDate from,
+                                                java.time.LocalDate to,
+                                                String createdBy) {
+        if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) return 0;
+        // まず既存を削除（半開区間）
+        deptTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, storeCode, departmentCode);
+        int created = 0;
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+            short dow = (short) d.getDayOfWeek().getValue();
+            java.util.Date dd = java.util.Date.from(d.atStartOfDay(zone).toInstant());
+            // 週次有効
+            var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd);
+            // 月次（DOM/WOM）有効
+            var monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, dd);
+            // 部門でフィルタ
+            weekly = weekly.stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
+            monthly = monthly.stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
+
+            // 週次
+            for (TaskPlan p : weekly) {
+                created += toDeptAssignments(storeCode, departmentCode, p.getTaskCode(), p.getScheduleType(),
+                        toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                        toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                        p.getRequiredStaffCount(), d, createdBy);
+            }
+            // 月次
+            for (MonthlyTaskPlan p : monthly) {
+                created += toDeptAssignments(storeCode, departmentCode, p.getTaskCode(), p.getScheduleType(),
+                        toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                        toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                        p.getRequiredStaffCount(), d, createdBy);
+            }
+        }
+        return created;
+    }
+
+    private int toDeptAssignments(String storeCode, String departmentCode, String taskCode, String scheduleType,
+                                  java.time.LocalTime fixedStart, java.time.LocalTime fixedEnd,
+                                  java.time.LocalTime winStart, java.time.LocalTime winEnd,
+                                  Integer requiredStaff, java.time.LocalDate date, String createdBy) {
+        int count = Math.max(1, nvl(requiredStaff, 1));
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.util.Date startAt;
+        java.util.Date endAt;
+        if ("FIXED".equalsIgnoreCase(scheduleType) && fixedStart != null && fixedEnd != null) {
+            startAt = java.util.Date.from(date.atTime(fixedStart).atZone(zone).toInstant());
+            endAt = java.util.Date.from(date.atTime(fixedEnd).atZone(zone).toInstant());
+        } else if (winStart != null && winEnd != null) {
+            startAt = java.util.Date.from(date.atTime(winStart).atZone(zone).toInstant());
+            endAt = java.util.Date.from(date.atTime(winEnd).atZone(zone).toInstant());
+        } else {
+            return 0;
+        }
+        int created = 0;
+        for (int i = 0; i < count; i++) {
+            DepartmentTaskAssignment a = new DepartmentTaskAssignment();
+            a.setStoreCode(storeCode);
+            a.setDepartmentCode(departmentCode);
+            a.setTaskCode(taskCode);
+            a.setEmployeeCode(null);
+            a.setStartAt(startAt);
+            a.setEndAt(endAt);
+            a.setCreatedBy(createdBy);
+            deptTaskAssignmentMapper.insert(a);
+            created++;
+        }
+        return created;
+    }
     private TaskPlan clonePlan(TaskPlan p) {
         TaskPlan c = new TaskPlan();
         c.setStoreCode(p.getStoreCode());
@@ -158,6 +245,62 @@ public class TaskPlanService {
         }
     }
 
+    /**
+     * 週次・月次の作業計画から、work_demand_interval を再生成（指定範囲/店舗/部門）。
+     * demand には requiredStaffCount を使用。FLEXIBLE は窓全体を1区間として扱う。
+     */
+    @Transactional
+    public int materializeWorkDemands(String storeCode, String departmentCode,
+                                      java.time.LocalDate from, java.time.LocalDate to) {
+        if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) return 0;
+        workDemandIntervalMapper.deleteByStoreDeptAndRange(storeCode, departmentCode, from, to);
+        int created = 0;
+        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+            short dow = (short) d.getDayOfWeek().getValue();
+            java.util.Date dd = java.util.Date.from(d.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+            var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd)
+                    .stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
+            var monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, dd)
+                    .stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
+            for (TaskPlan p : weekly) {
+                created += toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
+                        toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                        toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                        p.getRequiredStaffCount());
+            }
+            for (MonthlyTaskPlan p : monthly) {
+                created += toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
+                        toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                        toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                        p.getRequiredStaffCount());
+            }
+        }
+        return created;
+    }
+
+    private int toWorkDemandRows(String storeCode, String departmentCode, java.time.LocalDate date, String taskCode,
+                                 String scheduleType, java.time.LocalTime fixedStart, java.time.LocalTime fixedEnd,
+                                 java.time.LocalTime winStart, java.time.LocalTime winEnd, Integer requiredStaff) {
+        int demand = Math.max(1, nvl(requiredStaff, 1));
+        java.time.LocalTime from;
+        java.time.LocalTime to;
+        if ("FIXED".equalsIgnoreCase(scheduleType) && fixedStart != null && fixedEnd != null) {
+            from = fixedStart; to = fixedEnd;
+        } else if (winStart != null && winEnd != null) {
+            from = winStart; to = winEnd;
+        } else { return 0; }
+        DemandIntervalDto dto = DemandIntervalDto.builder()
+                .storeCode(storeCode)
+                .departmentCode(departmentCode)
+                .targetDate(date)
+                .from(from)
+                .to(to)
+                .demand(demand)
+                .taskCode(taskCode)
+                .build();
+        workDemandIntervalMapper.insert(dto);
+        return 1;
+    }
     // Special-day generation removed; use monthly_task_plan
 
     private int createTasksFromMonthly(String storeCode, LocalDate date, MonthlyTaskPlan p, String createdBy) {

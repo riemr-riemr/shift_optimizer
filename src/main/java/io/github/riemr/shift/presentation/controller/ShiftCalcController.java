@@ -6,6 +6,7 @@ import io.github.riemr.shift.application.dto.SolveRequest;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.application.service.StaffingBalanceService;
+import io.github.riemr.shift.application.service.ShiftOptimizationPreparationService;
 import io.github.riemr.shift.optimization.service.ShiftScheduleService;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
@@ -27,6 +28,7 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -44,10 +46,12 @@ import java.util.stream.Collectors;
 @Controller
 @RequiredArgsConstructor
 @RequestMapping("/shift")
+@Slf4j
 public class ShiftCalcController {
 
     private final ShiftScheduleService service;
     private final StaffingBalanceService staffingBalanceService;
+    private final ShiftOptimizationPreparationService preparationService;
     private final StoreMapper storeMapper;
     private final RegisterDemandHourService registerDemandHourService;
     private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
@@ -65,6 +69,32 @@ public class ShiftCalcController {
         return "shift/calc";
     }
 
+    @PostMapping("/api/calc/prepare")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> prepare(@RequestBody SolveRequest req) {
+        try {
+            LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            int startDay = appSettingService.getShiftCycleStartDay();
+            LocalDate cycleStart = computeCycleStart(base, startDay);
+            
+            log.info("Starting optimization preparation for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
+            var future = preparationService.prepareOptimizationDataAsync(cycleStart, req.storeCode(), req.departmentCode());
+            boolean success = future.get(); // Wait for completion
+            
+            return Map.of(
+                "success", success,
+                "message", success ? "事前準備が完了しました" : "事前準備中にエラーがありましたが続行可能です"
+            );
+        } catch (Exception e) {
+            log.error("Failed to prepare optimization data", e);
+            return Map.of(
+                "success", false,
+                "message", "事前準備に失敗しました: " + e.getMessage()
+            );
+        }
+    }
+
     @PostMapping("/api/calc/start")
     @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
@@ -72,6 +102,9 @@ public class ShiftCalcController {
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
+        
+        // 最適化開始: work_demand_interval + register_demand_interval → シフト最適化
+        log.info("Starting shift optimization for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
         return service.startSolveMonth(cycleStart, req.storeCode(), req.departmentCode());
     }
 

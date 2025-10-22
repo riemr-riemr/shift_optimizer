@@ -83,11 +83,11 @@ public class ShiftScheduleService {
     /* Public API                                                            */
     /* ===================================================================== */
 
+
     /**
      * 月次シフト計算を非同期で開始。
      * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
      */
-    @Transactional
     public SolveTicket startSolveMonth(LocalDate month) {
         return startSolveMonth(month, null, null);
     }
@@ -96,7 +96,6 @@ public class ShiftScheduleService {
      * 月次シフト計算を非同期で開始（店舗指定あり）。
      * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
      */
-    @Transactional
     public SolveTicket startSolveMonth(LocalDate month, String storeCode) {
         return startSolveMonth(month, storeCode, null);
     }
@@ -105,22 +104,12 @@ public class ShiftScheduleService {
      * 月次シフト計算を非同期で開始（店舗・部門指定あり）。
      * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
      */
-    @Transactional
     public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
         long problemId = toProblemId(month);
         ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month);
 
-        // 1) 作業計画の適用（当該サイクル範囲）
-        if (storeCode != null && !storeCode.isBlank()) {
-            LocalDate cycleStart = month;
-            LocalDate cycleEndInclusive = month.plusMonths(1).minusDays(1);
-            try {
-                taskPlanService.applyReplacing(storeCode, cycleStart, cycleEndInclusive, "auto_apply");
-                log.info("Applied task plans for store {} from {} to {}", storeCode, cycleStart, cycleEndInclusive);
-            } catch (Exception e) {
-                log.warn("Failed to apply task plans before solving: {}", e.getMessage());
-            }
-        }
+        // 1) 作業計画の適用は事前にShiftCalcControllerで完了済み
+        log.info("Starting optimization for month={}, store={}, dept={} (task plan preparation completed separately)", month, storeCode, departmentCode);
 
         // 既存ジョブならチケット再発行
         if (jobMap.containsKey(key)) {
