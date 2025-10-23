@@ -113,14 +113,16 @@ ON CONFLICT DO NOTHING;
 -- 3. employee : 従業員マスタ
 -- ------------------------------------------------
 CREATE TABLE employee (
-    employee_code        VARCHAR(10) PRIMARY KEY,
-    store_code           VARCHAR(10) REFERENCES store(store_code),
-    employee_name        VARCHAR(50) NOT NULL,
-    short_follow         SMALLINT, -- 0~4
-    max_work_minutes_day INT,
-    max_work_days_month  INT,
-    password_hash        VARCHAR(100),
-    authority_code       VARCHAR(20) REFERENCES authority_master(authority_code)
+    employee_code         VARCHAR(10) PRIMARY KEY,
+    store_code            VARCHAR(10) REFERENCES store(store_code),
+    employee_name         VARCHAR(50) NOT NULL,
+    min_work_minutes_day  INT,
+    max_work_minutes_day  INT,
+    -- 週次の最小・最大勤務時間（時）
+    min_work_hours_week   INT,
+    max_work_hours_week   INT,
+    password_hash         VARCHAR(100),
+    authority_code        VARCHAR(20) REFERENCES authority_master(authority_code)
 );
 
 -- 従業員の曜日別勤務設定
@@ -345,12 +347,33 @@ INSERT INTO app_setting(setting_key, setting_value)
 --   NOTE: Change password after first login.
 -- ------------------------------------------------
 INSERT INTO employee(
-    employee_code, store_code, employee_name, short_follow,
-    max_work_minutes_day, max_work_days_month, password_hash, authority_code
+    employee_code, store_code, employee_name,
+    min_work_minutes_day, max_work_minutes_day,
+    min_work_hours_week,  max_work_hours_week,
+    password_hash, authority_code
 ) VALUES (
-    'admin', NULL, 'Administrator', 0,
-    480, 31, crypt('admin', gen_salt('bf', 10)), 'ADMIN'
+    'admin', NULL, 'Administrator',
+    0, 480,
+    0, 50,
+    crypt('admin', gen_salt('bf', 10)), 'ADMIN'
 ) ON CONFLICT (employee_code) DO NOTHING;
+
+-- 月次の最小・最大勤務時間は年月別テーブルで管理
+-- 各従業員・各月の時間(時)を保持する
+CREATE TABLE IF NOT EXISTS employee_monthly_hours_setting (
+    employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
+    month_start     DATE        NOT NULL, -- 対象月の1日
+    min_work_hours  INTEGER     NOT NULL,
+    max_work_hours  INTEGER     NOT NULL,
+    PRIMARY KEY (employee_code, month_start)
+);
+
+-- 例: 管理者のデフォルト月次設定（必要に応じて調整）
+INSERT INTO employee_monthly_hours_setting (employee_code, month_start, min_work_hours, max_work_hours)
+VALUES ('admin', date_trunc('month', CURRENT_DATE)::date, 0, 200)
+ON CONFLICT DO NOTHING;
+
+-- 週次の最小・最大勤務時間はemployeeテーブルで管理
 
 -- ------------------------------------------------
 -- 13. 権限: Task画面の初期権限

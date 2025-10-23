@@ -49,7 +49,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             forbidDepartmentLowSkill(factory),
             employeeNotDoubleBooked(factory),
             maxWorkMinutesPerDay(factory),
-            maxWorkDaysPerMonth(factory),
+            monthlyWorkHoursRange(factory),
+            minWorkMinutesPerDay(factory),
+            weeklyWorkHoursRange(factory),
             maxConsecutiveDays(factory),
             forbidRequestedDayOff(factory),
             enforceLunchBreak(factory),
@@ -64,7 +66,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             satisfyWorkDemand(factory),
             preferHigherSkillLevel(factory),
             preferDepartmentHigherSkill(factory),
-            preferWorkWithinBaseHours(factory),
             
             minimizeDailyWorkers(factory),
             balanceWorkload(factory),
@@ -253,22 +254,80 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * 月次最大勤務日数制約（ハード制約）
-     * 各従業員の月間勤務日数が設定値（max_work_days_month）を超えることを禁止
-     * 過労防止と労働時間管理のための制約
-     * 
-     * @param f 制約ファクトリ
-     * @return 月次最大勤務日数制約
+     * 月次勤務時間範囲制約（ハード制約）
+     * 各従業員の月間勤務時間が[min_work_hours_month, max_work_hours_month]の範囲内であることを強制
+     * 分単位で集計し、閾値(時間)は60倍で比較
      */
-    private Constraint maxWorkDaysPerMonth(ConstraintFactory f) {
+    private Constraint monthlyWorkHoursRange(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
-                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, sa -> sa.getShiftDate().withDayOfMonth(1),
-                         ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getShiftDate))
-                .filter((emp, month, daySet) -> emp.getMaxWorkDaysMonth() != null && daySet.size() > emp.getMaxWorkDaysMonth())
+                .join(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting::getEmployeeCode),
+                        Joiners.filtering((sa, set) -> YearMonth.from(sa.getShiftDate())
+                                .equals(YearMonth.from(set.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()))))
+                .groupBy((sa, set) -> set, ConstraintCollectors.sum((sa, set) -> sa.getWorkMinutes()))
+                .filter((set, minutes) -> {
+                    boolean belowMin = set.getMinWorkHours() != null && minutes < set.getMinWorkHours() * 60;
+                    boolean aboveMax = set.getMaxWorkHours() != null && minutes > set.getMaxWorkHours() * 60;
+                    return belowMin || aboveMax;
+                })
+                .penalize(HardSoftScore.ONE_HARD, (set, minutes) -> {
+                    int penalty = 0;
+                    if (set.getMinWorkHours() != null && minutes < set.getMinWorkHours() * 60) {
+                        penalty += (set.getMinWorkHours() * 60 - minutes);
+                    }
+                    if (set.getMaxWorkHours() != null && minutes > set.getMaxWorkHours() * 60) {
+                        penalty += (minutes - set.getMaxWorkHours() * 60);
+                    }
+                    return Math.max(penalty, 1);
+                })
+                .asConstraint("Monthly work hours out of range");
+    }
+
+    /** 週次勤務時間範囲制約（ハード制約） */
+    private Constraint weeklyWorkHoursRange(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                        sa -> getWeekStart(sa.getShiftDate()),
+                        ConstraintCollectors.toList())
+                .filter((emp, weekStart, list) -> {
+                    int minutes = list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
+                    boolean belowMin = emp.getMinWorkHoursWeek() != null && minutes < emp.getMinWorkHoursWeek() * 60;
+                    boolean aboveMax = emp.getMaxWorkHoursWeek() != null && minutes > emp.getMaxWorkHoursWeek() * 60;
+                    return belowMin || aboveMax;
+                })
+                .penalize(HardSoftScore.ONE_HARD, (emp, weekStart, list) -> {
+                    int minutes = list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
+                    int penalty = 0;
+                    if (emp.getMinWorkHoursWeek() != null && minutes < emp.getMinWorkHoursWeek() * 60) {
+                        penalty += (emp.getMinWorkHoursWeek() * 60 - minutes);
+                    }
+                    if (emp.getMaxWorkHoursWeek() != null && minutes > emp.getMaxWorkHoursWeek() * 60) {
+                        penalty += (minutes - emp.getMaxWorkHoursWeek() * 60);
+                    }
+                    return Math.max(penalty, 1);
+                })
+                .asConstraint("Weekly work hours out of range");
+    }
+
+    /**
+     * 日次最小勤務時間制約（ハード制約）
+     * 各従業員の1日の労働時間が設定値（min_work_minutes_day）未満にならないようにする
+     * その日に全く勤務していない場合は対象外
+     */
+    private Constraint minWorkMinutesPerDay(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .filter((emp, date, list) -> emp.getMinWorkMinutesDay() != null
+                        && !list.isEmpty()
+                        && calculateWorkMinutesExcludingBreaks(list) < emp.getMinWorkMinutesDay())
                 .penalize(HardSoftScore.ONE_HARD,
-                          (emp, month, daySet) -> daySet.size() - emp.getMaxWorkDaysMonth())
-                .asConstraint("Exceed monthly workdays");
+                        (emp, date, list) -> emp.getMinWorkMinutesDay() - calculateWorkMinutesExcludingBreaks(list))
+                .asConstraint("Below daily minimum minutes");
     }
 
     /**
@@ -771,14 +830,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     
                     LocalTime baseStart = pref.getBaseStartTime().toLocalTime();
                     LocalTime baseEnd = pref.getBaseEndTime().toLocalTime();
-                    
-                    // 許容トレランス（システム解像度に合わせて1スロット=15分を許容）
-                    int toleranceMin = 15;
-                    LocalTime tolerantStart = baseStart.minusMinutes(toleranceMin);
-                    LocalTime tolerantEnd = baseEnd.plusMinutes(toleranceMin);
-                    // シフト時間が（許容込みの）基本勤務時間範囲外の場合は違反
-                    boolean isOutsideRange = shiftStartTime.isBefore(tolerantStart) ||
-                                             shiftEndTime.isAfter(tolerantEnd);
+                    // トレランスなしで厳密に基本勤務時間内を要求
+                    boolean isOutsideRange = shiftStartTime.isBefore(baseStart) ||
+                                             shiftEndTime.isAfter(baseEnd);
                     
                     if (isOutsideRange) {
                         System.out.println("CONSTRAINT VIOLATION: Employee " + sa.getAssignedEmployee().getEmployeeCode() + 
@@ -789,42 +843,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     
                     return isOutsideRange;
                 })
-                .penalize(HardSoftScore.of(8000, 0)) // 高いハードペナルティ（±1スロットは許容）
+                .penalize(HardSoftScore.ONE_HARD) // 厳密に基本時間外を禁止
                 .asConstraint("Assigned outside base work hours");
-    }
-
-    /**
-     * 基本勤務時間内での勤務を推奨するソフト制約
-     * employee_weekly_preferenceのbase_start_time/base_end_time範囲内の勤務を優遇
-     * 時間設定がある場合、その時間内での勤務にボーナスを与える
-     */
-    private Constraint preferWorkWithinBaseHours(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null)
-                .join(EmployeeWeeklyPreference.class,
-                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeWeeklyPreference::getEmployeeCode),
-                        Joiners.equal(sa -> sa.getShiftDate().getDayOfWeek().getValue(), 
-                                     pref -> pref.getDayOfWeek().intValue()))
-                .filter((sa, pref) -> {
-                    // OFFでなく、時間設定がある場合のみ適用
-                    if ("OFF".equalsIgnoreCase(pref.getWorkStyle()) || 
-                        pref.getBaseStartTime() == null || pref.getBaseEndTime() == null) {
-                        return false;
-                    }
-                    
-                    // 勤務時間がbase_start_time/base_end_time範囲内かチェック
-                    LocalTime shiftStartTime = sa.getStartAt().toInstant()
-                            .atZone(ZoneId.systemDefault()).toLocalTime();
-                    LocalTime shiftEndTime = sa.getEndAt().toInstant()
-                            .atZone(ZoneId.systemDefault()).toLocalTime();
-                    
-                    LocalTime baseStart = pref.getBaseStartTime().toLocalTime();
-                    LocalTime baseEnd = pref.getBaseEndTime().toLocalTime();
-                    
-                    // シフト時間が基本勤務時間範囲内の場合は報酬対象
-                    return !shiftStartTime.isBefore(baseStart) && !shiftEndTime.isAfter(baseEnd);
-                })
-                .reward(HardSoftScore.ofSoft(100)) // 基本時間内勤務への報酬
-                .asConstraint("Prefer work within base hours");
     }
 }

@@ -11,9 +11,10 @@ public class Employee implements Serializable {
     private String employeeCode;
     private String storeCode;
     private String employeeName;
-    private Short shortFollow;
+    private Integer minWorkMinutesDay;
     private Integer maxWorkMinutesDay;
-    private Integer maxWorkDaysMonth;
+    private Integer minWorkHoursWeek;
+    private Integer maxWorkHoursWeek;
     
 
     private static final long serialVersionUID = 1L;
@@ -42,12 +43,14 @@ public class Employee implements Serializable {
         this.employeeName = employeeName == null ? null : employeeName.trim();
     }
 
-    public Short getShortFollow() {
-        return shortFollow;
+    
+
+    public Integer getMinWorkMinutesDay() {
+        return minWorkMinutesDay;
     }
 
-    public void setShortFollow(Short shortFollow) {
-        this.shortFollow = shortFollow;
+    public void setMinWorkMinutesDay(Integer minWorkMinutesDay) {
+        this.minWorkMinutesDay = minWorkMinutesDay;
     }
 
     public Integer getMaxWorkMinutesDay() {
@@ -58,13 +61,22 @@ public class Employee implements Serializable {
         this.maxWorkMinutesDay = maxWorkMinutesDay;
     }
 
-    public Integer getMaxWorkDaysMonth() {
-        return maxWorkDaysMonth;
+    public Integer getMinWorkHoursWeek() {
+        return minWorkHoursWeek;
     }
 
-    public void setMaxWorkDaysMonth(Integer maxWorkDaysMonth) {
-        this.maxWorkDaysMonth = maxWorkDaysMonth;
+    public void setMinWorkHoursWeek(Integer minWorkHoursWeek) {
+        this.minWorkHoursWeek = minWorkHoursWeek;
     }
+
+    public Integer getMaxWorkHoursWeek() {
+        return maxWorkHoursWeek;
+    }
+
+    public void setMaxWorkHoursWeek(Integer maxWorkHoursWeek) {
+        this.maxWorkHoursWeek = maxWorkHoursWeek;
+    }
+
 
     
 }

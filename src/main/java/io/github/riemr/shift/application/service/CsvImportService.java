@@ -119,7 +119,7 @@ public class CsvImportService {
             List<Register> list = new ArrayList<>();
             while ((line = br.readLine()) != null) {
                 String[] a = line.split(",");
-                if (a.length < 8) continue;
+                if (a.length < 6) continue;
                 Register r = new Register();
                 r.setStoreCode(a[0]);
                 r.setRegisterNo(Integer.parseInt(a[1]));
@@ -148,9 +148,14 @@ public class CsvImportService {
                 e.setEmployeeCode(a[0]);
                 e.setStoreCode(a[1]);
                 e.setEmployeeName(a[2]);
-                e.setShortFollow(Short.parseShort(a[3]));
+                e.setMinWorkMinutesDay(Integer.parseInt(a[3]));
                 e.setMaxWorkMinutesDay(Integer.parseInt(a[4]));
-                e.setMaxWorkDaysMonth(Integer.parseInt(a[5]));
+                if (a.length > 5 && a[5] != null && !a[5].isBlank()) {
+                    try { e.setMinWorkHoursWeek(Integer.parseInt(a[5])); } catch (NumberFormatException ignore) {}
+                }
+                if (a.length > 6 && a[6] != null && !a[6].isBlank()) {
+                    try { e.setMaxWorkHoursWeek(Integer.parseInt(a[6])); } catch (NumberFormatException ignore) {}
+                }
                 list.add(e);
             }
             list.forEach(employeeMapper::insertSelective);
@@ -165,8 +170,8 @@ public class CsvImportService {
                 String[] a = line.split(",");
                 if (a.length < 8) continue;
                 String code = a[0];
-                String raw = a[6];
-                String role = a[7];
+                String raw = a[a.length-2];
+                String role = a[a.length-1];
                 String hash = encoder.encode((raw == null || raw.isBlank()) ? code : raw);
                 employeeMapper.updateAuthFields(code, hash, role);
                 cnt++;
@@ -304,7 +309,7 @@ public class CsvImportService {
                 if (line.isBlank()) continue;
                 try {
                     String[] a = line.split(",");
-                    if (a.length < 8) continue;
+                    if (a.length < 6) continue;
                     Register r = new Register();
                     r.setStoreCode(a[0]);
                     r.setRegisterNo(Integer.parseInt(a[1]));
@@ -340,9 +345,14 @@ public class CsvImportService {
                     e.setEmployeeCode(a[0]);
                     e.setStoreCode(a[1]);
                     e.setEmployeeName(a[2]);
-                    e.setShortFollow(Short.parseShort(a[3]));
+                    e.setMinWorkMinutesDay(Integer.parseInt(a[3]));
                     e.setMaxWorkMinutesDay(Integer.parseInt(a[4]));
-                    e.setMaxWorkDaysMonth(Integer.parseInt(a[5]));
+                    if (a.length > 5 && a[5] != null && !a[5].isBlank()) {
+                        try { e.setMinWorkHoursWeek(Integer.parseInt(a[5])); } catch (NumberFormatException ignore) {}
+                    }
+                    if (a.length > 6 && a[6] != null && !a[6].isBlank()) {
+                        try { e.setMaxWorkHoursWeek(Integer.parseInt(a[6])); } catch (NumberFormatException ignore) {}
+                    }
                     employeeMapper.upsert(e);
                     cnt++;
                 } catch (Exception ex) {

@@ -20,6 +20,7 @@ public class EmployeeService {
     private final EmployeeMapper mapper;
     private final EmployeeWeeklyPreferenceMapper weeklyMapper;
     private final StoreMapper storeMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
 
     public List<Employee> findAll() {
         EmployeeExample example = new EmployeeExample();
@@ -44,7 +45,8 @@ public class EmployeeService {
     }
 
     @Transactional
-    public void save(Employee e, boolean isNew, java.util.List<EmployeeWeeklyPreference> prefs) {
+    public void save(Employee e, boolean isNew, java.util.List<EmployeeWeeklyPreference> prefs,
+                     java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthlyHours) {
         if (isNew) {
             mapper.insertSelective(e);
         } else {
@@ -56,6 +58,16 @@ public class EmployeeService {
             for (var p : prefs) {
                 p.setEmployeeCode(e.getEmployeeCode());
                 weeklyMapper.insert(p);
+            }
+        }
+        // Replace monthly hours settings
+        monthlyHoursMapper.deleteByEmployee(e.getEmployeeCode());
+        if (monthlyHours != null) {
+            for (var m : monthlyHours) {
+                if (m.getMonthStart() != null) {
+                    m.setEmployeeCode(e.getEmployeeCode());
+                    monthlyHoursMapper.upsert(m);
+                }
             }
         }
     }

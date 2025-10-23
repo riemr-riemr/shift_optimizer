@@ -62,6 +62,7 @@ public class MasterCsvImportJobConfig {
             Step taskCategoryMasterStep,
             Step taskMasterStep,
             Step employeeStep,
+            Step employeeMonthlyHoursStep,
             Step employeeAuthStep,
             Step employeeWeeklyPreferenceStep,
             Step employeeRegisterSkillStep,
@@ -83,6 +84,7 @@ public class MasterCsvImportJobConfig {
                 .next(taskMasterStep)
                 .next(storeDepartmentStep)
                 .next(employeeStep)
+                .next(employeeMonthlyHoursStep)
                 .next(employeeAuthStep)
                 .next(employeeDepartmentStep)
                 .next(employeeDepartmentSkillStep)
@@ -335,6 +337,63 @@ public class MasterCsvImportJobConfig {
                 .build();
     }
 
+    /* === Step : employee_monthly_hours_setting.csv ===================== */
+    @Bean
+    public Step employeeMonthlyHoursStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader) {
+        return new StepBuilder("employeeMonthlyHoursStep", jobRepository)
+                .<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting>chunk(1000, txManager)
+                .reader(employeeMonthlyHoursReader)
+                .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper.upsert"))
+                .build();
+    }
+
+    @Bean
+    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader(@Value("${csv.dir:/csv}") Path csvDir) {
+        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+        tokenizer.setDelimiter(",");
+        // month は yyyy-MM または yyyy-MM-01 を受け付ける
+        tokenizer.setNames("employeeCode", "month", "minWorkHours", "maxWorkHours");
+        tokenizer.setStrict(false);
+
+        FieldSetMapper<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> mapper = fs -> {
+            var row = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting();
+            String code = fs.readString("employeeCode");
+            String month = null;
+            try { month = fs.readString("month"); } catch (Exception ignore) {}
+            Integer minH = null, maxH = null;
+            try { minH = fs.readInt("minWorkHours"); } catch (Exception ignore) {}
+            try { maxH = fs.readInt("maxWorkHours"); } catch (Exception ignore) {}
+
+            if (code == null || code.isBlank() || month == null || month.isBlank()) {
+                // スキップ用に空レコードを返さないよう例外で弾く
+                throw new IllegalArgumentException("employeeCode/month is required");
+            }
+            java.time.LocalDate firstDay;
+            if (month.length() == 7) {
+                firstDay = java.time.YearMonth.parse(month).atDay(1);
+            } else {
+                // yyyy-MM-01 等
+                firstDay = java.time.LocalDate.parse(month);
+            }
+            row.setEmployeeCode(code);
+            row.setMonthStart(java.sql.Date.valueOf(firstDay));
+            row.setMinWorkHours(minH);
+            row.setMaxWorkHours(maxH);
+            return row;
+        };
+
+        DefaultLineMapper<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> lm = new DefaultLineMapper<>();
+        lm.setLineTokenizer(tokenizer);
+        lm.setFieldSetMapper(mapper);
+
+        return new FlatFileItemReaderBuilder<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting>()
+                .name("employeeMonthlyHoursReader")
+                .resource(new FileSystemResource(csvDir.resolve("employee_monthly_hours_setting.csv")))
+                .linesToSkip(1)
+                .lineMapper(lm)
+                .build();
+    }
+
     @Bean
     public FlatFileItemReader<Employee> employeeReader(@Value("${csv.dir:/csv}") Path csvDir) {
         
@@ -348,9 +407,10 @@ public class MasterCsvImportJobConfig {
             e.setEmployeeCode(fs.readString("employeeCode"));
             e.setStoreCode(fs.readString("storeCode"));
             e.setEmployeeName(fs.readString("employeeName"));
-            e.setShortFollow(fs.readShort("shortFollow"));
+            e.setMinWorkMinutesDay(fs.readInt("minWorkMinutesDay"));
             e.setMaxWorkMinutesDay(fs.readInt("maxWorkMinutesDay"));
-            e.setMaxWorkDaysMonth(fs.readInt("maxWorkDaysMonth"));
+            e.setMinWorkHoursWeek(fs.readInt("minWorkHoursWeek"));
+            e.setMaxWorkHoursWeek(fs.readInt("maxWorkHoursWeek"));
             // 基本開始/終了時刻は曜日別テーブルに移行したため読み込み対象外
             return e;
         };
@@ -361,8 +421,8 @@ public class MasterCsvImportJobConfig {
                 .resource(new FileSystemResource(csvDir.resolve("employee.csv")))
                 .linesToSkip(1)
                 .delimited()
-                .names("employeeCode", "storeCode", "employeeName", "shortFollow", 
-                       "maxWorkMinutesDay", "maxWorkDaysMonth", "password", "authorityCode")
+                .names("employeeCode", "storeCode", "employeeName",
+                       "minWorkMinutesDay", "maxWorkMinutesDay", "minWorkHoursWeek", "maxWorkHoursWeek", "password", "authorityCode")
                 .fieldSetMapper(mapper)
                 .build();
     }
@@ -410,8 +470,8 @@ public class MasterCsvImportJobConfig {
                 .resource(new FileSystemResource(csvDir.resolve("employee.csv")))
                 .linesToSkip(1)
                 .delimited()
-                .names("employeeCode", "storeCode", "employeeName", "shortFollow",
-                        "maxWorkMinutesDay", "maxWorkDaysMonth", "password", "authorityCode")
+                .names("employeeCode", "storeCode", "employeeName",
+                        "minWorkMinutesDay", "maxWorkMinutesDay", "minWorkHoursWeek", "maxWorkHoursWeek", "password", "authorityCode")
                 .fieldSetMapper(mapper)
                 .build();
     }

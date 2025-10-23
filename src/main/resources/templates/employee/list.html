@@ -16,8 +16,12 @@
             <th>従業員コード</th>
             <th>氏名</th>
             <th>店舗コード</th>
+            <th>日下限(分)</th>
             <th>日上限(分)</th>
-            <th>月上限(日)</th>
+            <th>週下限(時)</th>
+            <th>週上限(時)</th>
+            
+            
             <th>操作</th>
           </tr>
         </thead>
@@ -28,8 +32,10 @@
             <td>
               <span class="badge bg-info" th:text="${e.storeCode}"></span>
             </td>
+            <td class="text-end" th:text="${e.minWorkMinutesDay}"></td>
             <td class="text-end" th:text="${e.maxWorkMinutesDay}"></td>
-            <td class="text-end" th:text="${e.maxWorkDaysMonth}"></td>
+            <td class="text-end" th:text="${e.minWorkHoursWeek}"></td>
+            <td class="text-end" th:text="${e.maxWorkHoursWeek}"></td>
             <td>
               <a class="btn btn-sm btn-outline-primary me-1"
                  th:href="@{'/employees/' + ${e.employeeCode}}">編集</a>
@@ -83,6 +89,14 @@
                 </div>
                 <div class="col-md-6">
                   <div class="mb-3">
+                    <label class="form-label">日下限(分)</label>
+                    <input type="number" class="form-control" name="minWorkMinutesDay" min="0" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
                     <label class="form-label">日上限(分)</label>
                     <input type="number" class="form-control" name="maxWorkMinutesDay" min="1" max="1440">
                   </div>
@@ -91,12 +105,18 @@
               <div class="row">
                 <div class="col-md-6">
                   <div class="mb-3">
-                    <label class="form-label">月上限(日)</label>
-                    <input type="number" class="form-control" name="maxWorkDaysMonth" min="1" max="31">
+                    <label class="form-label">週下限(時)</label>
+                    <input type="number" class="form-control" name="minWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週上限(時)</label>
+                    <input type="number" class="form-control" name="maxWorkHoursWeek" min="0" max="100">
                   </div>
                 </div>
               </div>
-            </div>
+                          </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
               <button type="submit" class="btn btn-primary">追加</button>
@@ -140,6 +160,14 @@
                 </div>
                 <div class="col-md-6">
                   <div class="mb-3">
+                    <label class="form-label">日下限(分)</label>
+                    <input type="number" class="form-control" name="minWorkMinutesDay" id="editMinWorkMinutesDay" min="0" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
                     <label class="form-label">日上限(分)</label>
                     <input type="number" class="form-control" name="maxWorkMinutesDay" id="editMaxWorkMinutesDay" min="1" max="1440">
                   </div>
@@ -148,12 +176,18 @@
               <div class="row">
                 <div class="col-md-6">
                   <div class="mb-3">
-                    <label class="form-label">月上限(日)</label>
-                    <input type="number" class="form-control" name="maxWorkDaysMonth" id="editMaxWorkDaysMonth" min="1" max="31">
+                    <label class="form-label">週下限(時)</label>
+                    <input type="number" class="form-control" name="minWorkHoursWeek" id="editMinWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週上限(時)</label>
+                    <input type="number" class="form-control" name="maxWorkHoursWeek" id="editMaxWorkHoursWeek" min="0" max="100">
                   </div>
                 </div>
               </div>
-            </div>
+                          </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
               <button type="submit" class="btn btn-primary">更新</button>

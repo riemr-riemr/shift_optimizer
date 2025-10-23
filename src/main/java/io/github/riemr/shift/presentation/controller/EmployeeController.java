@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class EmployeeController {
     private final EmployeeService service;
+    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
 
     /* 一覧 */
     @GetMapping
@@ -35,9 +36,17 @@ public class EmployeeController {
             row.setWorkStyle("OPTIONAL");
             form.getWeeklyPreferences().add(row);
         }
+        // 週次初期値
+        form.setMinWorkHoursWeek(0);
+        form.setMaxWorkHoursWeek(50);
+        // 月次設定の初期行（3行空行）
+        for (int i = 0; i < 3; i++) form.getMonthlyHours().add(new EmployeeForm.MonthlyHoursRow());
+        // 年選択の初期値（今年）
+        form.setSelectedYear(java.time.Year.now().getValue());
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
 
@@ -63,9 +72,29 @@ public class EmployeeController {
             }
             form.getWeeklyPreferences().add(row);
         }
+        // 月次設定をロード
+        var monthlyList = new java.util.ArrayList<EmployeeForm.MonthlyHoursRow>();
+        var monthlyEntities = monthlyHoursMapper.selectByEmployee(code);
+        for (var m : monthlyEntities) {
+            var r = new EmployeeForm.MonthlyHoursRow();
+            java.time.LocalDate md = m.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            r.setMonth(md.toString().substring(0,7));
+            r.setMinHours(m.getMinWorkHours());
+            r.setMaxHours(m.getMaxWorkHours());
+            monthlyList.add(r);
+        }
+        while (monthlyList.size() < 3) monthlyList.add(new EmployeeForm.MonthlyHoursRow());
+        form.setMonthlyHours(monthlyList);
+        
+        // 年選択の初期値設定とテーブル形式データ変換
+        Integer currentYear = java.time.Year.now().getValue();
+        form.setSelectedYear(currentYear);
+        loadMonthlyHoursForYear(form, code, currentYear);
+        
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
 
@@ -77,6 +106,7 @@ public class EmployeeController {
         if (result.hasErrors()) {
             model.addAttribute("edit", edit);
             model.addAttribute("stores", service.findAllStores());
+            model.addAttribute("availableYears", getAvailableYears());
             return "employee/form";
         }
         // Map weekly prefs
@@ -98,7 +128,24 @@ public class EmployeeController {
             }
             prefs.add(p);
         }
-        service.save(form.toEntity(), !edit, prefs);
+        // Map monthly settings from table format
+        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthly = new java.util.ArrayList<>();
+        if (form.getSelectedYear() != null && form.getMonthlyHoursTable() != null) {
+            for (int month = 1; month <= 12; month++) {
+                Integer minHours = form.getMonthlyHoursTable().getMinHours()[month - 1];
+                Integer maxHours = form.getMonthlyHoursTable().getMaxHours()[month - 1];
+                if (minHours != null || maxHours != null) {
+                    var m = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting();
+                    java.time.YearMonth ym = java.time.YearMonth.of(form.getSelectedYear(), month);
+                    java.util.Date ms = java.sql.Date.valueOf(ym.atDay(1));
+                    m.setMonthStart(ms);
+                    m.setMinWorkHours(minHours);
+                    m.setMaxWorkHours(maxHours);
+                    monthly.add(m);
+                }
+            }
+        }
+        service.save(form.toEntity(), !edit, prefs, monthly);
         return "redirect:/employees";
     }
 
@@ -108,5 +155,72 @@ public class EmployeeController {
     public String delete(@PathVariable String code) {
         service.delete(code);
         return "redirect:/employees";
+    }
+    
+    /* Ajax: 指定年の月別勤務時間を取得 */
+    @GetMapping("/{code}/monthly-hours/{year}")
+    @ResponseBody
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    public java.util.Map<String, Object> getMonthlyHoursByYear(@PathVariable String code, @PathVariable Integer year) {
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        
+        try {
+            var monthlyEntities = monthlyHoursMapper.selectByEmployee(code);
+            java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthMap = new java.util.HashMap<>();
+            
+            for (var entity : monthlyEntities) {
+                java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                if (date.getYear() == year) {
+                    monthMap.put(date.getMonthValue(), entity);
+                }
+            }
+            
+            Integer[] minHours = new Integer[12];
+            Integer[] maxHours = new Integer[12];
+            
+            for (int month = 1; month <= 12; month++) {
+                var setting = monthMap.get(month);
+                if (setting != null) {
+                    minHours[month - 1] = setting.getMinWorkHours();
+                    maxHours[month - 1] = setting.getMaxWorkHours();
+                }
+            }
+            
+            response.put("success", true);
+            response.put("minHours", minHours);
+            response.put("maxHours", maxHours);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        
+        return response;
+    }
+    
+    // 年選択オプションを生成（システム年の+-1年）
+    private java.util.List<Integer> getAvailableYears() {
+        Integer currentYear = java.time.Year.now().getValue();
+        return java.util.Arrays.asList(currentYear - 1, currentYear, currentYear + 1);
+    }
+    
+    // 指定年の月別勤務時間をテーブル形式にロード
+    private void loadMonthlyHoursForYear(EmployeeForm form, String employeeCode, Integer year) {
+        var monthlyEntities = monthlyHoursMapper.selectByEmployee(employeeCode);
+        java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthMap = new java.util.HashMap<>();
+        
+        for (var entity : monthlyEntities) {
+            java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            if (date.getYear() == year) {
+                monthMap.put(date.getMonthValue(), entity);
+            }
+        }
+        
+        for (int month = 1; month <= 12; month++) {
+            var setting = monthMap.get(month);
+            if (setting != null) {
+                form.getMonthlyHoursTable().getMinHours()[month - 1] = setting.getMinWorkHours();
+                form.getMonthlyHoursTable().getMaxHours()[month - 1] = setting.getMaxWorkHours();
+            }
+        }
     }
 }

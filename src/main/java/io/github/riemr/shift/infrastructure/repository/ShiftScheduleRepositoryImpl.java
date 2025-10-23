@@ -42,8 +42,10 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeDepartmentMapper    employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
+    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
     private final DepartmentMasterMapper departmentMasterMapper;
     private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
+    private final EmployeeMonthlyHoursSettingMapper employeeMonthlyHoursSettingMapper;
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -69,12 +71,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<Register> registers = registerMapper.selectAll();
 
         // Register demand: read interval rows for the cycle range [start, end), then split to quarters
-        int minutesPerSlot = 15; // default; TODO inject from AppSettingService if needed in optimization scope
-        try {
-            minutesPerSlot = org.springframework.web.context.ContextLoader.getCurrentWebApplicationContext()
-                    .getBean(io.github.riemr.shift.application.service.AppSettingService.class)
-                    .getTimeResolutionMinutes();
-        } catch (Exception ignore) {}
+        int minutesPerSlot = appSettingService.getTimeResolutionMinutes();
 
         List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
         List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows, minutesPerSlot);
@@ -104,6 +101,10 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         // 従業員レジスキルを取得
         List<EmployeeRegisterSkill> employeeRegisterSkills = skillMapper.selectByExample(null);
+
+        // 従業員の月次勤務時間設定（対象月）
+        java.util.Date monthStartDate = java.sql.Date.valueOf(cycleStart.withDayOfMonth(1));
+        List<EmployeeMonthlyHoursSetting> monthlyHoursSettings = employeeMonthlyHoursSettingMapper.selectByMonth(monthStartDate);
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -184,6 +185,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeDepartmentSkillList(deptSkills);
         schedule.setEmployeeWeeklyPreferenceList(weeklyPreferences);
         schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
+        schedule.setEmployeeMonthlyHoursSettingList(monthlyHoursSettings);
         return schedule;
     }
 

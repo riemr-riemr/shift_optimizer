@@ -19,20 +19,28 @@ public class EmployeeForm {
     @NotBlank(message = "氏名は必須です")
     private String employeeName;
 
-    @NotNull(message = "ショートフォロー区分は必須です")
-    @Min(value = 0, message = "ショートフォロー区分は0以上である必要があります")
-    @Max(value = 4, message = "ショートフォロー区分は4以下である必要があります")
-    private Short shortFollow;
 
     @NotNull(message = "1日上限時間は必須です")
     @Min(value = 1, message = "1日上限時間は1分以上である必要があります")
     @Max(value = 1440, message = "1日上限時間は1440分以下である必要があります")
     private Integer maxWorkMinutesDay;
 
-    @NotNull(message = "1ヶ月上限日数は必須です")
-    @Min(value = 1, message = "1ヶ月上限日数は1日以上である必要があります")
-    @Max(value = 31, message = "1ヶ月上限日数は31日以下である必要があります")
-    private Integer maxWorkDaysMonth;
+    @NotNull(message = "1日下限時間は必須です")
+    @Min(value = 0, message = "1日下限時間は0分以上である必要があります")
+    @Max(value = 1440, message = "1日下限時間は1440分以下である必要があります")
+    private Integer minWorkMinutesDay;
+
+    
+
+    @NotNull(message = "1週下限時間は必須です")
+    @Min(value = 0, message = "1週下限時間は0時間以上である必要があります")
+    @Max(value = 100, message = "1週下限時間は100時間以下である必要があります")
+    private Integer minWorkHoursWeek;
+
+    @NotNull(message = "1週上限時間は必須です")
+    @Min(value = 0, message = "1週上限時間は0時間以上である必要があります")
+    @Max(value = 100, message = "1週上限時間は100時間以下である必要があります")
+    private Integer maxWorkHoursWeek;
     // 曜日別設定（1=Mon .. 7=Sun）
     @lombok.Data
     public static class WeeklyPrefRow {
@@ -47,8 +55,17 @@ public class EmployeeForm {
 
     /* -------- DTO ⇔ Entity 変換 -------- */
     public Employee toEntity() {
-        return new Employee(employeeCode, storeCode, employeeName,
-                shortFollow, maxWorkMinutesDay, maxWorkDaysMonth);
+        Employee e = new Employee();
+        e.setEmployeeCode(employeeCode);
+        e.setStoreCode(storeCode);
+        e.setEmployeeName(employeeName);
+        
+        e.setMinWorkMinutesDay(minWorkMinutesDay);
+        e.setMaxWorkMinutesDay(maxWorkMinutesDay);
+        
+        e.setMinWorkHoursWeek(minWorkHoursWeek);
+        e.setMaxWorkHoursWeek(maxWorkHoursWeek);
+        return e;
     }
 
     public static EmployeeForm from(Employee e) {
@@ -56,11 +73,33 @@ public class EmployeeForm {
         f.employeeCode = e.getEmployeeCode();
         f.storeCode = e.getStoreCode();
         f.employeeName = e.getEmployeeName();
-        f.shortFollow = e.getShortFollow();
+        
+        f.minWorkMinutesDay = e.getMinWorkMinutesDay();
         f.maxWorkMinutesDay = e.getMaxWorkMinutesDay();
-        f.maxWorkDaysMonth = e.getMaxWorkDaysMonth();
+        
+        f.minWorkHoursWeek = e.getMinWorkHoursWeek();
+        f.maxWorkHoursWeek = e.getMaxWorkHoursWeek();
 
         
         return f;
     }
+
+    // 月別設定（UI入力用）
+    private Integer selectedYear; // 年選択用
+    
+    @lombok.Data
+    public static class MonthlyHoursRow {
+        private String month; // yyyy-MM
+        private Integer minHours;
+        private Integer maxHours;
+    }
+    private java.util.List<MonthlyHoursRow> monthlyHours = new java.util.ArrayList<>();
+    
+    // 月別時間設定（テーブル形式用）
+    @lombok.Data
+    public static class MonthlyHoursTableData {
+        private Integer[] minHours = new Integer[12]; // 1月～12月の下限
+        private Integer[] maxHours = new Integer[12]; // 1月～12月の上限
+    }
+    private MonthlyHoursTableData monthlyHoursTable = new MonthlyHoursTableData();
 }

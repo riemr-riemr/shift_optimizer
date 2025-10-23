@@ -17,15 +17,18 @@ public class MonthlyTaskPlanPageController {
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
     private final TaskMasterService taskMasterService;
     private final TaskCategoryMasterService taskCategoryMasterService;
+    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
 
     public MonthlyTaskPlanPageController(StoreMapper storeMapper,
                                          DepartmentSkillMatrixService departmentSkillMatrixService,
                                          TaskMasterService taskMasterService,
-                                         TaskCategoryMasterService taskCategoryMasterService) {
+                                         TaskCategoryMasterService taskCategoryMasterService,
+                                         io.github.riemr.shift.application.service.AppSettingService appSettingService) {
         this.storeMapper = storeMapper;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
         this.taskMasterService = taskMasterService;
         this.taskCategoryMasterService = taskCategoryMasterService;
+        this.appSettingService = appSettingService;
     }
 
     @GetMapping
@@ -34,12 +37,7 @@ public class MonthlyTaskPlanPageController {
                         Model model) {
         model.addAttribute("storeCode", storeCode);
         model.addAttribute("dept", departmentCode);
-        try {
-            io.github.riemr.shift.application.service.AppSettingService svc =
-                    org.springframework.web.context.ContextLoader.getCurrentWebApplicationContext()
-                            .getBean(io.github.riemr.shift.application.service.AppSettingService.class);
-            model.addAttribute("timeResolutionMinutes", svc.getTimeResolutionMinutes());
-        } catch (Exception ignored) { model.addAttribute("timeResolutionMinutes", 15); }
+        model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
         model.addAttribute("stores", storeMapper.selectByExample(null));
         model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
         model.addAttribute("masters", taskMasterService.list());

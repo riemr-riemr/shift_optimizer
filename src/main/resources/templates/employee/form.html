@@ -82,27 +82,28 @@
               <div class="invalid-feedback" th:if="${#fields.hasErrors('employeeName')}" th:errors="*{employeeName}"></div>
             </div>
 
-            <div class="mb-3">
-              <label for="shortFollow" class="form-label">
-                <i class="bi bi-award"></i> ショートフォロー区分
-                <span class="text-danger">*</span>
-              </label>
-              <select id="shortFollow" 
-                      th:field="*{shortFollow}" 
-                      class="form-select"
-                      th:classappend="${#fields.hasErrors('shortFollow')} ? 'is-invalid' : ''">
-                <option value="">-- 選択してください --</option>
-                <option value="0">なし</option>
-                <option value="1">× (不可)</option>
-                <option value="2">△ (条件付き可)</option>
-                <option value="3">○ (可能)</option>
-                <option value="4">◎ (得意)</option>
-              </select>
-              <div class="invalid-feedback" th:if="${#fields.hasErrors('shortFollow')}" th:errors="*{shortFollow}"></div>
-              <div class="form-text">ショートフォロー対応レベルを選択してください</div>
-            </div>
+            
 
             <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="minWorkMinutesDay" class="form-label">
+                    <i class="bi bi-clock-history"></i> 1日下限時間 (分)
+                    <span class="text-danger">*</span>
+                  </label>
+                  <div class="input-group">
+                    <input type="number" 
+                           id="minWorkMinutesDay"
+                           th:field="*{minWorkMinutesDay}" 
+                           class="form-control"
+                           th:classappend="${#fields.hasErrors('minWorkMinutesDay')} ? 'is-invalid' : ''"
+                           min="0" max="1440" step="15"
+                           placeholder="240"/>
+                    <span class="input-group-text">分</span>
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors('minWorkMinutesDay')}" th:errors="*{minWorkMinutesDay}"></div>
+                  </div>
+                </div>
+              </div>
               <div class="col-md-6">
                 <div class="mb-3">
                   <label for="maxWorkMinutesDay" class="form-label">
@@ -123,26 +124,85 @@
                   <div class="form-text">例: 8時間 = 480分</div>
                 </div>
               </div>
-              
+            </div>
+
+            <div class="row">
               <div class="col-md-6">
                 <div class="mb-3">
-                  <label for="maxWorkDaysMonth" class="form-label">
-                    <i class="bi bi-calendar-date"></i> 1ヶ月上限日数 (日)
+                  <label for="minWorkHoursWeek" class="form-label">
+                    <i class="bi bi-calendar3-week"></i> 1週下限時間 (時)
                     <span class="text-danger">*</span>
                   </label>
                   <div class="input-group">
-                    <input type="number" 
-                           id="maxWorkDaysMonth"
-                           th:field="*{maxWorkDaysMonth}" 
-                           class="form-control"
-                           th:classappend="${#fields.hasErrors('maxWorkDaysMonth')} ? 'is-invalid' : ''"
-                           min="1" max="31"
-                           placeholder="22"/>
-                    <span class="input-group-text">日</span>
-                    <div class="invalid-feedback" th:if="${#fields.hasErrors('maxWorkDaysMonth')}" th:errors="*{maxWorkDaysMonth}"></div>
+                    <input type="number" id="minWorkHoursWeek" th:field="*{minWorkHoursWeek}" class="form-control"
+                           th:classappend="${#fields.hasErrors('minWorkHoursWeek')} ? 'is-invalid' : ''" min="0" max="100" step="1" placeholder="0" />
+                    <span class="input-group-text">時間</span>
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors('minWorkHoursWeek')}" th:errors="*{minWorkHoursWeek}"></div>
                   </div>
-                  <div class="form-text">月の最大勤務可能日数</div>
                 </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="maxWorkHoursWeek" class="form-label">
+                    <i class="bi bi-calendar3-week"></i> 1週上限時間 (時)
+                    <span class="text-danger">*</span>
+                  </label>
+                  <div class="input-group">
+                    <input type="number" id="maxWorkHoursWeek" th:field="*{maxWorkHoursWeek}" class="form-control"
+                           th:classappend="${#fields.hasErrors('maxWorkHoursWeek')} ? 'is-invalid' : ''" min="0" max="100" step="1" placeholder="50" />
+                    <span class="input-group-text">時間</span>
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors('maxWorkHoursWeek')}" th:errors="*{maxWorkHoursWeek}"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card mt-3">
+              <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-calendar2-range"></i> 月別勤務時間（時）</h6>
+              </div>
+              <div class="card-body">
+                <div class="row mb-3">
+                  <div class="col-md-3">
+                    <label for="selectedYear" class="form-label">対象年</label>
+                    <select id="selectedYear" th:field="*{selectedYear}" class="form-select">
+                      <option th:each="year : ${availableYears}" th:value="${year}" th:text="${year}"></option>
+                    </select>
+                  </div>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th style="width:120px;">月</th>
+                        <th style="width:150px;">下限時間(時)</th>
+                        <th style="width:150px;">上限時間(時)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr th:each="month,stat : ${#numbers.sequence(1, 12)}">
+                        <td>
+                          <span th:text="${month} + '月'"></span>
+                        </td>
+                        <td>
+                          <input type="number" 
+                                 class="form-control form-control-sm" 
+                                 min="0" max="300" 
+                                 th:field="*{monthlyHoursTable.minHours[__${stat.index}__]}"
+                                 placeholder="0">
+                        </td>
+                        <td>
+                          <input type="number" 
+                                 class="form-control form-control-sm" 
+                                 min="0" max="300" 
+                                 th:field="*{monthlyHoursTable.maxHours[__${stat.index}__]}"
+                                 placeholder="0">
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="form-text">設定したい月のみ入力してください（空欄は制限なし）。</div>
               </div>
             </div>
 
@@ -256,9 +316,47 @@
         if (off) { start.value = ''; end.value = ''; }
       });
     }
+    
+    // 年選択変更時に月別勤務時間をAjaxで更新
+    function loadMonthlyHoursForYear(year) {
+      const employeeCode = document.querySelector('input[name="employeeCode"]').value;
+      if (!employeeCode) return; // 新規作成時はemployeeCodeが空なのでスキップ
+      
+      fetch(`/employees/${employeeCode}/monthly-hours/${year}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // 月別勤務時間の入力欄を更新
+            for (let month = 0; month < 12; month++) {
+              const minInput = document.querySelector(`input[name="monthlyHoursTable.minHours[${month}]"]`);
+              const maxInput = document.querySelector(`input[name="monthlyHoursTable.maxHours[${month}]"]`);
+              
+              if (minInput) {
+                minInput.value = data.minHours[month] || '';
+              }
+              if (maxInput) {
+                maxInput.value = data.maxHours[month] || '';
+              }
+            }
+          } else {
+            console.error('月別勤務時間の取得に失敗しました:', data.error);
+          }
+        })
+        .catch(error => {
+          console.error('Ajax通信エラー:', error);
+        });
+    }
+    
     document.addEventListener('change', e => {
-      if (e.target && e.target.classList.contains('work-style')) updateTimeInputs();
+      if (e.target && e.target.classList.contains('work-style')) {
+        updateTimeInputs();
+      }
+      // 年選択変更時
+      if (e.target && e.target.id === 'selectedYear') {
+        loadMonthlyHoursForYear(e.target.value);
+      }
     });
+    
     document.addEventListener('DOMContentLoaded', updateTimeInputs);
   </script>
 </div>
