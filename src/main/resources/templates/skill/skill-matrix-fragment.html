@@ -11,12 +11,14 @@
             <span class="input-group-text">店舗</span>
             <select th:attr="id=${id + '_store'}" class="form-select">
               <option value="">すべて</option>
+              <option th:each="s : ${stores}" th:value="${s.storeCode}" th:text="${s.storeCode + ' - ' + s.storeName}"></option>
             </select>
           </div>
           <div class="input-group input-group-sm" style="max-width: 360px;" th:if="${mode}=='task'">
             <span class="input-group-text">部門</span>
             <select th:attr="id=${id + '_dept'}" class="form-select">
               <option value="">すべて</option>
+              <option th:each="d : ${departments}" th:value="${d.departmentCode}" th:text="${d.departmentCode + ' - ' + d.departmentName}"></option>
             </select>
           </div>
           <div class="ms-auto small text-muted">
