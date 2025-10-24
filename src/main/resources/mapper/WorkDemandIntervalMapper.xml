@@ -52,4 +52,11 @@
       AND target_date &lt;  #{to}
   </delete>
 
+  <delete id="deleteByStoreAndRange">
+    DELETE FROM work_demand_interval
+    WHERE store_code = #{storeCode}
+      AND target_date &gt;= #{from}
+      AND target_date &lt;  #{to}
+  </delete>
+
 </mapper>

@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS department_task_assignment (
   store_code       VARCHAR(10) NOT NULL REFERENCES store(store_code),
   department_code  VARCHAR(32) NOT NULL REFERENCES department_master(department_code),
   task_code        VARCHAR(32),
-  employee_code    VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
+  employee_code    VARCHAR(10) NULL REFERENCES employee(employee_code),
   start_at         TIMESTAMP   NOT NULL,
   end_at           TIMESTAMP   NOT NULL,
   created_by       VARCHAR(64)

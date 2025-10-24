@@ -188,6 +188,21 @@ public class SchemaInitializer {
                     ")");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date)");
 
+            // Ensure department_task_assignment schema (allow NULL employee_code)
+            jdbc.execute("CREATE TABLE IF NOT EXISTS department_task_assignment (" +
+                    "assignment_id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code), " +
+                    "task_code VARCHAR(32), " +
+                    "employee_code VARCHAR(10) NULL REFERENCES employee(employee_code), " +
+                    "start_at TIMESTAMP NOT NULL, " +
+                    "end_at TIMESTAMP NOT NULL, " +
+                    "created_by VARCHAR(64)" +
+                    ")");
+            // Migrate legacy NOT NULL to NULL for employee_code
+            try { jdbc.execute("ALTER TABLE department_task_assignment ALTER COLUMN employee_code DROP NOT NULL"); } catch (Exception ignore) {}
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_dept_task_assign_sdd ON department_task_assignment (store_code, department_code, start_at)");
+
             log.info("Schema checked/initialized: is_register column and employee_task_skill table ensured.");
         } catch (Exception e) {
             log.warn("Schema initialization failed: {}", e.getMessage());

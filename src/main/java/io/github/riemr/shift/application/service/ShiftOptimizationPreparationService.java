@@ -53,29 +53,29 @@ public class ShiftOptimizationPreparationService {
             success = false;
         }
         
-        // 部門指定がある場合の追加処理
-        if (departmentCode != null && !departmentCode.isBlank()) {
-            try {
-                LocalDate from = cycleStart;
-                LocalDate to = cycleStart.plusMonths(1); // 半開区間
+        // 部門作業需要の物質化（全部門対象）
+        try {
+            LocalDate from = cycleStart;
+            LocalDate to = cycleStart.plusMonths(1); // 半開区間
+            
+            if (departmentCode != null && !departmentCode.isBlank()) {
+                // 特定部門の処理
                 int created = taskPlanService.materializeDepartmentAssignments(storeCode, departmentCode, from, to, "auto_init");
                 log.info("✅ Materialized {} department task assignments for store {}, dept {}, range {}..{}", 
                         created, storeCode, departmentCode, from, to);
-            } catch (Exception e) {
-                log.error("❌ Failed to materialize department assignments", e);
-                success = false;
-            }
-            
-            try {
-                LocalDate from = cycleStart;
-                LocalDate to = cycleStart.plusMonths(1); // 半開区間
+                
                 int rows = taskPlanService.materializeWorkDemands(storeCode, departmentCode, from, to);
                 log.info("✅ Materialized {} work demand intervals for store {}, dept {}, range {}..{}", 
                         rows, storeCode, departmentCode, from, to);
-            } catch (Exception e) {
-                log.error("❌ Failed to materialize work demands", e);
-                success = false;
+            } else {
+                // 全部門の作業需要を物質化（task_plan → work_demand_interval）
+                int totalRows = taskPlanService.materializeWorkDemandsForAllDepartments(storeCode, from, to);
+                log.info("✅ Materialized {} work demand intervals for all departments in store {}, range {}..{}", 
+                        totalRows, storeCode, from, to);
             }
+        } catch (Exception e) {
+            log.error("❌ Failed to materialize work demands", e);
+            success = false;
         }
         
         log.info("Task plan preparation completed for store={}, dept={}, success={}", storeCode, departmentCode, success);

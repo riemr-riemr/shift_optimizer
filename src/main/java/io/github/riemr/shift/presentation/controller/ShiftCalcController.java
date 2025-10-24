@@ -103,8 +103,12 @@ public class ShiftCalcController {
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
         
-        // 最適化開始: work_demand_interval + register_demand_interval → シフト最適化
         log.info("Starting shift optimization for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
+        System.out.println("DEBUG: Received request - month: " + req.month() + ", storeCode: " + req.storeCode() + ", departmentCode: " + req.departmentCode());
+        
+        // 事前準備処理はShiftScheduleService内で実行されるため、ここでは実行しない
+        
+        // 最適化開始: work_demand_interval + register_demand_interval → シフト最適化
         return service.startSolveMonth(cycleStart, req.storeCode(), req.departmentCode());
     }
 

@@ -104,12 +104,49 @@ public class ShiftScheduleService {
      * 月次シフト計算を非同期で開始（店舗・部門指定あり）。
      * 既に同じ月のジョブが走っている場合はそのステータスを再利用する。
      */
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
     public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
         long problemId = toProblemId(month);
         ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month);
 
-        // 1) 作業計画の適用は事前にShiftCalcControllerで完了済み
-        log.info("Starting optimization for month={}, store={}, dept={} (task plan preparation completed separately)", month, storeCode, departmentCode);
+        // 事前準備処理を最適化サービス内で同期実行
+        if (storeCode != null && !storeCode.isBlank()) {
+            try {
+                LocalDate cycleStart = month;
+                LocalDate cycleEnd = month.plusMonths(1);
+                
+                log.info("Executing task plan materialization for store: {}, dept: {}", storeCode, departmentCode);
+        System.out.println("DEBUG: ShiftScheduleService executing task plan materialization for store: " + storeCode + ", dept: " + departmentCode);
+                
+                // taskPlanServiceを使用して作業計画を物質化
+                taskPlanService.applyReplacing(storeCode, cycleStart, cycleEnd.minusDays(1), "optimization_prep");
+                
+                if (departmentCode != null && !departmentCode.isBlank()) {
+                    System.out.println("DEBUG: Processing specific department: " + departmentCode);
+                    // 部門タスク割当（従業員未割当の枠）も物質化しておく
+                    try {
+                        int createdDeptAssign = taskPlanService.materializeDepartmentAssignments(storeCode, departmentCode, cycleStart, cycleEnd, "optimization_prep");
+                        log.info("✅ Materialized {} department task assignments for dept: {}", createdDeptAssign, departmentCode);
+                        System.out.println("DEBUG: Materialized " + createdDeptAssign + " department task assignments for dept: " + departmentCode);
+                    } catch (Exception ex) {
+                        log.warn("Department task assignment materialization failed for dept {}: {}", departmentCode, ex.getMessage());
+                    }
+                    int createdWorkDemands = taskPlanService.materializeWorkDemands(storeCode, departmentCode, cycleStart, cycleEnd);
+                    log.info("✅ Created {} work demand intervals for dept: {}", createdWorkDemands, departmentCode);
+                    System.out.println("DEBUG: Created " + createdWorkDemands + " work demand intervals for dept: " + departmentCode);
+                } else {
+                    System.out.println("DEBUG: Processing ALL departments (departmentCode is null or blank)");
+                    int createdWorkDemands = taskPlanService.materializeWorkDemandsForAllDepartments(storeCode, cycleStart, cycleEnd);
+                    log.info("✅ Created {} work demand intervals for all departments", createdWorkDemands);
+                    System.out.println("DEBUG: Created " + createdWorkDemands + " work demand intervals for all departments");
+                }
+            } catch (Exception e) {
+                log.error("❌ Task plan materialization failed", e);
+                // エラーが発生してもOptaPlanner処理は続行
+            }
+        }
+        
+        log.info("Starting optimization for month={}, store={}, dept={} (task plan preparation completed)", month, storeCode, departmentCode);
 
         // 既存ジョブならチケット再発行
         if (jobMap.containsKey(key)) {
@@ -733,7 +770,9 @@ public class ShiftScheduleService {
 
         // Group by employee, date, and register for register assignments
         Map<String, List<ShiftAssignmentPlanningEntity>> registerAssignmentsByEmployeeDateRegister = best.getAssignmentList().stream()
-                .filter(a -> a.getAssignedEmployee() != null)
+                .filter(a -> a.getAssignedEmployee() != null
+                        && a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
+                        && a.getRegisterNo() != null)
                 .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + a.getShiftDate().toString() + "@" + a.getRegisterNo()));
 
         List<RegisterAssignment> mergedRegisterAssignments = new ArrayList<>();

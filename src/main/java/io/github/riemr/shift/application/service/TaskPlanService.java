@@ -78,7 +78,7 @@ public class TaskPlanService {
      * - FIXED: 指定開始/終了で requiredStaffCount 件を作成
      * - FLEXIBLE: 窓全体を1件（requiredStaffCount 件）として作成（所要は反映せず）
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public int materializeDepartmentAssignments(String storeCode,
                                                 String departmentCode,
                                                 java.time.LocalDate from,
@@ -172,7 +172,7 @@ public class TaskPlanService {
         return c;
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public int applyReplacing(String storeCode, LocalDate from, LocalDate to, String createdBy) {
         Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
         Date toDate = Date.from(to.atStartOfDay(ZoneId.systemDefault()).toInstant());
@@ -249,10 +249,14 @@ public class TaskPlanService {
      * 週次・月次の作業計画から、work_demand_interval を再生成（指定範囲/店舗/部門）。
      * demand には requiredStaffCount を使用。FLEXIBLE は窓全体を1区間として扱う。
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public int materializeWorkDemands(String storeCode, String departmentCode,
                                       java.time.LocalDate from, java.time.LocalDate to) {
-        if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) return 0;
+        if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) {
+            System.out.println("DEBUG: materializeWorkDemands - invalid parameters, returning 0");
+            return 0;
+        }
+        System.out.println("DEBUG: materializeWorkDemands starting for store: " + storeCode + ", dept: " + departmentCode + ", range: " + from + " to " + to);
         workDemandIntervalMapper.deleteByStoreDeptAndRange(storeCode, departmentCode, from, to);
         int created = 0;
         for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
@@ -262,12 +266,19 @@ public class TaskPlanService {
                     .stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
             var monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, dd)
                     .stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
+            
+            System.out.println("DEBUG: Date " + d + " (dow=" + dow + ") for dept " + departmentCode + " - weekly: " + weekly.size() + ", monthly: " + monthly.size());
+            System.out.println("DEBUG: Starting weekly plans processing...");
             for (TaskPlan p : weekly) {
-                created += toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
+                System.out.println("DEBUG: Processing weekly plan - taskCode: " + p.getTaskCode() + ", scheduleType: " + p.getScheduleType());
+                int result = toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
                         toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
                         toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
                         p.getRequiredStaffCount());
+                created += result;
+                System.out.println("DEBUG: Weekly plan processing result: " + result);
             }
+            System.out.println("DEBUG: Finished weekly plans processing, total created so far: " + created);
             for (MonthlyTaskPlan p : monthly) {
                 created += toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
                         toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
@@ -275,31 +286,94 @@ public class TaskPlanService {
                         p.getRequiredStaffCount());
             }
         }
+        System.out.println("DEBUG: materializeWorkDemands completed - created " + created + " work demand intervals for dept: " + departmentCode);
         return created;
+    }
+
+    /**
+     * 全部門の作業計画からwork_demand_intervalを物質化
+     * 部門未指定時の最適化で使用
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public int materializeWorkDemandsForAllDepartments(String storeCode, 
+                                                       java.time.LocalDate from, 
+                                                       java.time.LocalDate to) {
+        if (storeCode == null || storeCode.isBlank()) return 0;
+        
+        // 既存のwork_demand_intervalを全削除（店舗・期間指定）
+        workDemandIntervalMapper.deleteByStoreAndRange(storeCode, from, to);
+        
+        int totalCreated = 0;
+        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+            short dow = (short) d.getDayOfWeek().getValue();
+            java.util.Date dd = java.util.Date.from(d.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+            
+            // 全部門の週次計画を取得
+            var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd);
+            // 全部門の月次計画を取得
+            var monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, dd);
+            
+            System.out.println("DEBUG: Date " + d + " (dow=" + dow + ") - weekly plans: " + weekly.size() + ", monthly plans: " + monthly.size());
+            
+            for (TaskPlan p : weekly) {
+                if (p.getDepartmentCode() != null && !p.getDepartmentCode().isBlank()) {
+                    totalCreated += toWorkDemandRows(storeCode, p.getDepartmentCode(), d, p.getTaskCode(), p.getScheduleType(),
+                            toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                            toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                            p.getRequiredStaffCount());
+                }
+            }
+            for (MonthlyTaskPlan p : monthly) {
+                if (p.getDepartmentCode() != null && !p.getDepartmentCode().isBlank()) {
+                    totalCreated += toWorkDemandRows(storeCode, p.getDepartmentCode(), d, p.getTaskCode(), p.getScheduleType(),
+                            toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
+                            toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
+                            p.getRequiredStaffCount());
+                }
+            }
+        }
+        System.out.println("DEBUG: Total work demand intervals created: " + totalCreated);
+        return totalCreated;
     }
 
     private int toWorkDemandRows(String storeCode, String departmentCode, java.time.LocalDate date, String taskCode,
                                  String scheduleType, java.time.LocalTime fixedStart, java.time.LocalTime fixedEnd,
                                  java.time.LocalTime winStart, java.time.LocalTime winEnd, Integer requiredStaff) {
+        System.out.println("DEBUG: toWorkDemandRows - task: " + taskCode + ", scheduleType: " + scheduleType + ", fixedStart: " + fixedStart + ", fixedEnd: " + fixedEnd + ", winStart: " + winStart + ", winEnd: " + winEnd);
+        
         int demand = Math.max(1, nvl(requiredStaff, 1));
         java.time.LocalTime from;
         java.time.LocalTime to;
         if ("FIXED".equalsIgnoreCase(scheduleType) && fixedStart != null && fixedEnd != null) {
             from = fixedStart; to = fixedEnd;
+            System.out.println("DEBUG: Using FIXED schedule - from: " + from + ", to: " + to);
         } else if (winStart != null && winEnd != null) {
             from = winStart; to = winEnd;
-        } else { return 0; }
-        DemandIntervalDto dto = DemandIntervalDto.builder()
-                .storeCode(storeCode)
-                .departmentCode(departmentCode)
-                .targetDate(date)
-                .from(from)
-                .to(to)
-                .demand(demand)
-                .taskCode(taskCode)
-                .build();
-        workDemandIntervalMapper.insert(dto);
-        return 1;
+            System.out.println("DEBUG: Using window schedule - from: " + from + ", to: " + to);
+        } else { 
+            System.out.println("DEBUG: No valid time range found for task: " + taskCode + ", returning 0");
+            return 0; 
+        }
+        
+        try {
+            DemandIntervalDto dto = DemandIntervalDto.builder()
+                    .storeCode(storeCode)
+                    .departmentCode(departmentCode)
+                    .targetDate(date)
+                    .from(from)
+                    .to(to)
+                    .demand(demand)
+                    .taskCode(taskCode)
+                    .build();
+            System.out.println("DEBUG: Inserting work demand interval for task: " + taskCode);
+            workDemandIntervalMapper.insert(dto);
+            System.out.println("DEBUG: Successfully inserted work demand interval for task: " + taskCode);
+            return 1;
+        } catch (Exception e) {
+            System.out.println("DEBUG: Failed to insert work demand interval for task: " + taskCode + " - " + e.getMessage());
+            e.printStackTrace();
+            return 0;
+        }
     }
     // Special-day generation removed; use monthly_task_plan
 
@@ -350,5 +424,8 @@ public class TaskPlanService {
     private static int nvl(Integer v, int def) { return v == null ? def : v; }
     private static java.util.Date toDate(LocalDate d) { return java.util.Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
     private static java.util.Date toDate(LocalDateTime dt) { return java.util.Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }
-    private static LocalTime toLocalTime(java.util.Date timeOnly) { return timeOnly.toInstant().atZone(ZoneId.systemDefault()).toLocalTime(); }
+    private static LocalTime toLocalTime(java.util.Date timeOnly) { 
+        if (timeOnly == null) return null;
+        return timeOnly.toInstant().atZone(ZoneId.systemDefault()).toLocalTime(); 
+    }
 }

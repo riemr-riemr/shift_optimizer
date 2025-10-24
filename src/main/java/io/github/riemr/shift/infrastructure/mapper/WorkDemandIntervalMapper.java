@@ -26,4 +26,8 @@ public interface WorkDemandIntervalMapper {
                                   @Param("departmentCode") String departmentCode,
                                   @Param("from") LocalDate from,
                                   @Param("to") LocalDate to);
+
+    int deleteByStoreAndRange(@Param("storeCode") String storeCode,
+                              @Param("from") LocalDate from,
+                              @Param("to") LocalDate to);
 }

@@ -127,7 +127,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null && sa.getWorkKind() == WorkKind.REGISTER_OP))
                 .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
-                .penalize(HardSoftScore.ofSoft(1000), // 高い重みでソフト制約に変更
+                .penalize(HardSoftScore.ofSoft(800), // 需要充足の重要度を調整
                           (demand, assigned) -> {
                               int shortage = demand.getRequiredUnits() - assigned;
                               if (shortage > 0) {
@@ -160,7 +160,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
                     ))
                 .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
-                .penalize(HardSoftScore.ofSoft(900), (d, assigned) -> {
+                .penalize(HardSoftScore.ofSoft(700), (d, assigned) -> {
                     int shortage = d.getRequiredUnits() - assigned;
                     if (shortage > 0) return shortage * 100;
                     int over = assigned - d.getRequiredUnits();
@@ -254,8 +254,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * 月次勤務時間範囲制約（ハード制約）
-     * 各従業員の月間勤務時間が[min_work_hours_month, max_work_hours_month]の範囲内であることを強制
+     * 月次勤務時間範囲制約（ソフト制約）
+     * 各従業員の月間勤務時間が[min_work_hours_month, max_work_hours_month]の範囲内であることを推奨
      * 分単位で集計し、閾値(時間)は60倍で比較
      */
     private Constraint monthlyWorkHoursRange(ConstraintFactory f) {
@@ -271,7 +271,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     boolean aboveMax = set.getMaxWorkHours() != null && minutes > set.getMaxWorkHours() * 60;
                     return belowMin || aboveMax;
                 })
-                .penalize(HardSoftScore.ONE_HARD, (set, minutes) -> {
+                .penalize(HardSoftScore.ofSoft(1500), (set, minutes) -> {
                     int penalty = 0;
                     if (set.getMinWorkHours() != null && minutes < set.getMinWorkHours() * 60) {
                         penalty += (set.getMinWorkHours() * 60 - minutes);
@@ -284,7 +284,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Monthly work hours out of range");
     }
 
-    /** 週次勤務時間範囲制約（ハード制約） */
+    /** 週次勤務時間範囲制約（ソフト制約） */
     private Constraint weeklyWorkHoursRange(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
@@ -297,7 +297,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                     boolean aboveMax = emp.getMaxWorkHoursWeek() != null && minutes > emp.getMaxWorkHoursWeek() * 60;
                     return belowMin || aboveMax;
                 })
-                .penalize(HardSoftScore.ONE_HARD, (emp, weekStart, list) -> {
+                .penalize(HardSoftScore.ofSoft(1800), (emp, weekStart, list) -> {
                     int minutes = list.stream().mapToInt(ShiftAssignmentPlanningEntity::getWorkMinutes).sum();
                     int penalty = 0;
                     if (emp.getMinWorkHoursWeek() != null && minutes < emp.getMinWorkHoursWeek() * 60) {
@@ -312,7 +312,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * 日次最小勤務時間制約（ハード制約）
+     * 日次最小勤務時間制約（ソフト制約）
      * 各従業員の1日の労働時間が設定値（min_work_minutes_day）未満にならないようにする
      * その日に全く勤務していない場合は対象外
      */
@@ -325,14 +325,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter((emp, date, list) -> emp.getMinWorkMinutesDay() != null
                         && !list.isEmpty()
                         && calculateWorkMinutesExcludingBreaks(list) < emp.getMinWorkMinutesDay())
-                .penalize(HardSoftScore.ONE_HARD,
+                .penalize(HardSoftScore.ofSoft(2000),
                         (emp, date, list) -> emp.getMinWorkMinutesDay() - calculateWorkMinutesExcludingBreaks(list))
                 .asConstraint("Below daily minimum minutes");
     }
 
     /**
-     * 連続勤務日数制限制約（ハード制約）
-     * 従業員が5日以上連続で勤務することを禁止
+     * 連続勤務日数制限制約（ソフト制約）
+     * 従業員が5日以上連続で勤務することを推奨しない
      * 疲労蓄積防止と労働基準法遵守のための制約
      * 
      * @param f 制約ファクトリ
@@ -344,7 +344,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
                          ConstraintCollectors.toSortedSet(ShiftAssignmentPlanningEntity::getShiftDate))
                 .filter((emp, dates) -> hasRunLength(dates, 5))
-                .penalize(HardSoftScore.ONE_HARD)
+                .penalize(HardSoftScore.ofSoft(3000))
                 .asConstraint("More than 4 consecutive days");
     }
 
@@ -459,7 +459,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter(sa -> sa.getAssignedEmployee() != null)
                 .groupBy(ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getAssignedEmployee))
-                .penalize(HardSoftScore.ofSoft(500),
+                .penalize(HardSoftScore.ofSoft(300),
                           (date, empSet) -> empSet.size())
                 .asConstraint("Minimize daily workers");
     }
@@ -553,8 +553,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     // preferBaseWorkTimes は曜日別の週間設定へ置換予定（未実装）
 
     /**
-     * 週休二日保証制約（ハード制約）
-     * 各従業員について、1週間（月曜日から日曜日）のうち最低2日は休日でなければならない
+     * 週休二日保証制約（ソフト制約）
+     * 各従業員について、1週間（月曜日から日曜日）のうち最低2日は休日であることを推奨
      * 労働基準法の週休二日制遵守のための重要な制約
      * 
      * @param f 制約ファクトリ
@@ -567,7 +567,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                          sa -> getWeekStart(sa.getShiftDate()), // 週の開始日（月曜日）でグループ化
                          ConstraintCollectors.toSet(ShiftAssignmentPlanningEntity::getShiftDate))
                 .filter((emp, weekStart, workDays) -> workDays.size() > 5) // 週6日以上勤務の場合
-                .penalize(HardSoftScore.ONE_HARD, 
+                .penalize(HardSoftScore.ofSoft(2500), 
                           (emp, weekStart, workDays) -> workDays.size() - 5) // 5日を超えた分をペナルティ
                 .asConstraint("Ensure at least 2 rest days per week");
     }
@@ -655,7 +655,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      */
     private Constraint minimizeRegisterSwitching(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null)
+                .filter(sa -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
+                        && sa.getRegisterNo() != null)
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, 
                          ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
@@ -675,7 +677,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      */
     private Constraint preferConsistentRegisterAssignment(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null)
+                .filter(sa -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
+                        && sa.getRegisterNo() != null)
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
                          ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
@@ -702,8 +706,11 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             ShiftAssignmentPlanningEntity previous = assignments.get(i - 1);
             
             // 連続するタイムスロットでレジ番号が異なる場合、切り替わりとしてカウント
-            if (current.getStartAt().equals(previous.getEndAt()) && 
-                !current.getRegisterNo().equals(previous.getRegisterNo())) {
+            Integer curReg = current.getRegisterNo();
+            Integer prevReg = previous.getRegisterNo();
+            if (curReg != null && prevReg != null &&
+                current.getStartAt().equals(previous.getEndAt()) && 
+                !curReg.equals(prevReg)) {
                 switches++;
             }
         }
@@ -783,7 +790,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * 曜日別勤務設定でMANDATORYが設定されている日は必ず出勤させるソフト制約
+     * 曜日別勤務設定でMANDATORYが設定されている日は必ず出勤させるハード制約
      * employee_weekly_preferenceでwork_style='MANDATORY'の曜日は該当従業員は必須出勤
      * 該当曜日に勤務していない場合にペナルティを課す
      */
@@ -799,7 +806,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                          (pref, sa) -> sa.getShiftDate(),
                          ConstraintCollectors.countBi())
                 .filter((pref, date, assignmentCount) -> assignmentCount == 0) // 該当日に勤務がない場合
-                .penalize(HardSoftScore.ofSoft(5000)) // 高いソフトペナルティ
+                .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Missing mandatory work day");
     }
 

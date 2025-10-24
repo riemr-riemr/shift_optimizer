@@ -53,6 +53,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
      */
     private static final AtomicLong TEMP_ID_SEQ = new AtomicLong(-1L);
 
+    
+
     // ============================================================================
     // public API
     // ============================================================================
