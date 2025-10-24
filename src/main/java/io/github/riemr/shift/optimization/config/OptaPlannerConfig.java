@@ -46,9 +46,10 @@ public class OptaPlannerConfig {
     }
     
     private TerminationConfig terminationConfig() {
+        // グローバルの終了条件は「経過時間（spent limit）」に統一
+        // → フィージブルになっても即終了せず、指定時間まで探索を継続
         return new TerminationConfig()
-                // 時間制限を無制限に設定（ハード制約を満たすまで実行）
-                .withBestScoreLimit("0hard/*soft");
+                .withSpentLimit(solverSpentLimit);
     }
     
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
@@ -56,13 +57,9 @@ public class OptaPlannerConfig {
     }
     
     private LocalSearchPhaseConfig localSearchPhaseConfig() {
+        // ローカルサーチは「30秒間スコア改善がなければ早期終了」
         return new LocalSearchPhaseConfig()
                 .withTerminationConfig(new TerminationConfig()
-                        // Local Searchフェーズで120秒間スコア改善がない場合にアーリーストッピング
-                        .withUnimprovedSpentLimit(Duration.ofSeconds(120))
-                        // フェーズレベルでも最大時間制限を設定（保険）
-                        .withSpentLimit(solverSpentLimit.minus(Duration.ofSeconds(180)).isNegative()
-                                ? solverSpentLimit
-                                : solverSpentLimit.minus(Duration.ofSeconds(180))));
+                        .withUnimprovedSpentLimit(Duration.ofSeconds(30)));
     }
 }
