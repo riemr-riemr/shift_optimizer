@@ -141,7 +141,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         // レジ部門ならレジ需要も含める
         if (isRegisterDepartment) {
-            emptyAssignments.addAll(buildEmptyAssignments(demands, registers, departmentCode));
+            emptyAssignments.addAll(buildEmptyAssignments(demands, registers, departmentCode, minutesPerSlot));
         }
 
         // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
@@ -168,7 +168,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 }
             }
             workDemands = tmp;
-            emptyAssignments.addAll(buildEmptyWorkAssignments(workDemands, departmentCode));
+            emptyAssignments.addAll(buildEmptyWorkAssignments(workDemands, departmentCode, minutesPerSlot));
         }
 
         // 3. ドメインモデル組み立て
@@ -206,7 +206,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
      */
     private List<ShiftAssignmentPlanningEntity> buildEmptyAssignments(List<RegisterDemandQuarter> demandList,
                                                                      List<Register> registerList,
-                                                                     String departmentCode) {
+                                                                     String departmentCode,
+                                                                     int minutesPerSlot) {
         // 店舗毎のレジを [SEMI 優先] & [register_no 昇順] ソートで保持
         Map<String, List<Register>> registerMap = registerList.stream()
                 .collect(Collectors.groupingBy(Register::getStoreCode, Collectors.collectingAndThen(Collectors.toList(), list -> {
@@ -227,7 +228,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
             }
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
-            LocalDateTime end   = start.plusMinutes(15);
+            LocalDateTime end   = start.plusMinutes(minutesPerSlot);
 
             List<Register> candidates = registerMap.getOrDefault(d.getStoreCode(), List.of());
             if (candidates.isEmpty()) {
@@ -261,7 +262,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
     private List<ShiftAssignmentPlanningEntity> buildEmptyWorkAssignments(
             List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> demandList,
-            String departmentCode) {
+            String departmentCode,
+            int minutesPerSlot) {
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
         for (var d : demandList) {
             LocalDate demandDate;
@@ -272,7 +274,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
             }
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
-            LocalDateTime end = start.plusMinutes(15);
+            LocalDateTime end = start.plusMinutes(minutesPerSlot);
             for (int i = 0; i < d.getRequiredUnits(); i++) {
                 // Reuse RegisterAssignment as time container with null registerNo
                 RegisterAssignment sa = new RegisterAssignment();

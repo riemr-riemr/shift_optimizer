@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
@@ -17,7 +18,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
-import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
 import org.optaplanner.core.api.solver.SolverJob;
@@ -71,13 +71,15 @@ public class ShiftScheduleService {
     private final TaskPlanService taskPlanService;
 
     /* === Settings === */
-    @Value("${shift.solver.spent-limit:PT2M}") // ISO‑8601 Duration (default 2 minutes)
+    @Value("${shift.solver.spent-limit:PT5M}") // ISO‑8601 Duration (default 5 minutes)
     private Duration spentLimit;
 
     /* === Runtime State === */
     private final Map<ProblemKey, Instant> startMap = new ConcurrentHashMap<>();
     private final Map<ProblemKey, SolverJob<ShiftSchedule, ProblemKey>> jobMap = new ConcurrentHashMap<>();
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
+    // 開発者向け: スコア推移の時系列
+    private final Map<ProblemKey, java.util.List<io.github.riemr.shift.application.dto.ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
 
     /* ===================================================================== */
     /* Public API                                                            */
@@ -161,8 +163,9 @@ public class ShiftScheduleService {
                 key,
                 this::loadProblem,
                 bestSolution -> {
-                    // フェーズ情報のみ更新
+                    // フェーズ・スコアの更新
                     updatePhase(key, bestSolution);
+                    recordScorePoint(key, bestSolution);
                     persistResult(bestSolution);
                 },
                 this::onError);
@@ -239,6 +242,43 @@ public class ShiftScheduleService {
         }
 
         return new SolveStatusDto(status.name(), pct, finish, currentPhase);
+    }
+
+    private void recordScorePoint(ProblemKey key, ShiftSchedule best) {
+        if (best == null || best.getScore() == null) return;
+        var s = best.getScore();
+        int init = s.initScore();
+        int hard = s.hardScore();
+        int soft = s.softScore();
+        long now = System.currentTimeMillis();
+        scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
+                .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        // keep last 1000 points to bound memory
+        var list = scoreSeriesMap.get(key);
+        if (list.size() > 1000) {
+            list.subList(0, list.size() - 1000).clear();
+        }
+    }
+
+    // 開発者向け: スコア推移を取得（deptのnull/空白を同一視）
+    public java.util.List<io.github.riemr.shift.application.dto.ScorePoint> getScoreSeries(long problemId, String storeCode, String departmentCode) {
+        String deptNorm = (departmentCode == null || departmentCode.isBlank()) ? null : departmentCode;
+        for (ProblemKey key : scoreSeriesMap.keySet()) {
+            boolean storeMatch = java.util.Objects.equals(key.getStoreCode(), storeCode);
+            boolean probMatch = toProblemId(key.getCycleStart()) == problemId;
+            String keyDept = key.getDepartmentCode();
+            boolean deptMatch = (deptNorm == null ? (keyDept == null || keyDept.isBlank()) : java.util.Objects.equals(keyDept, deptNorm));
+            if (storeMatch && probMatch && deptMatch) {
+                return scoreSeriesMap.getOrDefault(key, java.util.List.of());
+            }
+        }
+        // 部門が見つからない場合、store+problemId だけで近いものを返す（最後の手段）
+        for (ProblemKey key : scoreSeriesMap.keySet()) {
+            if (java.util.Objects.equals(key.getStoreCode(), storeCode) && toProblemId(key.getCycleStart()) == problemId) {
+                return scoreSeriesMap.getOrDefault(key, java.util.List.of());
+            }
+        }
+        return java.util.List.of();
     }
 
     /** 計算終了後の最終解をフロント用 DTO に変換して返す */
@@ -470,9 +510,112 @@ public class ShiftScheduleService {
         
         // 実行可能性チェック：全員希望休の日があるかチェック
         validateProblemFeasibility(unsolved);
+
+        // 追加診断: スロットごとの候補従業員数を集計し、極端にゼロが多い場合に警告
+        try {
+            diagnoseFeasibility(unsolved);
+        } catch (Exception diagEx) {
+            log.debug("Feasibility diagnostics skipped: {}", diagEx.getMessage());
+        }
         
         log.info("Loaded unsolved problem for {} store {} ({} assignments)", cycleStart, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
         return unsolved;
+    }
+
+    /**
+     * ハード制約の単体（スロット単位）チェックで、各アサイン可能スロットに候補従業員が存在するかを診断する。
+     * 相互依存（ダブルブッキング、日次上限等）は無視し、以下をチェック:
+     *  - 希望休（off）
+     *  - 曜日OFF/基本時間外
+     *  - レジ技能 0/1 禁止（REGISTER_OP 時）
+     */
+    private void diagnoseFeasibility(ShiftSchedule s) {
+        if (s.getAssignmentList() == null || s.getEmployeeList() == null) return;
+
+        // インデックス化
+        Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> prefByEmp =
+                Optional.ofNullable(s.getEmployeeWeeklyPreferenceList()).orElse(List.of()).stream()
+                        .collect(Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference::getEmployeeCode));
+
+        Map<String, Map<Integer, Short>> skillByEmpRegister = new HashMap<>();
+        for (var sk : Optional.ofNullable(s.getEmployeeRegisterSkillList()).orElse(List.of())) {
+            skillByEmpRegister
+                    .computeIfAbsent(sk.getEmployeeCode(), k -> new HashMap<>())
+                    .put(sk.getRegisterNo(), sk.getSkillLevel());
+        }
+
+        Map<String, Set<LocalDate>> dayOffByEmp = new HashMap<>();
+        for (var req : Optional.ofNullable(s.getEmployeeRequestList()).orElse(List.of())) {
+            if ("off".equalsIgnoreCase(req.getRequestKind())) {
+                String emp = req.getEmployeeCode();
+                LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                dayOffByEmp.computeIfAbsent(emp, k -> new java.util.HashSet<>()).add(d);
+            }
+        }
+
+        int total = 0;
+        int noCandidate = 0;
+        int registerSlots = 0;
+
+        for (var a : s.getAssignmentList()) {
+            total++;
+            LocalDate date = a.getShiftDate();
+            var start = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+            var end = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+
+            int candidates = 0;
+            for (var e : s.getEmployeeList()) {
+                String code = e.getEmployeeCode();
+
+                // 希望休
+                if (dayOffByEmp.getOrDefault(code, Set.of()).contains(date)) continue;
+
+                // 曜日OFF/基本時間外
+                var prefs = prefByEmp.getOrDefault(code, List.of());
+                boolean offDay = false;
+                boolean outsideBase = false;
+                for (var p : prefs) {
+                    if (p.getDayOfWeek() == null) continue;
+                    if (p.getDayOfWeek().intValue() != date.getDayOfWeek().getValue()) continue;
+                    if ("OFF".equalsIgnoreCase(p.getWorkStyle())) { offDay = true; break; }
+                    if (p.getBaseStartTime() != null && p.getBaseEndTime() != null) {
+                        var bs = p.getBaseStartTime().toLocalTime();
+                        var be = p.getBaseEndTime().toLocalTime();
+                        if (start.isBefore(bs) || end.isAfter(be)) {
+                            outsideBase = true; // 厳密
+                        }
+                    }
+                }
+                if (offDay || outsideBase) continue;
+
+                // レジ技能（REGISTER_OP のみチェック）
+                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                    registerSlots++;
+                    Integer reg = a.getRegisterNo();
+                    if (reg != null) {
+                        Short lv = skillByEmpRegister.getOrDefault(code, Map.of()).get(reg);
+                        if (lv != null && (lv == 0 || lv == 1)) {
+                            continue; // 禁止
+                        }
+                    }
+                }
+
+                candidates++;
+                if (candidates >= 1) break; // 1人いれば十分
+            }
+            if (candidates == 0) noCandidate++;
+        }
+
+        if (noCandidate > 0) {
+            double pct = (total == 0) ? 0.0 : (noCandidate * 100.0 / total);
+            log.warn("⚠️ FEASIBILITY DIAG: {} / {} slots have zero candidates ({}%). registerSlots={}",
+                    noCandidate, total, String.format("%.1f", pct), registerSlots);
+            if (pct >= 50.0) {
+                log.warn("Likely cause: OFF日/基本時間外/スキル0/1が厳しすぎる、または従業員が不足しています。設定とデータを確認してください。");
+            }
+        } else {
+            log.info("Feasibility DIAG: All slots have at least one candidate.");
+        }
     }
     
     /**
