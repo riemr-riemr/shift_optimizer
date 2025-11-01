@@ -11,7 +11,7 @@ import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
-import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -89,9 +89,9 @@ public class ShiftSchedule {
     @ProblemFactCollectionProperty
     private List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList = new java.util.ArrayList<>();
 
-    /** 従業員の月次勤務時間設定 */
+    /** 従業員の月次設定（勤務時間・公休日数） */
     @ProblemFactCollectionProperty
-    private List<EmployeeMonthlyHoursSetting> employeeMonthlyHoursSettingList = new java.util.ArrayList<>();
+    private List<EmployeeMonthlySetting> employeeMonthlySettingList = new java.util.ArrayList<>();
 
     /* === Planning entities === */
 
@@ -123,7 +123,7 @@ public class ShiftSchedule {
                          List<EmployeeRegisterSkill> employeeRegisterSkillList,
                          List<EmployeeDepartmentSkill> employeeDepartmentSkillList,
                          List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList,
-                         List<EmployeeMonthlyHoursSetting> employeeMonthlyHoursSettingList,
+                         List<EmployeeMonthlySetting> employeeMonthlySettingList,
                          List<ShiftAssignmentPlanningEntity> assignmentList) {
         this.problemId = problemId;
         this.month = month;
@@ -139,7 +139,7 @@ public class ShiftSchedule {
         this.employeeRegisterSkillList = employeeRegisterSkillList;
         this.employeeDepartmentSkillList = employeeDepartmentSkillList;
         this.employeeWeeklyPreferenceList = employeeWeeklyPreferenceList;
-        this.employeeMonthlyHoursSettingList = employeeMonthlyHoursSettingList;
+        this.employeeMonthlySettingList = employeeMonthlySettingList;
         this.assignmentList = assignmentList;
     }
 }

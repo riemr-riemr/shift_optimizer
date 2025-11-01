@@ -190,10 +190,25 @@
                             <button type="submit" class="btn btn-primary" style="flex: 1;">
                                 <i class="bi bi-search"></i> 表示更新
                             </button>
-                            <button type="button" id="optimizeBtn" class="btn btn-success" style="flex: 1;"
+                            <button type="button" id="attendanceOptimizeBtn" class="btn btn-success" style="flex: 1;"
                                     th:disabled="${#strings.isEmpty(selectedStoreCode)}"
                                     th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
-                                <i class="bi bi-gear"></i> 最適化
+                                <i class="bi bi-people"></i> 月次シフト最適化
+                            </button>
+                            <button type="button" id="assignmentOptimizeBtn" class="btn btn-primary" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-tools"></i> 作業割当
+                            </button>
+                            <button type="button" id="clearAttendanceBtn" class="btn btn-outline-danger" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-trash"></i> 出勤クリア
+                            </button>
+                            <button type="button" id="clearAssignmentBtn" class="btn btn-outline-warning" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-eraser"></i> 作業割当クリア
                             </button>
                         </div>
                     </div>
@@ -421,6 +436,11 @@
                             <div class="progress-bar progress-bar-striped progress-bar-animated" 
                                  role="progressbar" style="width: 0%" id="progressBar"></div>
                         </div>
+                        <!-- リアルタイムのスコア推移 -->
+                        <div class="mt-3">
+                            <div class="small text-muted mb-1">目的関数（hard/soft）の推移</div>
+                            <canvas id="scoreChart" height="120"></canvas>
+                        </div>
                         <div class="mt-3 small text-muted">
                             <p>店舗: <span id="optimizationStore" th:text="${selectedStoreCode}"></span></p>
                             <p>対象月: <span id="optimizationMonth"></span></p>
@@ -431,7 +451,7 @@
                         <div class="alert alert-success">
                             <i class="bi bi-check-circle"></i> 最適化が完了しました！
                         </div>
-                        <p>シフトの最適化が正常に完了しました。表示を更新してください。</p>
+                        <p class="mt-2">シフトの最適化が正常に完了しました。必要に応じて表示を更新してください。</p>
                     </div>
                     
                     <div id="optimizationError" style="display: none;">
@@ -451,6 +471,8 @@
         </div>
     </div>
 
+    <!-- Chart.js for plotting -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let optimizationTicket = null;
         let statusCheckInterval = null;
@@ -462,10 +484,10 @@
             if (storeSelect) {
                 storeSelect.addEventListener('change', async function() {
                     // 最適化ボタンの有効/無効を更新
-                    const optimizeBtn = document.getElementById('optimizeBtn');
-                    if (optimizeBtn) {
-                        optimizeBtn.disabled = !this.value;
-                    }
+                    const attendanceBtn = document.getElementById('attendanceOptimizeBtn');
+                    const assignmentBtn = document.getElementById('assignmentOptimizeBtn');
+                    if (attendanceBtn) attendanceBtn.disabled = !this.value;
+                    if (assignmentBtn) assignmentBtn.disabled = !this.value;
                     // 部門一覧をロード
                     if (deptSelect) {
                         deptSelect.innerHTML = '<option value="">部門を選択</option>';
@@ -485,13 +507,17 @@
             }
             
             // 最適化ボタンのイベント
-            const optimizeBtn = document.getElementById('optimizeBtn');
-            if (optimizeBtn) {
-                optimizeBtn.addEventListener('click', startOptimization);
-            }
+            const attendanceBtn = document.getElementById('attendanceOptimizeBtn');
+            const assignmentBtn = document.getElementById('assignmentOptimizeBtn');
+            if (attendanceBtn) attendanceBtn.addEventListener('click', () => startOptimization('ATTENDANCE'));
+            if (assignmentBtn) assignmentBtn.addEventListener('click', () => startOptimization('ASSIGNMENT'));
+            const clearAttendanceBtn = document.getElementById('clearAttendanceBtn');
+            const clearAssignmentBtn = document.getElementById('clearAssignmentBtn');
+            if (clearAttendanceBtn) clearAttendanceBtn.addEventListener('click', clearAttendance);
+            if (clearAssignmentBtn) clearAssignmentBtn.addEventListener('click', clearAssignment);
         });
         
-        function startOptimization() {
+        function startOptimization(stage) {
             const storeCode = document.getElementById('storeCode').value;
             const departmentCode = document.getElementById('departmentCode').value;
             const targetMonth = document.getElementById('targetMonth').value;
@@ -542,10 +568,11 @@
                     console.warn('Preparation had issues but continuing:', prepResult.message);
                 }
                 
-                // フェーズ2: 最適化実行 (work_demand_interval + register_demand_interval → シフト最適化)
+                // フェーズ2: 最適化実行（段階選択）
                 document.getElementById('optimizationStatus').textContent = '最適化を開始中...';
-                
-                return fetch('/shift/api/calc/start', {
+                window.__currentOptimizationStage = stage;
+                const url = stage === 'ATTENDANCE' ? '/shift/api/attendance/start' : '/shift/api/assignment/start';
+                return fetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -580,6 +607,42 @@
                 showError('最適化の開始に失敗しました: ' + error.message);
             });
         }
+
+        async function clearAttendance() {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            if (!storeCode) { alert('店舗を選択してください。'); return; }
+            if (!confirm('この月の出勤（シフト）を削除します。よろしいですか？')) return;
+            try {
+                const res = await fetch('/shift/api/clear/attendance', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: targetMonth, storeCode, departmentCode})
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || '削除に失敗しました');
+                alert('出勤を削除しました（件数: ' + (json.deleted ?? 0) + '）');
+                window.location.reload();
+            } catch (e) { alert('削除に失敗しました: ' + e.message); }
+        }
+
+        async function clearAssignment() {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            if (!storeCode) { alert('店舗を選択してください。'); return; }
+            if (!confirm('この月の作業割当（レジ/部門タスク）を削除します。よろしいですか？')) return;
+            try {
+                const res = await fetch('/shift/api/clear/assignment', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: targetMonth, storeCode, departmentCode})
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || '削除に失敗しました');
+                alert('作業割当を削除しました（件数: ' + (json.deleted ?? 0) + '）');
+                window.location.reload();
+            } catch (e) { alert('削除に失敗しました: ' + e.message); }
+        }
         
         function checkOptimizationStatus() {
             if (!optimizationTicket || !optimizationTicket.problemId) {
@@ -593,7 +656,8 @@
             
             const storeCode = document.getElementById('storeCode').value;
             const departmentCode = document.getElementById('departmentCode').value;
-            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`)
+            const stage = window.__currentOptimizationStage || '';
+            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}&stage=${encodeURIComponent(stage)}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -644,6 +708,8 @@
             } else {
                 statusText.textContent = status.phase || '最適化を実行中...';
             }
+            // スコア推移を更新（2秒ごと）: 最新点が無くても直前値を時刻で1点追加
+            try { appendScorePointTick(); } catch(e) { console.warn('score update failed', e); }
         }
         
         function showSuccess() {
@@ -651,6 +717,8 @@
             document.getElementById('optimizationResult').style.display = 'block';
             document.getElementById('refreshBtn').style.display = 'inline-block';
             document.getElementById('modalCloseBtn').style.display = 'none';
+            // スコア系列を描画
+            try { loadScoreSeries(); } catch (e) { console.warn('loadScoreSeries failed', e); }
         }
         
         function showError(message) {
@@ -698,6 +766,68 @@
             document.getElementById('refreshBtn').style.display = 'none';
             document.getElementById('modalCloseBtn').style.display = 'block';
             document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+
+        // Chart.js for score plotting (リアルタイムに時刻で1点ずつ追加)
+        let scoreChart;
+        let lastHard = null, lastSoft = null;
+        let baseHard = null, baseSoft = null; // 正規化用ベースライン（最初に観測したbestを0とする）
+        function appendScorePointTick(){
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value || '';
+            if (!optimizationTicket || !optimizationTicket.problemId) return;
+            const url = `/shift/api/calc/score-series/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`;
+            fetch(url)
+                .then(r => r.ok ? r.json() : [])
+                .then(list => {
+                    // 最新のスコア（bestSolution）が無ければ直前値を使用
+                    if (Array.isArray(list) && list.length > 0) {
+                        const last = list[list.length - 1];
+                        lastHard = last.hardScore;
+                        lastSoft = last.softScore;
+                    }
+                    if (lastHard == null || lastSoft == null) return; // 初回はbestが記録されるまで待機
+                    const canvas = document.getElementById('scoreChart');
+                    if (!canvas) return;
+                    if (!scoreChart) {
+                        const ctx = canvas.getContext('2d');
+                        scoreChart = new Chart(ctx, {
+                            type: 'line',
+                            data: { labels: [], datasets: [
+                                { label: 'hard(Δ)', data: [], borderColor: '#dc3545', fill: false, tension: 0.15, yAxisID: 'yHard' },
+                                { label: 'soft(Δ)', data: [], borderColor: '#0d6efd', fill: false, tension: 0.15, yAxisID: 'ySoft' }
+                            ]},
+                            options: {
+                                responsive: true,
+                                interaction: { mode: 'index', intersect: false },
+                                stacked: false,
+                                plugins: { legend: { position: 'bottom' } },
+                                scales: {
+                                    x: { title: { display: true, text: 'time' } },
+                                    yHard: { type: 'linear', position: 'left', title: { display: true, text: 'hard Δ' }, grid: { drawOnChartArea: true } },
+                                    ySoft: { type: 'linear', position: 'right', title: { display: true, text: 'soft Δ' }, grid: { drawOnChartArea: false } }
+                                }
+                            }
+                        });
+                    }
+                    // ベースライン（最初に観測した値）を保持してΔ表示にする
+                    if (baseHard === null) baseHard = lastHard;
+                    if (baseSoft === null) baseSoft = lastSoft;
+
+                    const label = new Date().toLocaleTimeString();
+                    scoreChart.data.labels.push(label);
+                    scoreChart.data.datasets[0].data.push(lastHard - baseHard);
+                    scoreChart.data.datasets[1].data.push(lastSoft - baseSoft);
+                    // 点数が多くなりすぎないように200点で古いものを切り捨て
+                    const MAX_POINTS = 200;
+                    if (scoreChart.data.labels.length > MAX_POINTS) {
+                        scoreChart.data.labels.shift();
+                        scoreChart.data.datasets[0].data.shift();
+                        scoreChart.data.datasets[1].data.shift();
+                    }
+                    scoreChart.update();
+                })
+                .catch(()=>{});
         }
     </script>
 </div>

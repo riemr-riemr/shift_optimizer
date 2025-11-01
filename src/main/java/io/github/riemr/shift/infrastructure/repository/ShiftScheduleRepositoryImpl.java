@@ -5,8 +5,9 @@ import io.github.riemr.shift.infrastructure.persistence.entity.*;
 import io.github.riemr.shift.application.dto.DemandIntervalDto;
 import io.github.riemr.shift.application.dto.QuarterSlot;
 import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
-import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.mapper.*;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
@@ -45,7 +46,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
     private final DepartmentMasterMapper departmentMasterMapper;
     private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
-    private final EmployeeMonthlyHoursSettingMapper employeeMonthlyHoursSettingMapper;
+    private final EmployeeMonthlySettingMapper employeeMonthlySettingMapper;
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -106,7 +107,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         // 従業員の月次勤務時間設定（対象月）
         java.util.Date monthStartDate = java.sql.Date.valueOf(cycleStart.withDayOfMonth(1));
-        List<EmployeeMonthlyHoursSetting> monthlyHoursSettings = employeeMonthlyHoursSettingMapper.selectByMonth(monthStartDate);
+        List<EmployeeMonthlySetting> monthlySettings = employeeMonthlySettingMapper.selectByMonth(monthStartDate);
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -187,7 +188,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeDepartmentSkillList(deptSkills);
         schedule.setEmployeeWeeklyPreferenceList(weeklyPreferences);
         schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
-        schedule.setEmployeeMonthlyHoursSettingList(monthlyHoursSettings);
+        schedule.setEmployeeMonthlySettingList(monthlySettings);
         return schedule;
     }
 

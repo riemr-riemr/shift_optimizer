@@ -108,8 +108,17 @@ public class ShiftScheduleService {
      */
     @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
     public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
+        return startSolveInternal(month, storeCode, departmentCode, "ASSIGNMENT");
+    }
+
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    public SolveTicket startSolveAttendanceMonth(LocalDate month, String storeCode, String departmentCode) {
+        return startSolveInternal(month, storeCode, departmentCode, "ATTENDANCE");
+    }
+
+    private SolveTicket startSolveInternal(LocalDate month, String storeCode, String departmentCode, String stage) {
         long problemId = toProblemId(month);
-        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month);
+        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month, stage);
 
         // 事前準備処理を最適化サービス内で同期実行
         if (storeCode != null && !storeCode.isBlank()) {
@@ -148,15 +157,23 @@ public class ShiftScheduleService {
             }
         }
         
-        log.info("Starting optimization for month={}, store={}, dept={} (task plan preparation completed)", month, storeCode, departmentCode);
+        log.info("Starting optimization for month={}, store={}, dept={}, stage={} (task plan preparation completed)", month, storeCode, departmentCode, stage);
 
-        // 既存ジョブならチケット再発行
+        // 既存ジョブならチケット再発行（startMapが未設定でもNPEにしない）
         if (jobMap.containsKey(key)) {
             Instant started = startMap.get(key);
+            if (started == null) {
+                started = Instant.now();
+                startMap.put(key, started);
+            }
             return new SolveTicket(problemId,
                     started.toEpochMilli(),
                     started.plus(spentLimit).toEpochMilli());
         }
+
+        // 進捗メタ情報（レース防止のため先に開始時刻を記録）
+        Instant start = Instant.now();
+        startMap.put(key, start);
 
         // Solver 起動 (listen)
         SolverJob<ShiftSchedule, ProblemKey> job = solverManager.solveAndListen(
@@ -166,14 +183,10 @@ public class ShiftScheduleService {
                     // フェーズ・スコアの更新
                     updatePhase(key, bestSolution);
                     recordScorePoint(key, bestSolution);
-                    persistResult(bestSolution);
+                    persistResult(bestSolution, key);
                 },
                 this::onError);
         jobMap.put(key, job);
-
-        // 進捗メタ情報
-        Instant start = Instant.now();
-        startMap.put(key, start);
 
         return new SolveTicket(problemId,
                 start.toEpochMilli(),
@@ -182,63 +195,45 @@ public class ShiftScheduleService {
 
     /** 進捗バー用ステータス */
     public SolveStatusDto getStatus(Long problemId, String storeCode, String departmentCode) {
-        // jobMapから該当するProblemKeyを検索
-        ProblemKey targetKey = null;
+        // 後方互換: ステージ無指定は最初に見つかったものを返す
         for (ProblemKey key : jobMap.keySet()) {
             if (Objects.equals(key.getStoreCode(), storeCode) &&
                 Objects.equals(key.getDepartmentCode(), departmentCode) &&
                 toProblemId(key.getCycleStart()) == problemId) {
-                targetKey = key;
-                break;
+                return internalStatus(key);
             }
         }
-        
-        if (targetKey == null) {
-            return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
-        }
-        
-        SolverStatus status = solverManager.getSolverStatus(targetKey);
-        Instant began = startMap.get(targetKey);
-        if (began == null) return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
+        return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
+    }
 
-        long now = Instant.now().toEpochMilli();
-        long finish = began.plus(spentLimit).toEpochMilli();
-        
-        // 時間ベースの進捗計算
-        int pct = (int) Math.min(100, ((now - began.toEpochMilli()) * 100) / (finish - began.toEpochMilli()));
-        
-        // フェーズ情報を取得
-        String currentPhase = currentPhaseMap.getOrDefault(targetKey, "初期化中");
-        
-        if (status == SolverStatus.NOT_SOLVING) {
-            pct = 100;
-            currentPhase = "完了";
-            
-            // ハード制約違反チェック
-            SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(targetKey);
-            if (job != null) {
-                try {
-                    ShiftSchedule finalSolution = job.getFinalBestSolution();
-                    if (finalSolution.getScore() != null && finalSolution.getScore().hardScore() < 0) {
-                        // ハード制約違反がある場合は違反情報を含めて返す
-                        List<String> violationMessages = analyzeConstraintViolationsForUI(finalSolution);
-                        // 後始末
-                        jobMap.remove(targetKey);
-                        startMap.remove(targetKey);
-                        currentPhaseMap.remove(targetKey);
-                        return SolveStatusDto.withConstraintViolations(status.name(), pct, finish, "制約違反あり", violationMessages);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } catch (ExecutionException e) {
-                    log.error("Failed to get final solution", e);
-                }
+    public SolveStatusDto getStatus(Long problemId, String storeCode, String departmentCode, String stage) {
+        for (ProblemKey key : jobMap.keySet()) {
+            if (Objects.equals(key.getStoreCode(), storeCode) &&
+                Objects.equals(key.getDepartmentCode(), departmentCode) &&
+                toProblemId(key.getCycleStart()) == problemId &&
+                Objects.equals(key.getStage(), stage)) {
+                return internalStatus(key);
             }
-            
-            // 後始末
-            jobMap.remove(targetKey);
-            startMap.remove(targetKey);
-            currentPhaseMap.remove(targetKey);
+        }
+        return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
+    }
+
+    private SolveStatusDto internalStatus(ProblemKey key) {
+        SolverStatus status = solverManager.getSolverStatus(key);
+        Instant started = startMap.get(key);
+        if (started == null) {
+            // ジョブ開始時刻が消えている（完了後の参照やレース）場合でもNPEにせず安全な既定値で扱う
+            started = Instant.now();
+        }
+        long start = started.toEpochMilli();
+        long finish = started.plus(spentLimit).toEpochMilli();
+        int pct = (int) Math.min(100, Math.max(0,
+                Math.round((System.currentTimeMillis() - start) * 100.0 / Math.max(1, finish - start))))
+                ;
+        String currentPhase = currentPhaseMap.getOrDefault(key, "初期化中");
+        if (status == SolverStatus.NOT_SOLVING) {
+            startMap.remove(key);
+            currentPhaseMap.remove(key);
         }
 
         return new SolveStatusDto(status.name(), pct, finish, currentPhase);
@@ -283,18 +278,32 @@ public class ShiftScheduleService {
 
     /** 計算終了後の最終解をフロント用 DTO に変換して返す */
     public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode, String departmentCode) {
-        ProblemKey targetKey = null;
+        // 後方互換: 最初に見つかったステージの結果
         for (ProblemKey k : jobMap.keySet()) {
             if (Objects.equals(k.getStoreCode(), storeCode) &&
                 Objects.equals(k.getDepartmentCode(), departmentCode) &&
                 toProblemId(k.getCycleStart()) == problemId) {
-                targetKey = k; break;
+                return internalFetchResult(k);
             }
         }
-        if (targetKey == null) return List.of();
-        SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(targetKey);
-        if (job == null) return List.of();
+        return List.of();
+    }
 
+    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode, String departmentCode, String stage) {
+        for (ProblemKey k : jobMap.keySet()) {
+            if (Objects.equals(k.getStoreCode(), storeCode) &&
+                Objects.equals(k.getDepartmentCode(), departmentCode) &&
+                toProblemId(k.getCycleStart()) == problemId &&
+                Objects.equals(k.getStage(), stage)) {
+                return internalFetchResult(k);
+            }
+        }
+        return List.of();
+    }
+
+    private List<ShiftAssignmentView> internalFetchResult(ProblemKey key) {
+        SolverJob<ShiftSchedule, ProblemKey> job = jobMap.get(key);
+        if (job == null) return List.of();
         try {
             ShiftSchedule solved = job.getFinalBestSolution();
             return solved.getAssignmentList().stream()
@@ -390,6 +399,40 @@ public class ShiftScheduleService {
 
     public List<ShiftAssignmentMonthlyView> fetchShiftsByMonth(LocalDate anyDayInMonth, String storeCode) {
         return fetchShiftsByMonth(anyDayInMonth, storeCode, null);
+    }
+
+    /**
+     * 出勤（shift_assignment）を月次単位で削除する（店舗単位）。
+     */
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    public int clearAttendance(LocalDate anyDayInMonth, String storeCode) {
+        LocalDate from = computeCycleStart(anyDayInMonth);
+        LocalDate to   = from.plusMonths(1);
+        if (storeCode == null || storeCode.isBlank()) return 0;
+        return shiftAssignmentMapper.deleteByMonthAndStore(from, to, storeCode);
+    }
+
+    /**
+     * 作業割当（register_assignment, department_task_assignment）を月次単位で削除する。
+     * 部門が指定されている場合はその部門のタスクのみ削除。
+     */
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    public int clearWorkAssignments(LocalDate anyDayInMonth, String storeCode, String departmentCode) {
+        LocalDate from = computeCycleStart(anyDayInMonth);
+        LocalDate to   = from.plusMonths(1);
+        if (storeCode == null || storeCode.isBlank()) return 0;
+        int total = 0;
+        total += registerAssignmentMapper.deleteByMonthAndStore(from, to, storeCode);
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            total += departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, storeCode, departmentCode);
+        } else {
+            try {
+                java.lang.reflect.Method m = departmentTaskAssignmentMapper.getClass().getMethod("deleteByMonthAndStore", java.time.LocalDate.class, java.time.LocalDate.class, String.class);
+                Object r = m.invoke(departmentTaskAssignmentMapper, from, to, storeCode);
+                if (r instanceof Integer i) total += i;
+            } catch (Exception ignore) { /* メソッドが無ければスキップ */ }
+        }
+        return total;
     }
 
     public List<ShiftAssignmentView> fetchAssignmentsByDate(LocalDate date, String storeCode, String departmentCode) {
@@ -508,6 +551,20 @@ public class ShiftScheduleService {
             unsolved.setAssignmentList(new ArrayList<>());
         }
         
+        // ステージをエンティティへ伝搬
+        if (unsolved.getAssignmentList() != null) {
+            for (var a : unsolved.getAssignmentList()) {
+                a.setStage(key.getStage());
+            }
+        }
+
+        // ステージごとの可用従業員候補を事前計算（ピン留め相当のフィルタリング）
+        try {
+            prepareCandidateEmployees(unsolved, key.getStage(), cycleStart);
+        } catch (Exception ex) {
+            log.warn("Failed to prepare candidate employees: {}", ex.getMessage());
+        }
+
         // 実行可能性チェック：全員希望休の日があるかチェック
         validateProblemFeasibility(unsolved);
 
@@ -520,6 +577,133 @@ public class ShiftScheduleService {
         
         log.info("Loaded unsolved problem for {} store {} ({} assignments)", cycleStart, unsolved.getStoreCode(), unsolved.getAssignmentList().size());
         return unsolved;
+    }
+
+    // ATTENDANCE: 有休/希望休/曜日OFFは候補から除外（休みをピン留め）
+    // ASSIGNMENT: 当該スロットで出勤中の従業員のみを候補化
+    private void prepareCandidateEmployees(ShiftSchedule schedule, String stage, LocalDate cycleStart) {
+        if (schedule.getAssignmentList() == null || schedule.getEmployeeList() == null) return;
+
+        final var employees = schedule.getEmployeeList();
+        final var requests = java.util.Optional.ofNullable(schedule.getEmployeeRequestList()).orElse(java.util.List.of());
+        final var weekly = java.util.Optional.ofNullable(schedule.getEmployeeWeeklyPreferenceList()).orElse(java.util.List.of());
+
+        // インデックス化
+        java.util.Map<String, java.util.Set<LocalDate>> offDatesByEmp = new java.util.HashMap<>();
+        for (var r : requests) {
+            if (r.getRequestKind() == null) continue;
+            String kind = r.getRequestKind().toLowerCase();
+            if ("off".equals(kind) || "paid_leave".equals(kind)) {
+                LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
+            }
+        }
+        java.util.Map<String, java.util.Set<Integer>> weeklyOffByEmp = new java.util.HashMap<>();
+        for (var p : weekly) {
+            if ("OFF".equalsIgnoreCase(p.getWorkStyle())) {
+                weeklyOffByEmp.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashSet<>())
+                        .add(p.getDayOfWeek().intValue());
+            }
+        }
+
+        // ASSIGNMENT用: 出勤ロスター（DBのshift_assignment）をロード
+        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment> attendance = java.util.List.of();
+        if (stage != null && stage.equals("ASSIGNMENT")) {
+            LocalDate cycleEnd = cycleStart.plusMonths(1);
+            var list = shiftAssignmentMapper.selectByMonth(cycleStart, cycleEnd);
+            if (schedule.getStoreCode() != null) {
+                list = list.stream().filter(sa -> schedule.getStoreCode().equals(sa.getStoreCode())).toList();
+            }
+            attendance = list;
+        }
+
+        for (var a : schedule.getAssignmentList()) {
+            LocalDate date = a.getShiftDate();
+            java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> cands;
+            if ("ATTENDANCE".equals(stage)) {
+                cands = employees.stream().filter(e -> {
+                    var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), java.util.Set.of());
+                    if (offSet.contains(date)) return false; // 有休/希望休
+                    var offDow = weeklyOffByEmp.getOrDefault(e.getEmployeeCode(), java.util.Set.of());
+                    return !offDow.contains(date.getDayOfWeek().getValue()); // 曜日OFF
+                }).toList();
+            } else if ("ASSIGNMENT".equals(stage)) {
+                // 当該スロット内に出勤が重なる従業員のみ
+                var start = a.getStartAt().toInstant();
+                var end = a.getEndAt().toInstant();
+                java.util.Set<String> onDuty = new java.util.HashSet<>();
+                for (var sa : attendance) {
+                    if (sa.getStartAt() == null || sa.getEndAt() == null) continue;
+                    var s = sa.getStartAt().toInstant();
+                    var e = sa.getEndAt().toInstant();
+                    boolean overlap = s.isBefore(end) && e.isAfter(start);
+                    if (overlap) {
+                        onDuty.add(sa.getEmployeeCode());
+                    }
+                }
+                cands = employees.stream().filter(e -> onDuty.contains(e.getEmployeeCode())).toList();
+            } else {
+                cands = employees; // デフォルト（フェールセーフ）
+            }
+            a.setCandidateEmployees(cands);
+        }
+
+        // ATTENDANCE: 出勤固定（MANDATORY）の人は、その日に少なくとも1スロットは必ず候補を単一化して“ピン”に近い状態にする
+        if ("ATTENDANCE".equals(stage)) {
+            // 週MANDATORYをインデックス化（OFFや有休が優先されるため、該当日は除外）
+            java.util.Map<LocalDate, java.util.List<String>> mandatoryByDate = new java.util.HashMap<>();
+            for (var p : weekly) {
+                if (!"MANDATORY".equalsIgnoreCase(p.getWorkStyle())) continue;
+                String emp = p.getEmployeeCode();
+                // 対象月全日に対して、該当DOWを付与（簡便実装）
+                LocalDate d = cycleStart;
+                LocalDate end = cycleStart.plusMonths(1);
+                while (d.isBefore(end)) {
+                    if (d.getDayOfWeek().getValue() == p.getDayOfWeek().intValue()) {
+                        // OFF/有休は優先：この日はMANDATORYから除外
+                        var offSet = offDatesByEmp.getOrDefault(emp, java.util.Set.of());
+                        var offDow = weeklyOffByEmp.getOrDefault(emp, java.util.Set.of());
+                        if (!offSet.contains(d) && !offDow.contains(d.getDayOfWeek().getValue())) {
+                            mandatoryByDate.computeIfAbsent(d, k -> new java.util.ArrayList<>()).add(emp);
+                        }
+                    }
+                    d = d.plusDays(1);
+                }
+            }
+
+            // 日付ごとに未予約スロットへ順に単一候補化（過度な拘束を避けるため各MANDATORYあたり1スロット）
+            java.util.Map<LocalDate, java.util.List<ShiftAssignmentPlanningEntity>> byDate = new java.util.HashMap<>();
+            for (var a : schedule.getAssignmentList()) {
+                byDate.computeIfAbsent(a.getShiftDate(), k -> new java.util.ArrayList<>()).add(a);
+            }
+            for (var entry : mandatoryByDate.entrySet()) {
+                LocalDate date = entry.getKey();
+                var emps = entry.getValue();
+                var slots = byDate.getOrDefault(date, java.util.List.of());
+                int idx = 0;
+                for (String emp : emps) {
+                    // 空きを探す（既に単一化されていないスロット）
+                    ShiftAssignmentPlanningEntity target = null;
+                    for (int i = idx; i < slots.size(); i++) {
+                        var a = slots.get(i);
+                        var c = a.getAvailableEmployees();
+                        if (c != null && c.size() > 1) { target = a; idx = i + 1; break; }
+                    }
+                    if (target == null && !slots.isEmpty()) {
+                        // すべて単一化済みなら最初を上書き（最小限の影響）
+                        target = slots.get(0);
+                    }
+                    if (target != null) {
+                        // 指定従業員が候補にいない場合はスキップ（例: スキルや別理由で不可）
+                        var exists = target.getAvailableEmployees().stream().anyMatch(e -> emp.equals(e.getEmployeeCode()));
+                        if (exists) {
+                            var only = employees.stream().filter(e -> emp.equals(e.getEmployeeCode())).toList();
+                            target.setCandidateEmployees(only);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -853,7 +1037,7 @@ public class ShiftScheduleService {
      * ハード制約違反がある場合は保存を阻止し、アラートを出力する。
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    private void persistResult(ShiftSchedule best) {
+    private void persistResult(ShiftSchedule best, ProblemKey key) {
         // Construction Heuristic中（未割当が残っている）なら保存をスキップ
         if (best.getScore() != null && best.getScore().initScore() < 0) {
             log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
@@ -877,12 +1061,20 @@ public class ShiftScheduleService {
         LocalDate to   = cycleStart.plusMonths(1); // 半開区間
         String store = best.getStoreCode();
         if (store != null) {
-            registerAssignmentMapper.deleteByMonthAndStore(from, to, store);
-            shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
+            if ("ATTENDANCE".equals(key.getStage())) {
+                shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
+            } else {
+                registerAssignmentMapper.deleteByMonthAndStore(from, to, store);
+                shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
+            }
         } else {
             // 後方互換: storeCode が無い場合は従来の削除（非推奨）
-            registerAssignmentMapper.deleteByProblemId(best.getProblemId());
-            shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+            if ("ATTENDANCE".equals(key.getStage())) {
+                shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+            } else {
+                registerAssignmentMapper.deleteByProblemId(best.getProblemId());
+                shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
+            }
         }
 
         // Group by employee and date for shift assignments (work time)
@@ -909,6 +1101,13 @@ public class ShiftScheduleService {
             shiftAssignment.setEndAt(endAt);
             shiftAssignment.setCreatedBy("auto");
             shiftAssignments.add(shiftAssignment);
+        }
+
+        if ("ATTENDANCE".equals(key.getStage())) {
+            // 出勤のみ保存
+            shiftAssignments.forEach(shiftAssignmentMapper::insert);
+            log.info("Persisted attendance solution – shifts={}, score={}", shiftAssignments.size(), best.getScore());
+            return;
         }
 
         // Group by employee, date, and register for register assignments
@@ -987,8 +1186,8 @@ public class ShiftScheduleService {
             deptTaskAssignments.forEach(departmentTaskAssignmentMapper::insert);
         }
 
-        log.info("Persisted best solution – shifts={}, registers={}, deptTasks={} (score={})", 
-                shiftAssignments.size(), mergedRegisterAssignments.size(), deptTaskAssignments.size(), best.getScore());
+        log.info("Persisted best solution – stage={}, shifts={}, registers={}, deptTasks={} (score={})",
+                key.getStage(), shiftAssignments.size(), mergedRegisterAssignments.size(), deptTaskAssignments.size(), best.getScore());
     }
 
     private static LocalDateTime toLocalDateTime(Date date) {

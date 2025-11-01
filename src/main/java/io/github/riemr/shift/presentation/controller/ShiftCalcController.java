@@ -108,7 +108,31 @@ public class ShiftCalcController {
         
         // 事前準備処理はShiftScheduleService内で実行されるため、ここでは実行しない
         
-        // 最適化開始: work_demand_interval + register_demand_interval → シフト最適化
+        // 既存の最適化（作業割当まで）
+        return service.startSolveMonth(cycleStart, req.storeCode(), req.departmentCode());
+    }
+
+    // 新規: 月次シフト最適化（出勤のみ決定）
+    @PostMapping("/api/attendance/start")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public SolveTicket startAttendance(@RequestBody SolveRequest req) {
+        LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int startDay = appSettingService.getShiftCycleStartDay();
+        LocalDate cycleStart = computeCycleStart(base, startDay);
+        log.info("Starting attendance optimization for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
+        return service.startSolveAttendanceMonth(cycleStart, req.storeCode(), req.departmentCode());
+    }
+
+    // 新規: 作業割当（出勤済み前提で細目割当）
+    @PostMapping("/api/assignment/start")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public SolveTicket startAssignment(@RequestBody SolveRequest req) {
+        LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int startDay = appSettingService.getShiftCycleStartDay();
+        LocalDate cycleStart = computeCycleStart(base, startDay);
+        log.info("Starting assignment optimization for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
         return service.startSolveMonth(cycleStart, req.storeCode(), req.departmentCode());
     }
 
@@ -128,16 +152,31 @@ public class ShiftCalcController {
     @ResponseBody
     public SolveStatusDto status(@PathVariable("id") Long id,
                                  @RequestParam("storeCode") String storeCode,
-                                 @RequestParam("departmentCode") String departmentCode) {
-        return service.getStatus(id, storeCode, departmentCode);
+                                 @RequestParam("departmentCode") String departmentCode,
+                                 @RequestParam(value = "stage", required = false) String stage) {
+        return (stage == null || stage.isBlank())
+                ? service.getStatus(id, storeCode, departmentCode)
+                : service.getStatus(id, storeCode, departmentCode, stage);
     }
 
     @GetMapping("/api/calc/result/{id}")
     @ResponseBody
     public List<ShiftAssignmentView> result(@PathVariable("id") Long id,
                                             @RequestParam("storeCode") String storeCode,
-                                            @RequestParam("departmentCode") String departmentCode) {
-        return service.fetchResult(id, storeCode, departmentCode);
+                                            @RequestParam("departmentCode") String departmentCode,
+                                            @RequestParam(value = "stage", required = false) String stage) {
+        return (stage == null || stage.isBlank())
+                ? service.fetchResult(id, storeCode, departmentCode)
+                : service.fetchResult(id, storeCode, departmentCode, stage);
+    }
+
+    // 開発者向け: スコア推移を返す
+    @GetMapping("/api/calc/score-series/{id}")
+    @ResponseBody
+    public List<io.github.riemr.shift.application.dto.ScorePoint> scoreSeries(@PathVariable("id") Long id,
+                                                                              @RequestParam("storeCode") String storeCode,
+                                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        return service.getScoreSeries(id, storeCode, departmentCode);
     }
 
     @GetMapping("/api/calc/assignments/daily/{date}")
@@ -244,6 +283,36 @@ public class ShiftCalcController {
         }
     }
 
+    @PostMapping("/api/clear/attendance")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> clearAttendance(@RequestBody io.github.riemr.shift.application.dto.SolveRequest req) {
+        try {
+            LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            int startDay = appSettingService.getShiftCycleStartDay();
+            LocalDate cycleStart = computeCycleStart(base, startDay);
+            int deleted = service.clearAttendance(cycleStart, req.storeCode());
+            return Map.of("success", true, "deleted", deleted, "message", "出勤データを削除しました");
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "削除に失敗しました: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/api/clear/assignment")
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> clearAssignment(@RequestBody io.github.riemr.shift.application.dto.SolveRequest req) {
+        try {
+            LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            int startDay = appSettingService.getShiftCycleStartDay();
+            LocalDate cycleStart = computeCycleStart(base, startDay);
+            int deleted = service.clearWorkAssignments(cycleStart, req.storeCode(), req.departmentCode());
+            return Map.of("success", true, "deleted", deleted, "message", "作業割当を削除しました");
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "削除に失敗しました: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/api/calc/staffing-balance/{date}")
     @ResponseBody
     public List<StaffingBalanceDto> getStaffingBalance(@PathVariable("date") String dateString,
@@ -275,8 +344,8 @@ public class ShiftCalcController {
             List<Store> stores = storeMapper.selectByExample(null);
             stores.sort(Comparator.comparing(Store::getStoreCode));
             
-            // 月次シフトデータ取得（部門指定）
-            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchAssignmentsByMonth(cycleStart, storeCode, departmentCode);
+            // 月次シフトデータ取得（出勤＝shift_assignmentベース）
+            List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchShiftsByMonth(cycleStart, storeCode, departmentCode);
             
             // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();

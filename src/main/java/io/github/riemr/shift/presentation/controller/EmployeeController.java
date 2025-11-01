@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class EmployeeController {
     private final EmployeeService service;
     private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
 
     /* 一覧 */
     @GetMapping
@@ -90,6 +91,7 @@ public class EmployeeController {
         Integer currentYear = java.time.Year.now().getValue();
         form.setSelectedYear(currentYear);
         loadMonthlyHoursForYear(form, code, currentYear);
+        loadMonthlyOffdaysForYear(form, code, currentYear);
         
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
@@ -128,7 +130,7 @@ public class EmployeeController {
             }
             prefs.add(p);
         }
-        // Map monthly settings from table format
+        // Map monthly work-hours settings from table format
         java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthly = new java.util.ArrayList<>();
         if (form.getSelectedYear() != null && form.getMonthlyHoursTable() != null) {
             for (int month = 1; month <= 12; month++) {
@@ -145,7 +147,24 @@ public class EmployeeController {
                 }
             }
         }
-        service.save(form.toEntity(), !edit, prefs, monthly);
+        // Map monthly off-days settings from table format
+        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting> offdays = new java.util.ArrayList<>();
+        if (form.getSelectedYear() != null && form.getMonthlyOffdaysTable() != null) {
+            for (int month = 1; month <= 12; month++) {
+                Integer minOff = form.getMonthlyOffdaysTable().getMinOffDays()[month - 1];
+                Integer maxOff = form.getMonthlyOffdaysTable().getMaxOffDays()[month - 1];
+                if (minOff != null || maxOff != null) {
+                    var m = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting();
+                    java.time.YearMonth ym = java.time.YearMonth.of(form.getSelectedYear(), month);
+                    java.util.Date ms = java.sql.Date.valueOf(ym.atDay(1));
+                    m.setMonthStart(ms);
+                    m.setMinOffDays(minOff);
+                    m.setMaxOffDays(maxOff);
+                    offdays.add(m);
+                }
+            }
+        }
+        service.save(form.toEntity(), !edit, prefs, monthly, offdays);
         return "redirect:/employees";
     }
 
@@ -197,30 +216,81 @@ public class EmployeeController {
         return response;
     }
     
+    /* Ajax: 指定年の月別公休日数を取得 */
+    @GetMapping("/{code}/monthly-offdays/{year}")
+    @ResponseBody
+    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    public java.util.Map<String, Object> getMonthlyOffdaysByYear(@PathVariable String code, @PathVariable Integer year) {
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        try {
+            var monthlyEntities = monthlyOffdaysMapper.selectByEmployee(code);
+            java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting> monthMap = new java.util.HashMap<>();
+            for (var entity : monthlyEntities) {
+                java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                if (date.getYear() == year) {
+                    monthMap.put(date.getMonthValue(), entity);
+                }
+            }
+            Integer[] minOff = new Integer[12];
+            Integer[] maxOff = new Integer[12];
+            for (int month = 1; month <= 12; month++) {
+                var setting = monthMap.get(month);
+                if (setting != null) {
+                    minOff[month - 1] = setting.getMinOffDays();
+                    maxOff[month - 1] = setting.getMaxOffDays();
+                }
+            }
+            response.put("success", true);
+            response.put("minOffDays", minOff);
+            response.put("maxOffDays", maxOff);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        return response;
+    }
+    
+    // ビュー描画用: 指定年の月別勤務時間をフォームのテーブルに反映
+    private void loadMonthlyHoursForYear(EmployeeForm form, String code, Integer year) {
+        var monthlyEntities = monthlyHoursMapper.selectByEmployee(code);
+        Integer[] minHours = new Integer[12];
+        Integer[] maxHours = new Integer[12];
+        for (var entity : monthlyEntities) {
+            java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            if (date.getYear() == year) {
+                minHours[date.getMonthValue() - 1] = entity.getMinWorkHours();
+                maxHours[date.getMonthValue() - 1] = entity.getMaxWorkHours();
+            }
+        }
+        var table = new EmployeeForm.MonthlyHoursTableData();
+        table.setMinHours(minHours);
+        table.setMaxHours(maxHours);
+        form.setMonthlyHoursTable(table);
+    }
+    
+    // ビュー描画用: 指定年の月別公休日数をフォームのテーブルに反映
+    private void loadMonthlyOffdaysForYear(EmployeeForm form, String code, Integer year) {
+        var entities = monthlyOffdaysMapper.selectByEmployee(code);
+        Integer[] minOff = new Integer[12];
+        Integer[] maxOff = new Integer[12];
+        for (var e : entities) {
+            java.time.LocalDate date = e.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            if (date.getYear() == year) {
+                minOff[date.getMonthValue() - 1] = e.getMinOffDays();
+                maxOff[date.getMonthValue() - 1] = e.getMaxOffDays();
+            }
+        }
+        var table = new EmployeeForm.MonthlyOffdaysTableData();
+        table.setMinOffDays(minOff);
+        table.setMaxOffDays(maxOff);
+        form.setMonthlyOffdaysTable(table);
+    }
+    
     // 年選択オプションを生成（システム年の+-1年）
     private java.util.List<Integer> getAvailableYears() {
         Integer currentYear = java.time.Year.now().getValue();
         return java.util.Arrays.asList(currentYear - 1, currentYear, currentYear + 1);
     }
     
-    // 指定年の月別勤務時間をテーブル形式にロード
-    private void loadMonthlyHoursForYear(EmployeeForm form, String employeeCode, Integer year) {
-        var monthlyEntities = monthlyHoursMapper.selectByEmployee(employeeCode);
-        java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthMap = new java.util.HashMap<>();
-        
-        for (var entity : monthlyEntities) {
-            java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-            if (date.getYear() == year) {
-                monthMap.put(date.getMonthValue(), entity);
-            }
-        }
-        
-        for (int month = 1; month <= 12; month++) {
-            var setting = monthMap.get(month);
-            if (setting != null) {
-                form.getMonthlyHoursTable().getMinHours()[month - 1] = setting.getMinWorkHours();
-                form.getMonthlyHoursTable().getMaxHours()[month - 1] = setting.getMaxWorkHours();
-            }
-        }
-    }
+    // （重複回避）上のloadMonthlyHoursForYearを使用
 }

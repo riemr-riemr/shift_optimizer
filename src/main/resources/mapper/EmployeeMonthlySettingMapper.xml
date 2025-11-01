@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlySettingMapper">
+  <resultMap id="EmployeeMonthlySettingMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting">
+    <id     column="employee_code"  property="employeeCode"/>
+    <id     column="month_start"    property="monthStart"/>
+    <result column="min_work_hours" property="minWorkHours"/>
+    <result column="max_work_hours" property="maxWorkHours"/>
+    <result column="min_off_days"   property="minOffDays"/>
+    <result column="max_off_days"   property="maxOffDays"/>
+  </resultMap>
+
+  <select id="selectByMonth" parameterType="date" resultMap="EmployeeMonthlySettingMap">
+    SELECT 
+      COALESCE(h.employee_code, o.employee_code) AS employee_code,
+      COALESCE(h.month_start, o.month_start)     AS month_start,
+      h.min_work_hours,
+      h.max_work_hours,
+      o.min_off_days,
+      o.max_off_days
+    FROM employee_monthly_hours_setting h
+    FULL OUTER JOIN employee_monthly_offdays_setting o
+      ON h.employee_code = o.employee_code AND h.month_start = o.month_start
+    WHERE COALESCE(h.month_start, o.month_start) = #{monthStart}
+  </select>
+
+  <select id="selectByEmployeeAndMonth" resultMap="EmployeeMonthlySettingMap">
+    SELECT 
+      COALESCE(h.employee_code, o.employee_code) AS employee_code,
+      COALESCE(h.month_start, o.month_start)     AS month_start,
+      h.min_work_hours,
+      h.max_work_hours,
+      o.min_off_days,
+      o.max_off_days
+    FROM employee_monthly_hours_setting h
+    FULL OUTER JOIN employee_monthly_offdays_setting o
+      ON h.employee_code = o.employee_code AND h.month_start = o.month_start
+    WHERE COALESCE(h.employee_code, o.employee_code) = #{employeeCode}
+      AND COALESCE(h.month_start, o.month_start) = #{monthStart}
+  </select>
+</mapper>

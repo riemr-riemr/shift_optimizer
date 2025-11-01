@@ -159,7 +159,7 @@
 
             <div class="card mt-3">
               <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-calendar2-range"></i> 月別勤務時間（時）</h6>
+                <h6 class="mb-0"><i class="bi bi-calendar2-week"></i> 月別の働き方</h6>
               </div>
               <div class="card-body">
                 <div class="row mb-3">
@@ -170,46 +170,69 @@
                     </select>
                   </div>
                 </div>
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle">
-                    <thead>
-                      <tr>
-                        <th style="width:120px;">月</th>
-                        <th style="width:150px;">下限時間(時)</th>
-                        <th style="width:150px;">上限時間(時)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr th:each="month,stat : ${#numbers.sequence(1, 12)}">
-                        <td>
-                          <span th:text="${month} + '月'"></span>
-                        </td>
-                        <td>
-                          <input type="number" 
-                                 class="form-control form-control-sm" 
-                                 min="0" max="300" 
-                                 th:field="*{monthlyHoursTable.minHours[__${stat.index}__]}"
-                                 placeholder="0">
-                        </td>
-                        <td>
-                          <input type="number" 
-                                 class="form-control form-control-sm" 
-                                 min="0" max="300" 
-                                 th:field="*{monthlyHoursTable.maxHours[__${stat.index}__]}"
-                                 placeholder="0">
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle">
+                        <thead>
+                          <tr>
+                            <th style="width:120px;">月</th>
+                            <th style="width:150px;">下限時間(時)</th>
+                            <th style="width:150px;">上限時間(時)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr th:each="month,stat : ${#numbers.sequence(1, 12)}">
+                            <td><span th:text="${month} + '月'"></span></td>
+                            <td>
+                              <input type="number" class="form-control form-control-sm" min="0" max="300"
+                                     th:field="*{monthlyHoursTable.minHours[__${stat.index}__]}" placeholder="0">
+                            </td>
+                            <td>
+                              <input type="number" class="form-control form-control-sm" min="0" max="300"
+                                     th:field="*{monthlyHoursTable.maxHours[__${stat.index}__]}" placeholder="0">
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="form-text">設定したい月のみ入力してください（空欄は制限なし）。</div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle">
+                        <thead>
+                          <tr>
+                            <th style="width:120px;">月</th>
+                            <th style="width:150px;">下限公休(日)</th>
+                            <th style="width:150px;">上限公休(日)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr th:each="month,stat : ${#numbers.sequence(1, 12)}">
+                            <td><span th:text="${month} + '月'"></span></td>
+                            <td>
+                              <input type="number" class="form-control form-control-sm" min="0" max="31"
+                                     th:field="*{monthlyOffdaysTable.minOffDays[__${stat.index}__]}" placeholder="0">
+                            </td>
+                            <td>
+                              <input type="number" class="form-control form-control-sm" min="0" max="31"
+                                     th:field="*{monthlyOffdaysTable.maxOffDays[__${stat.index}__]}" placeholder="0">
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="form-text">設定したい月のみ入力してください（空欄は制限なし）。</div>
+                  </div>
                 </div>
-                <div class="form-text">設定したい月のみ入力してください（空欄は制限なし）。</div>
               </div>
             </div>
 
-            <div class="card mt-3">
-              <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-calendar-week"></i> 曜日別の働き方</h6>
-              </div>
+          <div class="card mt-3">
+            <div class="card-header">
+              <h6 class="mb-0"><i class="bi bi-calendar-week"></i> 曜日別の働き方</h6>
+            </div>
               <div class="card-body">
                 <div class="table-responsive">
                   <table class="table table-sm align-middle">
@@ -317,7 +340,7 @@
       });
     }
     
-    // 年選択変更時に月別勤務時間をAjaxで更新
+    // 年選択変更時に月別勤務時間・公休日数をAjaxで更新
     function loadMonthlyHoursForYear(year) {
       const employeeCode = document.querySelector('input[name="employeeCode"]').value;
       if (!employeeCode) return; // 新規作成時はemployeeCodeが空なのでスキップ
@@ -345,6 +368,22 @@
         .catch(error => {
           console.error('Ajax通信エラー:', error);
         });
+
+      fetch(`/employees/${employeeCode}/monthly-offdays/${year}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            for (let month = 0; month < 12; month++) {
+              const minInput = document.querySelector(`input[name="monthlyOffdaysTable.minOffDays[${month}]"]`);
+              const maxInput = document.querySelector(`input[name="monthlyOffdaysTable.maxOffDays[${month}]"]`);
+              if (minInput) minInput.value = data.minOffDays[month] || '';
+              if (maxInput) maxInput.value = data.maxOffDays[month] || '';
+            }
+          } else {
+            console.error('月別公休日数の取得に失敗しました:', data.error);
+          }
+        })
+        .catch(error => console.error('Ajax通信エラー:', error));
     }
     
     document.addEventListener('change', e => {
@@ -357,7 +396,13 @@
       }
     });
     
-    document.addEventListener('DOMContentLoaded', updateTimeInputs);
+    document.addEventListener('DOMContentLoaded', () => {
+      updateTimeInputs();
+      const yearSel = document.getElementById('selectedYear');
+      if (yearSel && yearSel.value) {
+        loadMonthlyHoursForYear(yearSel.value);
+      }
+    });
   </script>
 </div>
 </body>

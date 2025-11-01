@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>Solver Metrics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-graph-up"></i> 目的関数の改善度（開発者向け）</h1>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-auto">
+          <label class="form-label">対象月</label>
+          <input type="month" id="month" class="form-control" th:value="${#temporals.format(#dates.createNow(),'yyyy-MM')}">
+        </div>
+        <div class="col-auto">
+          <label class="form-label">店舗</label>
+          <input id="store" class="form-control" placeholder="例: 348">
+        </div>
+        <div class="col-auto">
+          <label class="form-label">部門</label>
+          <input id="dept" class="form-control" placeholder="例: 520">
+        </div>
+        <div class="col-auto align-self-end">
+          <button id="loadBtn" class="btn btn-primary">読み込み</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <canvas id="scoreChart" height="140"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById('scoreChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [
+        { label: 'hard(Δ)', data: [], borderColor: '#dc3545', fill: false, tension: 0.15, yAxisID: 'yHard' },
+        { label: 'soft(Δ)', data: [], borderColor: '#0d6efd', fill: false, tension: 0.15, yAxisID: 'ySoft' }
+      ]},
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        stacked: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          x: { title: {display: true, text: 'time'} },
+          yHard: { type: 'linear', position: 'left', title: { display: true, text: 'hard Δ' }, grid: { drawOnChartArea: true } },
+          ySoft: { type: 'linear', position: 'right', title: { display: true, text: 'soft Δ' }, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+
+    function loadSeries(){
+      const m = document.getElementById('month').value; // yyyy-MM
+      const store = document.getElementById('store').value; const dept = document.getElementById('dept').value;
+      if(!m||!store){ alert('対象月と店舗を指定してください'); return; }
+      const id = Number(m.replace('-', '')); // yyyyMM as problemId
+      fetch(`/shift/api/calc/score-series/${id}?storeCode=${encodeURIComponent(store)}&departmentCode=${encodeURIComponent(dept)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(list => {
+          const labels = list.map(p => new Date(p.timeMillis).toLocaleTimeString());
+          const hardRaw = list.map(p => p.hardScore);
+          const softRaw = list.map(p => p.softScore);
+          const hardBase = hardRaw.length ? hardRaw[0] : 0;
+          const softBase = softRaw.length ? softRaw[0] : 0;
+          const hard = hardRaw.map(v => v - hardBase);
+          const soft = softRaw.map(v => v - softBase);
+          chart.data.labels = labels;
+          chart.data.datasets[0].data = hard;
+          chart.data.datasets[1].data = soft;
+          chart.update();
+        })
+        .catch(() => {});
+    }
+    document.getElementById('loadBtn').addEventListener('click', loadSeries);
+  </script>
+</main>
+</body>
+</html>

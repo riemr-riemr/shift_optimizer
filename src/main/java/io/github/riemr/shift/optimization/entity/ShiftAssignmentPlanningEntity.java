@@ -8,6 +8,7 @@ import lombok.ToString;
 import org.optaplanner.core.api.domain.entity.PlanningEntity;
 import org.optaplanner.core.api.domain.lookup.PlanningId;
 import org.optaplanner.core.api.domain.variable.PlanningVariable;
+import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -29,8 +30,14 @@ public class ShiftAssignmentPlanningEntity {
     private WorkKind workKind;     // REGISTER_OP or DEPARTMENT_TASK
     private String taskCode;       // used when workKind == DEPARTMENT_TASK
 
-    @PlanningVariable(valueRangeProviderRefs = {"employeeRange"})
+    // Optimization stage hint: ATTENDANCE or ASSIGNMENT
+    private String stage;
+
+    @PlanningVariable(valueRangeProviderRefs = {"availableEmployees"})
     private Employee assignedEmployee;
+
+    // エンティティ毎に可用な従業員候補（ATTENDANCE/ASSIGNMENTでフィルタリング）
+    private java.util.List<Employee> candidateEmployees = java.util.Collections.emptyList();
 
     public ShiftAssignmentPlanningEntity() {
     }
@@ -64,5 +71,15 @@ public class ShiftAssignmentPlanningEntity {
         }
         long diff = origin.getEndAt().getTime() - origin.getStartAt().getTime();
         return (int) (diff / (1000 * 60));
+    }
+
+    public String getStoreCode() {
+        return origin != null ? origin.getStoreCode() : null;
+    }
+
+    // エンティティ依存の従業員候補レンジ
+    @ValueRangeProvider(id = "availableEmployees")
+    public java.util.List<Employee> getAvailableEmployees() {
+        return candidateEmployees == null ? java.util.Collections.emptyList() : candidateEmployees;
     }
 }

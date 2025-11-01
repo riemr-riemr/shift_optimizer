@@ -31,6 +31,7 @@ public class OptaPlannerConfig {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverFactory.class)
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public SolverFactory<ShiftSchedule> solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(ShiftSchedule.class)
@@ -41,7 +42,7 @@ public class OptaPlannerConfig {
         solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
                 .withConstraintProviderClass(ShiftScheduleConstraintProvider.class));
 
-        // Phase 設定
+        // Phase 設定（OptaPlanner API シグネチャに合わせる）
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
                 constructionHeuristicPhaseConfig(),
                 localSearchPhaseConfig()
@@ -70,16 +71,27 @@ public class OptaPlannerConfig {
         // TABU_SEARCHで探索性向上
         ls.setLocalSearchType(LocalSearchType.TABU_SEARCH);
 
-        // シンプルなChangeMoveSelectorを使用
+        // Change + Swap の複合ムーブで改善余地を広げる
         ChangeMoveSelectorConfig change = new ChangeMoveSelectorConfig();
         change.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(ShiftAssignmentPlanningEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
-        change.setValueSelectorConfig(new ValueSelectorConfig()
+        ValueSelectorConfig valueSelector = new ValueSelectorConfig()
                 .withVariableName("assignedEmployee")
+                .withSelectionOrder(SelectionOrder.RANDOM);
+        change.setValueSelectorConfig(valueSelector);
+
+        org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig swap =
+                new org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig();
+        swap.setEntitySelectorConfig(new EntitySelectorConfig()
+                .withEntityClass(ShiftAssignmentPlanningEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
 
-        ls.setMoveSelectorConfig(change);
+        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig union =
+                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
+        union.setMoveSelectorList(java.util.Arrays.asList(change, swap));
+
+        ls.setMoveSelectorConfig(union);
         return ls;
     }
 }

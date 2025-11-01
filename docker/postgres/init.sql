@@ -125,6 +125,18 @@ CREATE TABLE employee (
     authority_code        VARCHAR(20) REFERENCES authority_master(authority_code)
 );
 
+-- 従業員の月次公休日数設定（最小・最大）
+-- 従業員の月次設定を集約（労働時間・公休日数）
+CREATE TABLE IF NOT EXISTS employee_monthly_setting (
+    employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
+    month_start     DATE        NOT NULL, -- 対象月の1日
+    min_work_hours  INTEGER,             -- 最小労働時間（時）
+    max_work_hours  INTEGER,             -- 最大労働時間（時）
+    min_off_days    INTEGER,             -- 最小公休日数（日）
+    max_off_days    INTEGER,             -- 最大公休日数（日）
+    PRIMARY KEY (employee_code, month_start)
+);
+
 -- 従業員の曜日別勤務設定
 CREATE TABLE employee_weekly_preference (
     employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code),
@@ -360,16 +372,8 @@ INSERT INTO employee(
 
 -- 月次の最小・最大勤務時間は年月別テーブルで管理
 -- 各従業員・各月の時間(時)を保持する
-CREATE TABLE IF NOT EXISTS employee_monthly_hours_setting (
-    employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
-    month_start     DATE        NOT NULL, -- 対象月の1日
-    min_work_hours  INTEGER     NOT NULL,
-    max_work_hours  INTEGER     NOT NULL,
-    PRIMARY KEY (employee_code, month_start)
-);
-
 -- 例: 管理者のデフォルト月次設定（必要に応じて調整）
-INSERT INTO employee_monthly_hours_setting (employee_code, month_start, min_work_hours, max_work_hours)
+INSERT INTO employee_monthly_setting (employee_code, month_start, min_work_hours, max_work_hours, min_off_days, max_off_days)
 VALUES ('admin', date_trunc('month', CURRENT_DATE)::date, 0, 200)
 ON CONFLICT DO NOTHING;
 

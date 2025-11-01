@@ -102,4 +102,12 @@ public class EmployeeForm {
         private Integer[] maxHours = new Integer[12]; // 1月～12月の上限
     }
     private MonthlyHoursTableData monthlyHoursTable = new MonthlyHoursTableData();
+
+    // 月別公休日数設定（テーブル形式用）
+    @lombok.Data
+    public static class MonthlyOffdaysTableData {
+        private Integer[] minOffDays = new Integer[12]; // 1月～12月の公休日下限（日）
+        private Integer[] maxOffDays = new Integer[12]; // 1月～12月の公休日上限（日）
+    }
+    private MonthlyOffdaysTableData monthlyOffdaysTable = new MonthlyOffdaysTableData();
 }
