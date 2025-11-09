@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <title>シフトパターンマスタ</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-calendar2"></i> シフトパターンマスタ</h1>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">新規/更新</div>
+    <div class="card-body">
+      <form th:action="@{/settings/shift-patterns}" method="post" class="row g-2 align-items-end">
+        <div class="col-auto">
+          <label class="form-label">コード</label>
+          <input name="patternCode" class="form-control" placeholder="EARLY" required>
+        </div>
+        <div class="col-auto">
+          <label class="form-label">開始(HH:mm)</label>
+          <input name="startTime" type="time" class="form-control" step="900" required>
+        </div>
+        <div class="col-auto">
+          <label class="form-label">終了(HH:mm)</label>
+          <input name="endTime" type="time" class="form-control" step="900" required>
+        </div>
+        <div class="col-auto form-check form-switch">
+          <input class="form-check-input" type="checkbox" name="active" id="active" checked>
+          <label class="form-check-label" for="active">有効</label>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-primary"><i class="bi bi-save"></i> 保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">一覧</div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+        <tr>
+          <th>コード</th><th>開始</th><th>終了</th><th>有効</th><th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="p: ${patterns}">
+          <td th:text="${p.patternCode}"></td>
+          <td th:text="${#dates.format(p.startTime,'HH:mm')}"></td>
+          <td th:text="${#dates.format(p.endTime,'HH:mm')}"></td>
+          <td>
+            <span th:text="${p.active} ? '有効' : '無効'"></span>
+          </td>
+          <td>
+            <form th:action="@{/settings/shift-patterns/delete}" method="post" th:if="${p.patternCode}!=null">
+              <input type="hidden" name="patternCode" th:value="${p.patternCode}">
+              <button class="btn btn-sm btn-outline-danger" onclick="return confirm('削除しますか？')"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>

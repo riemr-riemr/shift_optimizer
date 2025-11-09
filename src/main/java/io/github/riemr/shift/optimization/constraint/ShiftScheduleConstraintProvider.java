@@ -6,6 +6,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQua
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.entity.WorkKind;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
@@ -55,12 +56,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             weeklyWorkHoursRange(factory),
             maxConsecutiveDays(factory),
             forbidRequestedDayOff(factory),
-            enforceLunchBreak(factory),
+            requireBreakWhenOver6h(factory),
             // 休憩の中央化（小さめの重みで誘導）
             preferCenteredBreak(factory),
             
             ensureWeeklyRestDays(factory),
             forbidWorkOnOffDays(factory),
+            forbidWorkOutsideShiftPatterns(factory),
             // MANDATORY曜日の未出勤検出（週・月の両面からチェック）
             enforceMandatoryWorkDaysWeekly(factory),
             enforceMandatoryWorkDaysMonthly(factory),
@@ -557,14 +559,46 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @param f 制約ファクトリ
      * @return 昼食休憩強制制約
      */
-    private Constraint enforceLunchBreak(ConstraintFactory f) {
+    private Constraint requireBreakWhenOver6h(ConstraintFactory f) {
+        // BreakAssignment を参照せず、同一日の勤務スロット間ギャップ >= 60分の有無で判定する
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
-                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ShiftAssignmentPlanningEntity::getShiftDate,
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
-                .filter((emp, date, list) -> exceedsSixHoursWithoutBreak(list))
+                // 合計が6時間超 かつ 60分以上の休憩ギャップが存在しない場合に違反
+                .filter((emp, date, list) -> totalWorkedMinutes(list) > 360 && !hasBreakAtLeast60(list))
                 .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("No 1h break");
+                .asConstraint("Require 60m break when > 6h (gap-based)");
+    }
+
+    // BreakAssignment を直接参照した「休憩中の勤務禁止」制約は一時的に無効化
+
+    /**
+     * シフトパターン外の勤務を禁止（ハード）。
+     * 該当日のパターン（曜日一致 or 曜日null）いずれにも収まらないスロット割当を禁止。
+     */
+    private Constraint forbidWorkOutsideShiftPatterns(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null)
+                .join(EmployeeShiftPattern.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeShiftPattern::getEmployeeCode),
+                        Joiners.filtering((sa, p) -> !Boolean.FALSE.equals(p.getActive())))
+                .groupBy((sa, p) -> sa, ConstraintCollectors.toList((sa, p) -> p))
+                .filter((sa, list) -> {
+                    var slotStart = sa.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+                    var slotEnd = sa.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+                    for (var p : list) {
+                        var ps = p.getStartTime().toLocalTime();
+                        var pe = p.getEndTime().toLocalTime();
+                        if ((slotStart.equals(ps) || slotStart.isAfter(ps)) && (slotEnd.isBefore(pe) || slotEnd.equals(pe))) {
+                            return false;
+                        }
+                    }
+                    return true;
+                })
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Assigned outside shift patterns (hard)");
     }
 
     /**
@@ -651,6 +685,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         }
         return false;
     }
+
+    // BreakAssignment を利用した重複チェックは無効化（エンティティ参照を排除）
 
     /**
      * 日次勤務者数最小化制約（ソフト制約）

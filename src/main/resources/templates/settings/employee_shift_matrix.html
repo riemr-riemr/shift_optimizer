@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <title>従業員シフトパターン一覧</title>
+  <style>
+    .matrix-cell { text-align:center; }
+    .matrix-cell .on { color:#0d6efd; font-weight:bold; }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-grid"></i> 従業員シフト一覧（行：従業員 / 列：パターン）</h1>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>マトリクス</div>
+      <button class="btn btn-sm btn-primary" type="submit" form="bulkFormBody">
+        <i class="bi bi-save"></i> 一括保存
+      </button>
+    </div>
+    <div class="card-body table-responsive">
+      <form th:action="@{/settings/employee-shift-matrix}" method="post" id="bulkFormBody">
+        <input type="hidden" name="bulk" value="1">
+      <table class="table table-sm table-bordered align-middle">
+        <thead>
+        <tr>
+          <th>従業員</th>
+          <th th:each="p: ${patterns}" th:text="${p.patternCode} + ' (' + ${#dates.format(p.startTime,'HH:mm')} + '-' + ${#dates.format(p.endTime,'HH:mm')} + ')' "></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="e: ${employees}">
+          <td th:text="${e.employeeCode} + ' ' + ${e.employeeName}"></td>
+          <td class="matrix-cell" th:each="p: ${patterns}">
+            <div th:with="link=${linkMap[e.employeeCode]?.get(p.patternCode)}">
+                <select class="form-select form-select-sm" th:name="${'p_' + e.employeeCode + '_' + p.patternCode}">
+                  <option th:value="0" th:selected="${link?.priority == 0}">×</option>
+                  <option th:value="1" th:selected="${link?.priority == 1}"></option>
+                  <option th:value="2" th:selected="${link?.priority == 2}">△</option>
+                  <option th:value="3" th:selected="${link?.priority == 3}">○</option>
+                  <option th:value="4" th:selected="${link?.priority == 4}">◎</option>
+                </select>
+            </div>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+      </form>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>

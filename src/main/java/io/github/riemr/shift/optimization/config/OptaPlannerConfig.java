@@ -45,7 +45,8 @@ public class OptaPlannerConfig {
         // Phase 設定（OptaPlanner API シグネチャに合わせる）
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
                 constructionHeuristicPhaseConfig(),
-                localSearchPhaseConfig()
+                relaxedLocalSearchPhase(), // フェーズ1: 緩めの受理で多様化
+                strictLocalSearchPhase()   // フェーズ2: タブーで収束
         ));
 
         return SolverFactory.create(solverConfig);
@@ -63,15 +64,13 @@ public class OptaPlannerConfig {
     }
 
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
+        // 単一のPlanning Entityクラスなのでデフォルト設定を使用
         return new ConstructionHeuristicPhaseConfig();
     }
 
-    private LocalSearchPhaseConfig localSearchPhaseConfig() {
+    private LocalSearchPhaseConfig strictLocalSearchPhase() {
         LocalSearchPhaseConfig ls = new LocalSearchPhaseConfig();
-        // TABU_SEARCHで探索性向上
         ls.setLocalSearchType(LocalSearchType.TABU_SEARCH);
-
-        // Change + Swap の複合ムーブで改善余地を広げる
         ChangeMoveSelectorConfig change = new ChangeMoveSelectorConfig();
         change.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(ShiftAssignmentPlanningEntity.class)
@@ -92,6 +91,23 @@ public class OptaPlannerConfig {
         union.setMoveSelectorList(java.util.Arrays.asList(change, swap));
 
         ls.setMoveSelectorConfig(union);
+        return ls;
+    }
+
+    private LocalSearchPhaseConfig relaxedLocalSearchPhase() {
+        LocalSearchPhaseConfig ls = new LocalSearchPhaseConfig();
+        ls.setLocalSearchType(LocalSearchType.LATE_ACCEPTANCE);
+        // 変更ムーブ中心（探索の多様化を優先）
+        ChangeMoveSelectorConfig change = new ChangeMoveSelectorConfig();
+        change.setEntitySelectorConfig(new EntitySelectorConfig()
+                .withEntityClass(ShiftAssignmentPlanningEntity.class)
+                .withSelectionOrder(SelectionOrder.RANDOM));
+        change.setValueSelectorConfig(new ValueSelectorConfig()
+                .withVariableName("assignedEmployee")
+                .withSelectionOrder(SelectionOrder.RANDOM));
+        ls.setMoveSelectorConfig(change);
+        // 後続フェーズがあるため、このフェーズ単体の終了条件を必須で設定
+        ls.setTerminationConfig(new TerminationConfig().withSpentLimit(solverSpentLimit.dividedBy(2)));
         return ls;
     }
 }

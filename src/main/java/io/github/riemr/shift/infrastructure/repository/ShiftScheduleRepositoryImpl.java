@@ -47,6 +47,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final DepartmentMasterMapper departmentMasterMapper;
     private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
     private final EmployeeMonthlySettingMapper employeeMonthlySettingMapper;
+    private final EmployeeShiftPatternMapper employeeShiftPatternMapper;
 
     /*
      * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
@@ -108,6 +109,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         // 従業員の月次勤務時間設定（対象月）
         java.util.Date monthStartDate = java.sql.Date.valueOf(cycleStart.withDayOfMonth(1));
         List<EmployeeMonthlySetting> monthlySettings = employeeMonthlySettingMapper.selectByMonth(monthStartDate);
+        List<EmployeeShiftPattern> shiftPatterns = employeeShiftPatternMapper.selectAllActive();
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -189,6 +191,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeWeeklyPreferenceList(weeklyPreferences);
         schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
         schedule.setEmployeeMonthlySettingList(monthlySettings);
+        schedule.setEmployeeShiftPatternList(shiftPatterns);
         return schedule;
     }
 

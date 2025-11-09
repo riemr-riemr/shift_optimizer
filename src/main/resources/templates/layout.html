@@ -223,6 +223,24 @@
                         従業員個人シフト
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)}">
+                    <a th:href="@{/settings/employee-shift-matrix}">
+                        <i class="bi bi-grid"></i>
+                        従業員シフト一覧
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)}">
+                    <a th:href="@{/skills}">
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        レジ担当一覧
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)}">
+                    <a th:href="@{/skills/tasks}">
+                        <i class="bi bi-grid"></i>
+                        作業担当一覧
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_PLAN)}">
                     <a th:href="@{/tasks/plan}">
                         <i class="bi bi-calendar-week"></i>
@@ -253,6 +271,12 @@
                         作業マスタ
                     </a>
                 </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)}">
+                    <a th:href="@{/settings/shift-patterns}">
+                        <i class="bi bi-calendar2"></i>
+                        シフトパターンマスタ
+                    </a>
+                </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
                     <a th:href="@{/tasks/categories}">
                         <i class="bi bi-tags"></i>
@@ -281,18 +305,6 @@
                     <a th:href="@{/masters/register}">
                         <i class="bi bi-cash-coin"></i>
                         レジマスタ
-                    </a>
-                </li>
-                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SKILL_MATRIX)}">
-                    <a th:href="@{/skills}">
-                        <i class="bi bi-grid-3x3-gap"></i>
-                        レジ担当一覧
-                    </a>
-                </li>
-                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)}">
-                    <a th:href="@{/skills/tasks}">
-                        <i class="bi bi-grid"></i>
-                        作業担当一覧
                     </a>
                 </li>
 

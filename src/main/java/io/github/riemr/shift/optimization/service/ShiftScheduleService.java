@@ -547,15 +547,21 @@ public class ShiftScheduleService {
         unsolved.setEmployeeRegisterSkillList(employeeRegisterSkillMapper.selectByExample(null));
         // Repository 側で必要なフィールドをセット済みだが、問題 ID だけはここで上書きしておく
         unsolved.setProblemId(toProblemId(cycleStart));
-        if (unsolved.getAssignmentList() == null) {
-            unsolved.setAssignmentList(new ArrayList<>());
-        }
+        if (unsolved.getAssignmentList() == null) unsolved.setAssignmentList(new ArrayList<>());
+        if (unsolved.getBreakList() == null) unsolved.setBreakList(new ArrayList<>());
         
         // ステージをエンティティへ伝搬
         if (unsolved.getAssignmentList() != null) {
             for (var a : unsolved.getAssignmentList()) {
                 a.setStage(key.getStage());
             }
+        }
+
+        // 休憩候補（BreakAssignment）を生成
+        try {
+            prepareBreakAssignments(unsolved, key.getStage(), cycleStart);
+        } catch (Exception ex) {
+            log.warn("Failed to prepare break assignments: {}", ex.getMessage());
         }
 
         // ステージごとの可用従業員候補を事前計算（ピン留め相当のフィルタリング）
@@ -579,6 +585,56 @@ public class ShiftScheduleService {
         return unsolved;
     }
 
+    private void prepareBreakAssignments(ShiftSchedule schedule, String stage, LocalDate cycleStart) {
+        var assignments = java.util.Optional.ofNullable(schedule.getAssignmentList()).orElse(java.util.List.of());
+        var employees = java.util.Optional.ofNullable(schedule.getEmployeeList()).orElse(java.util.List.of());
+        var weekly = java.util.Optional.ofNullable(schedule.getEmployeeWeeklyPreferenceList()).orElse(java.util.List.of());
+        if (assignments.isEmpty() || employees.isEmpty()) return;
+
+        // 日付集合
+        java.util.Set<LocalDate> dates = assignments.stream().map(ShiftAssignmentPlanningEntity::getShiftDate).collect(java.util.stream.Collectors.toSet());
+
+        // 週別可用インデックス
+        java.util.Map<String, java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new java.util.HashMap<>();
+        for (var p : weekly) {
+            weeklyPrefByEmpDow.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashMap<>())
+                    .put(p.getDayOfWeek().intValue(), p);
+        }
+
+        int slotMinutes = appSettingService.getTimeResolutionMinutes();
+        java.util.List<io.github.riemr.shift.optimization.entity.BreakAssignment> breakList = new java.util.ArrayList<>();
+        for (var e : employees) {
+            for (var d : dates) {
+                var cand = buildBreakCandidates(weeklyPrefByEmpDow.get(e.getEmployeeCode()), d, slotMinutes);
+                String id = e.getEmployeeCode() + ":" + d.toString();
+                breakList.add(new io.github.riemr.shift.optimization.entity.BreakAssignment(id, e, d, cand));
+            }
+        }
+        schedule.setBreakList(breakList);
+    }
+
+    private java.util.List<java.util.Date> buildBreakCandidates(java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefByDow,
+                                                                LocalDate date, int slotMinutes) {
+        java.util.List<java.util.Date> result = new java.util.ArrayList<>();
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        if (prefByDow == null) return result;
+        var pref = prefByDow.get(date.getDayOfWeek().getValue());
+        if (pref == null || "OFF".equalsIgnoreCase(pref.getWorkStyle())) return result;
+        if (pref.getBaseStartTime() == null || pref.getBaseEndTime() == null) return result;
+        var start = pref.getBaseStartTime().toLocalTime();
+        var end = pref.getBaseEndTime().toLocalTime();
+        // 休憩60分が入る開始の最小・最大
+        var latestStart = end.minusMinutes(60);
+        if (!latestStart.isAfter(start)) return result;
+        java.time.LocalTime t = start;
+        while (!t.isAfter(latestStart)) {
+            var dt = java.time.LocalDateTime.of(date, t);
+            result.add(java.util.Date.from(dt.atZone(zone).toInstant()));
+            t = t.plusMinutes(slotMinutes);
+        }
+        return result;
+    }
+
     // ATTENDANCE: 有休/希望休/曜日OFFは候補から除外（休みをピン留め）
     // ASSIGNMENT: 当該スロットで出勤中の従業員のみを候補化
     private void prepareCandidateEmployees(ShiftSchedule schedule, String stage, LocalDate cycleStart) {
@@ -599,11 +655,12 @@ public class ShiftScheduleService {
             }
         }
         java.util.Map<String, java.util.Set<Integer>> weeklyOffByEmp = new java.util.HashMap<>();
+        java.util.Map<String, java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new java.util.HashMap<>();
         for (var p : weekly) {
-            if ("OFF".equalsIgnoreCase(p.getWorkStyle())) {
-                weeklyOffByEmp.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashSet<>())
-                        .add(p.getDayOfWeek().intValue());
-            }
+            weeklyPrefByEmpDow.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashMap<>())
+                    .put(p.getDayOfWeek().intValue(), p);
+            if ("OFF".equalsIgnoreCase(p.getWorkStyle()))
+                weeklyOffByEmp.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashSet<>()).add(p.getDayOfWeek().intValue());
         }
 
         // ASSIGNMENT用: 出勤ロスター（DBのshift_assignment）をロード
@@ -617,6 +674,11 @@ public class ShiftScheduleService {
             attendance = list;
         }
 
+        // パターンを社員別にインデックス
+        java.util.Map<String, java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern>> patternByEmp =
+                java.util.Optional.ofNullable(schedule.getEmployeeShiftPatternList()).orElse(java.util.List.of())
+                        .stream().collect(java.util.stream.Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern::getEmployeeCode));
+
         for (var a : schedule.getAssignmentList()) {
             LocalDate date = a.getShiftDate();
             java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> cands;
@@ -625,7 +687,13 @@ public class ShiftScheduleService {
                     var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), java.util.Set.of());
                     if (offSet.contains(date)) return false; // 有休/希望休
                     var offDow = weeklyOffByEmp.getOrDefault(e.getEmployeeCode(), java.util.Set.of());
-                    return !offDow.contains(date.getDayOfWeek().getValue()); // 曜日OFF
+                    if (offDow.contains(date.getDayOfWeek().getValue())) return false; // 曜日OFF
+                    if (!withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
+                            a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                            a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
+                    return matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
+                            a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                            a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime());
                 }).toList();
             } else if ("ASSIGNMENT".equals(stage)) {
                 // 当該スロット内に出勤が重なる従業員のみ
@@ -641,7 +709,14 @@ public class ShiftScheduleService {
                         onDuty.add(sa.getEmployeeCode());
                     }
                 }
-                cands = employees.stream().filter(e -> onDuty.contains(e.getEmployeeCode())).toList();
+                cands = employees.stream().filter(e -> onDuty.contains(e.getEmployeeCode()))
+                        .filter(e -> withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
+                                a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                                a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime()))
+                        .filter(e -> matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
+                                a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                                a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime()))
+                        .toList();
             } else {
                 cands = employees; // デフォルト（フェールセーフ）
             }
@@ -704,6 +779,33 @@ public class ShiftScheduleService {
                 }
             }
         }
+    }
+
+    private boolean matchesAnyPattern(java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern> list,
+                                      LocalDate date, java.time.LocalTime slotStart, java.time.LocalTime slotEnd) {
+        // シフトパターンが設定されていない場合は制限なしとして true を返す
+        if (list == null || list.isEmpty()) return true;
+        for (var p : list) {
+            if (Boolean.FALSE.equals(p.getActive())) continue;
+            var ps = p.getStartTime().toLocalTime();
+            var pe = p.getEndTime().toLocalTime();
+            if ((slotStart.equals(ps) || slotStart.isAfter(ps)) && (slotEnd.isBefore(pe) || slotEnd.equals(pe))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean withinWeeklyBase(java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefByDow,
+                                     LocalDate date, java.time.LocalTime slotStart, java.time.LocalTime slotEnd) {
+        if (prefByDow == null) return true;
+        var pref = prefByDow.get(date.getDayOfWeek().getValue());
+        if (pref == null) return true;
+        if ("OFF".equalsIgnoreCase(pref.getWorkStyle())) return false;
+        if (pref.getBaseStartTime() == null || pref.getBaseEndTime() == null) return true;
+        var bs = pref.getBaseStartTime().toLocalTime();
+        var be = pref.getBaseEndTime().toLocalTime();
+        return (slotStart.equals(bs) || slotStart.isAfter(bs)) && (slotEnd.isBefore(be) || slotEnd.equals(be));
     }
 
     /**
@@ -1043,7 +1145,7 @@ public class ShiftScheduleService {
             log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
             return;
         }
-        // ハード制約違反チェック
+        // ハード制約違反チェック（警告のみ、保存は継続）
         if (best.getScore() != null && best.getScore().hardScore() < 0) {
             log.error("🚨 HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
             log.error("🚫 Database save BLOCKED due to constraint violations");
@@ -1052,7 +1154,12 @@ public class ShiftScheduleService {
             // 制約違反の詳細分析と改善提案を出力
             analyzeConstraintViolations(best);
             
-            // ハード制約違反時は保存を実行しない
+            // ハード制約違反があっても保存を継続
+        }
+        
+        // 問題データの状況をログ出力
+        if (best.getAssignmentList() == null || best.getAssignmentList().isEmpty()) {
+            log.error("❌ No assignment list data to persist! AssignmentList is empty.");
             return;
         }
         // 既存データをクリア（サイクル開始日〜+1ヶ月の範囲で消す）

@@ -8,10 +8,12 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.BreakAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -93,11 +95,19 @@ public class ShiftSchedule {
     @ProblemFactCollectionProperty
     private List<EmployeeMonthlySetting> employeeMonthlySettingList = new java.util.ArrayList<>();
 
+    /** 従業員のシフトパターン（優先順位つき） */
+    @ProblemFactCollectionProperty
+    private List<EmployeeShiftPattern> employeeShiftPatternList = new java.util.ArrayList<>();
+
     /* === Planning entities === */
 
     /** 15分×レジ × 日付 × シフトを割り当てる単位 */
     @PlanningEntityCollectionProperty
     private List<ShiftAssignmentPlanningEntity> assignmentList;
+
+    /** 従業員×日ごとの60分休憩（現在は問題事実として保持） */
+    @ProblemFactCollectionProperty
+    private List<BreakAssignment> breakList;
 
     /* === Score === */
 
@@ -124,7 +134,9 @@ public class ShiftSchedule {
                          List<EmployeeDepartmentSkill> employeeDepartmentSkillList,
                          List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList,
                          List<EmployeeMonthlySetting> employeeMonthlySettingList,
-                         List<ShiftAssignmentPlanningEntity> assignmentList) {
+                         List<EmployeeShiftPattern> employeeShiftPatternList,
+                         List<ShiftAssignmentPlanningEntity> assignmentList,
+                         List<BreakAssignment> breakList) {
         this.problemId = problemId;
         this.month = month;
         this.storeCode = storeCode;
@@ -140,6 +152,8 @@ public class ShiftSchedule {
         this.employeeDepartmentSkillList = employeeDepartmentSkillList;
         this.employeeWeeklyPreferenceList = employeeWeeklyPreferenceList;
         this.employeeMonthlySettingList = employeeMonthlySettingList;
+        this.employeeShiftPatternList = employeeShiftPatternList;
         this.assignmentList = assignmentList;
+        this.breakList = breakList;
     }
 }

@@ -127,15 +127,34 @@ CREATE TABLE employee (
 
 -- 従業員の月次公休日数設定（最小・最大）
 -- 従業員の月次設定を集約（労働時間・公休日数）
-CREATE TABLE IF NOT EXISTS employee_monthly_setting (
+-- 月次設定は労働時間/公休日数で分離し、互換ビューで集約
+CREATE TABLE IF NOT EXISTS employee_monthly_hours_setting (
     employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
     month_start     DATE        NOT NULL, -- 対象月の1日
-    min_work_hours  INTEGER,             -- 最小労働時間（時）
-    max_work_hours  INTEGER,             -- 最大労働時間（時）
-    min_off_days    INTEGER,             -- 最小公休日数（日）
-    max_off_days    INTEGER,             -- 最大公休日数（日）
+    min_work_hours  INTEGER,
+    max_work_hours  INTEGER,
     PRIMARY KEY (employee_code, month_start)
 );
+
+CREATE TABLE IF NOT EXISTS employee_monthly_offdays_setting (
+    employee_code   VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
+    month_start     DATE        NOT NULL,
+    min_off_days    INTEGER,
+    max_off_days    INTEGER,
+    PRIMARY KEY (employee_code, month_start)
+);
+
+CREATE OR REPLACE VIEW employee_monthly_setting AS
+SELECT 
+  COALESCE(h.employee_code, o.employee_code) AS employee_code,
+  COALESCE(h.month_start,  o.month_start)    AS month_start,
+  h.min_work_hours,
+  h.max_work_hours,
+  o.min_off_days,
+  o.max_off_days
+FROM employee_monthly_hours_setting h
+FULL OUTER JOIN employee_monthly_offdays_setting o
+  ON h.employee_code = o.employee_code AND h.month_start = o.month_start;
 
 -- 従業員の曜日別勤務設定
 CREATE TABLE employee_weekly_preference (
@@ -150,6 +169,25 @@ CREATE TABLE employee_weekly_preference (
     PRIMARY KEY (employee_code, day_of_week),
     CHECK ( (work_style = 'OFF' AND base_start_time IS NULL AND base_end_time IS NULL) OR (work_style <> 'OFF') )
 );
+
+-- シフトパターン（開始〜終了、曜日、活性）
+CREATE TABLE IF NOT EXISTS shift_pattern (
+    pattern_code   VARCHAR(32) PRIMARY KEY,
+    start_time     TIME        NOT NULL,
+    end_time       TIME        NOT NULL,
+    active         BOOLEAN     NOT NULL DEFAULT TRUE
+);
+
+-- 従業員×シフトパターン（多対多、中間）
+CREATE TABLE IF NOT EXISTS employee_shift_pattern (
+    employee_code  VARCHAR(10) NOT NULL REFERENCES employee(employee_code) ON DELETE CASCADE,
+    pattern_code   VARCHAR(32) NOT NULL REFERENCES shift_pattern(pattern_code) ON DELETE CASCADE,
+    priority       SMALLINT,
+    active         BOOLEAN     NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (employee_code, pattern_code),
+    CHECK (priority IS NULL OR (priority BETWEEN 0 AND 4))
+);
+CREATE INDEX IF NOT EXISTS idx_emp_shift_pattern_emp ON employee_shift_pattern(employee_code);
 
 -- ------------------------------------------------
 -- 5. employee_register_skill : 従業員×レジ習熟度
@@ -373,7 +411,7 @@ INSERT INTO employee(
 -- 月次の最小・最大勤務時間は年月別テーブルで管理
 -- 各従業員・各月の時間(時)を保持する
 -- 例: 管理者のデフォルト月次設定（必要に応じて調整）
-INSERT INTO employee_monthly_setting (employee_code, month_start, min_work_hours, max_work_hours, min_off_days, max_off_days)
+INSERT INTO employee_monthly_hours_setting (employee_code, month_start, min_work_hours, max_work_hours)
 VALUES ('admin', date_trunc('month', CURRENT_DATE)::date, 0, 200)
 ON CONFLICT DO NOTHING;
 
