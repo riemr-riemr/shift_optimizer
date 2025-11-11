@@ -248,8 +248,8 @@
   </update>
 
   <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
-    insert into public.shift_assignment (shift_id, store_code, employee_code, start_at, end_at, created_by)
-    values (#{shiftId,jdbcType=BIGINT}, #{storeCode,jdbcType=VARCHAR}, #{employeeCode,jdbcType=VARCHAR}, 
+    insert into public.shift_assignment (store_code, employee_code, start_at, end_at, created_by)
+    values (#{storeCode,jdbcType=VARCHAR}, #{employeeCode,jdbcType=VARCHAR}, 
             #{startAt,jdbcType=TIMESTAMP}, #{endAt,jdbcType=TIMESTAMP}, #{createdBy,jdbcType=VARCHAR})
     on conflict (store_code, employee_code, start_at) do update set
       end_at = excluded.end_at,

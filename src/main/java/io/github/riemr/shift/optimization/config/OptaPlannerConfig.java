@@ -1,8 +1,11 @@
 package io.github.riemr.shift.optimization.config;
 
 import io.github.riemr.shift.optimization.constraint.ShiftScheduleConstraintProvider;
+import io.github.riemr.shift.optimization.constraint.AttendanceConstraintProvider;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import org.optaplanner.core.api.solver.SolverFactory;
 import org.optaplanner.core.api.solver.SolverManager;
 import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicPhaseConfig;
@@ -13,6 +16,7 @@ import org.optaplanner.core.config.heuristic.selector.common.SelectionOrder;
 import org.optaplanner.core.config.localsearch.LocalSearchPhaseConfig;
 import org.optaplanner.core.config.localsearch.LocalSearchType;
 import org.optaplanner.core.config.phase.PhaseConfig;
+// pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
 import org.optaplanner.core.config.solver.termination.TerminationConfig;
@@ -59,6 +63,31 @@ public class OptaPlannerConfig {
         return SolverManager.create(solverFactory);
     }
 
+    // ATTENDANCE（パターン単位）用ソルバー
+    @Bean
+    public SolverFactory<AttendanceSolution> attendanceSolverFactory() {
+        SolverConfig solverConfig = new SolverConfig()
+                .withSolutionClass(AttendanceSolution.class)
+                .withEntityClasses(DailyPatternAssignmentEntity.class)
+                .withTerminationConfig(terminationConfig());
+
+        solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
+                .withConstraintProviderClass(AttendanceConstraintProvider.class));
+
+        // ATTENDANCE は標準の CH + LS（デフォルトムーブ = Change）を使用
+        solverConfig.setPhaseConfigList(List.of(
+                new ConstructionHeuristicPhaseConfig(),
+                new LocalSearchPhaseConfig()
+        ));
+        return SolverFactory.create(solverConfig);
+    }
+
+    @Bean
+    public SolverManager<AttendanceSolution, io.github.riemr.shift.optimization.service.ProblemKey> attendanceSolverManager(
+            SolverFactory<AttendanceSolution> solverFactory) {
+        return SolverManager.create(solverFactory);
+    }
+
     private TerminationConfig terminationConfig() {
         return new TerminationConfig().withSpentLimit(solverSpentLimit);
     }
@@ -80,14 +109,13 @@ public class OptaPlannerConfig {
                 .withSelectionOrder(SelectionOrder.RANDOM);
         change.setValueSelectorConfig(valueSelector);
 
+        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig union =
+                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
         org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig swap =
                 new org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig();
         swap.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(ShiftAssignmentPlanningEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
-
-        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig union =
-                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
         union.setMoveSelectorList(java.util.Arrays.asList(change, swap));
 
         ls.setMoveSelectorConfig(union);

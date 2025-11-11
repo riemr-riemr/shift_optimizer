@@ -184,11 +184,9 @@ public class TaskPlanService {
     public int generate(String storeCode, LocalDate from, LocalDate to, String createdBy) {
         int created = 0;
         ZoneId zone = ZoneId.systemDefault();
-        Date fromDate = Date.from(from.atStartOfDay(zone).toInstant());
-        Date toDate = Date.from(to.atStartOfDay(zone).toInstant());
 
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            short dow = (short) d.getDayOfWeek().getValue(); // ISO 1..7
+            short dow = (short) d.getDayOfWeek().getValue();
             List<TaskPlan> plans = planRepository.listWeeklyEffective(storeCode, dow, Date.from(d.atStartOfDay(zone).toInstant()));
 
             for (TaskPlan p : plans) {

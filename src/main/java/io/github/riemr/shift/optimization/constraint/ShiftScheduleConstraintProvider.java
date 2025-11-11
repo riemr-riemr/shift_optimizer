@@ -68,6 +68,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             enforceMandatoryWorkDaysMonthly(factory),
             forbidWorkOutsideBaseHours(factory),
             // ATTENDANCE: 最大連勤6日（7日以上は禁止）
+            // 連勤上限は候補生成側での事前フィルタに加えてハード制約でも担保
             maxConsecutiveDaysAttendanceHard(factory),
 
             // Soft constraints (stage-aware)
