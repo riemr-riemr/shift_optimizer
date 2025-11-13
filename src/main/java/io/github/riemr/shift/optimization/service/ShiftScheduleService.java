@@ -83,6 +83,7 @@ public class ShiftScheduleService {
     /* === Settings === */
     @Value("${shift.solver.spent-limit:PT5M}") // ISO‑8601 Duration (default 5 minutes)
     private Duration spentLimit;
+    // 終了条件（未改善時間）は OptaPlanner の TerminationConfig で設定
 
     /* === Runtime State === */
     private final Map<ProblemKey, Instant> startMap = new ConcurrentHashMap<>();
@@ -90,6 +91,7 @@ public class ShiftScheduleService {
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
     // 開発者向け: スコア推移の時系列
     private final Map<ProblemKey, List<io.github.riemr.shift.application.dto.ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
+    // 進行状況可視化用のスコア系列のみ保持
 
     /* ===================================================================== */
     /* Public API                                                            */
@@ -255,6 +257,7 @@ public class ShiftScheduleService {
                     },
                     this::onError);
             jobMap.put(key, job);
+            // 未改善による早期終了は TerminationConfig に委譲
 
             // 最終ベストのみ保存
             new Thread(() -> {
@@ -279,6 +282,7 @@ public class ShiftScheduleService {
                     },
                     this::onError);
             jobMap.put(key, job);
+            // 未改善による早期終了は TerminationConfig に委譲
 
             // 最終ベストのみ保存
             new Thread(() -> {
@@ -393,6 +397,7 @@ public class ShiftScheduleService {
         long now = System.currentTimeMillis();
         scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
                 .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        // 改善検出は OptaPlanner の終了条件に委譲（記録のみ）
         // keep last 1000 points to bound memory
         var list = scoreSeriesMap.get(key);
         if (list.size() > 1000) {
@@ -409,11 +414,14 @@ public class ShiftScheduleService {
         long now = System.currentTimeMillis();
         scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
                 .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        // 改善検出は OptaPlanner の終了条件に委譲（記録のみ）
         var list = scoreSeriesMap.get(key);
         if (list.size() > 1000) {
             list.subList(0, list.size() - 1000).clear();
         }
     }
+
+    // 早期終了（未改善）は OptaPlanner の TerminationConfig.withUnimprovedScoreSpentLimit に委譲
 
     /**
      * 開発者向け: 最適化過程のスコア推移時系列データを取得する。

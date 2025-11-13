@@ -32,6 +32,8 @@ public class OptaPlannerConfig {
     // アプリ設定と揃えるため同じキーを参照（デフォルト: PT5M に統一）
     @org.springframework.beans.factory.annotation.Value("${shift.solver.spent-limit:PT5M}")
     private Duration solverSpentLimit;
+    @org.springframework.beans.factory.annotation.Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
+    private Duration unimprovedScoreLimit;
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverFactory.class)
@@ -89,7 +91,12 @@ public class OptaPlannerConfig {
     }
 
     private TerminationConfig terminationConfig() {
-        return new TerminationConfig().withSpentLimit(solverSpentLimit);
+        TerminationConfig t = new TerminationConfig().withSpentLimit(solverSpentLimit);
+        if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
+            // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
+            t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
+        }
+        return t;
     }
 
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
