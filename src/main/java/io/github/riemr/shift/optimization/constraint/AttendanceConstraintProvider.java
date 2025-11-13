@@ -81,6 +81,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .ifNotExists(EmployeeShiftPattern.class,
                         Joiners.equal(e -> e.getAssignedEmployee().getEmployeeCode(), EmployeeShiftPattern::getEmployeeCode),
                         Joiners.filtering((e, p) -> !Boolean.FALSE.equals(p.getActive())
+                                && p.getPriority() != null && p.getPriority().intValue() >= 2
                                 && p.getStartTime().toLocalTime().equals(e.getPatternStart())
                                 && p.getEndTime().toLocalTime().equals(e.getPatternEnd())))
                 .penalize(HardSoftScore.ONE_HARD)

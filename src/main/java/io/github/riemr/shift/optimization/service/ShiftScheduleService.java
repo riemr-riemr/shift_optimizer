@@ -910,10 +910,13 @@ public class ShiftScheduleService {
         }
 
         // パターン時間帯の重複（同時刻の開始/終了が複数従業員に跨る）を除外し、時間窓のユニーク集合を作る
+        // ただし priority が 0,1 のパターンは「割当不可」として窓生成の対象外にする（>=2 のみ採用）
         java.util.LinkedHashSet<String> windowKeys = new java.util.LinkedHashSet<>();
         List<java.time.LocalTime[]> windows = new java.util.ArrayList<>();
         for (var p : patterns) {
             if (Boolean.FALSE.equals(p.getActive())) continue;
+            Short prio = p.getPriority();
+            if (prio == null || prio.intValue() < 2) continue; // priority 0,1 は除外
             var ps = p.getStartTime().toLocalTime();
             var pe = p.getEndTime().toLocalTime();
             String key = ps + "_" + pe;
@@ -976,9 +979,10 @@ public class ShiftScheduleService {
         List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> list = new java.util.ArrayList<>();
         for (var e : employees) {
             String code = e.getEmployeeCode();
-            // パターン境界完全一致
+            // パターン境界完全一致 かつ priority >= 2
             boolean hasPattern = pattByEmp.getOrDefault(code, List.of()).stream()
                     .anyMatch(p -> !Boolean.FALSE.equals(p.getActive())
+                            && p.getPriority() != null && p.getPriority().intValue() >= 2
                             && p.getStartTime().toLocalTime().equals(ps)
                             && p.getEndTime().toLocalTime().equals(pe));
             if (!hasPattern) continue;
@@ -1696,7 +1700,7 @@ public class ShiftScheduleService {
             log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
             return;
         }
-        // ハード制約違反チェック（警告のみ、保存は継続）
+        // ハード制約違反チェック（保存ブロック）
         if (best.getScore() != null && best.getScore().hardScore() < 0) {
             log.error("🚨 HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
             log.error("🚫 Database save BLOCKED due to constraint violations");
@@ -1704,8 +1708,8 @@ public class ShiftScheduleService {
             
             // 制約違反の詳細分析と改善提案を出力
             analyzeConstraintViolations(best);
-            
-            // ハード制約違反があっても保存を継続
+            // ハード制約違反がある場合は既存データの削除や保存を行わない
+            return;
         }
         
         // 問題データの状況をログ出力
