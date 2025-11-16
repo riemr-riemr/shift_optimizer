@@ -76,10 +76,42 @@ public class OptaPlannerConfig {
         solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
                 .withConstraintProviderClass(AttendanceConstraintProvider.class));
 
-        // ATTENDANCE は標準の CH + LS（デフォルトムーブ = Change）を使用
+        // ATTENDANCE: CH + LS（第1段: LATE_ACCEPTANCE で多様化, 第2段: TABU_SEARCH で収束）
+        // 共通のムーブ（Change + Swap）
+        ChangeMoveSelectorConfig aChange = new ChangeMoveSelectorConfig();
+        aChange.setEntitySelectorConfig(new EntitySelectorConfig()
+                .withEntityClass(DailyPatternAssignmentEntity.class)
+                .withSelectionOrder(SelectionOrder.RANDOM));
+        aChange.setValueSelectorConfig(new ValueSelectorConfig()
+                .withVariableName("assignedEmployee")
+                .withSelectionOrder(SelectionOrder.RANDOM));
+        org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig aSwap =
+                new org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig();
+        aSwap.setEntitySelectorConfig(new EntitySelectorConfig()
+                .withEntityClass(DailyPatternAssignmentEntity.class)
+                .withSelectionOrder(SelectionOrder.RANDOM));
+        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig aUnion =
+                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
+        aUnion.setMoveSelectorList(java.util.Arrays.asList(aChange, aSwap));
+
+        // フェーズ1: LATE_ACCEPTANCE（悪化も一定受理して停滞回避）
+        LocalSearchPhaseConfig alsDiversify = new LocalSearchPhaseConfig();
+        alsDiversify.setLocalSearchType(LocalSearchType.LATE_ACCEPTANCE);
+        alsDiversify.setMoveSelectorConfig(aUnion);
+        // 先行フェーズには必ずフェーズ終了条件が必要（全体終了条件だけでは到達不能エラーになる）
+        alsDiversify.setTerminationConfig(new TerminationConfig().withSpentLimit(solverSpentLimit.dividedBy(2)));
+        //（デフォルト設定の Late Acceptance を使用）
+
+        // フェーズ2: TABU_SEARCH（重複探索を避けつつ収束）
+        LocalSearchPhaseConfig alsConverge = new LocalSearchPhaseConfig();
+        alsConverge.setLocalSearchType(LocalSearchType.TABU_SEARCH);
+        alsConverge.setMoveSelectorConfig(aUnion);
+        //（デフォルト設定の Tabu 構成を使用）
+
         solverConfig.setPhaseConfigList(List.of(
                 new ConstructionHeuristicPhaseConfig(),
-                new LocalSearchPhaseConfig()
+                alsDiversify,
+                alsConverge
         ));
         return SolverFactory.create(solverConfig);
     }
