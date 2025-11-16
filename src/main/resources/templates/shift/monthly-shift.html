@@ -593,7 +593,7 @@
                 console.log('Optimization ticket received:', ticket);
                 optimizationTicket = ticket;
                 
-                if (!ticket || !ticket.problemId) {
+                if (!ticket || !ticket.ticketId) {
                     throw new Error('Invalid ticket received: ' + JSON.stringify(ticket));
                 }
                 
@@ -645,19 +645,19 @@
         }
         
         function checkOptimizationStatus() {
-            if (!optimizationTicket || !optimizationTicket.problemId) {
+            if (!optimizationTicket || !optimizationTicket.ticketId) {
                 console.error('Invalid optimization ticket:', optimizationTicket);
                 clearInterval(statusCheckInterval);
                 showError('最適化チケットが無効です');
                 return;
             }
             
-            console.log('Checking status for ticket ID:', optimizationTicket.problemId);
+            console.log('Checking status for ticket ID:', optimizationTicket.ticketId);
             
             const storeCode = document.getElementById('storeCode').value;
             const departmentCode = document.getElementById('departmentCode').value;
             const stage = window.__currentOptimizationStage || '';
-            fetch(`/shift/api/calc/status/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}&stage=${encodeURIComponent(stage)}`)
+            fetch(`/shift/api/calc/status/${optimizationTicket.ticketId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}&stage=${encodeURIComponent(stage)}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -775,8 +775,8 @@
         function appendScorePointTick(){
             const storeCode = document.getElementById('storeCode').value;
             const departmentCode = document.getElementById('departmentCode').value || '';
-            if (!optimizationTicket || !optimizationTicket.problemId) return;
-            const url = `/shift/api/calc/score-series/${optimizationTicket.problemId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`;
+            if (!optimizationTicket || !optimizationTicket.ticketId) return;
+            const url = `/shift/api/calc/score-series/${optimizationTicket.ticketId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`;
             fetch(url)
                 .then(r => r.ok ? r.json() : [])
                 .then(list => {

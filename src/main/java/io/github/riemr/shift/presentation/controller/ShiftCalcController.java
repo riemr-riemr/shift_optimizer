@@ -150,7 +150,7 @@ public class ShiftCalcController {
 
     @GetMapping("/api/calc/status/{id}")
     @ResponseBody
-    public SolveStatusDto status(@PathVariable("id") Long id,
+    public SolveStatusDto status(@PathVariable("id") String id,
                                  @RequestParam("storeCode") String storeCode,
                                  @RequestParam("departmentCode") String departmentCode,
                                  @RequestParam(value = "stage", required = false) String stage) {
@@ -161,7 +161,7 @@ public class ShiftCalcController {
 
     @GetMapping("/api/calc/result/{id}")
     @ResponseBody
-    public List<ShiftAssignmentView> result(@PathVariable("id") Long id,
+    public List<ShiftAssignmentView> result(@PathVariable("id") String id,
                                             @RequestParam("storeCode") String storeCode,
                                             @RequestParam("departmentCode") String departmentCode,
                                             @RequestParam(value = "stage", required = false) String stage) {
@@ -173,7 +173,7 @@ public class ShiftCalcController {
     // 開発者向け: スコア推移を返す
     @GetMapping("/api/calc/score-series/{id}")
     @ResponseBody
-    public List<io.github.riemr.shift.application.dto.ScorePoint> scoreSeries(@PathVariable("id") Long id,
+    public List<io.github.riemr.shift.application.dto.ScorePoint> scoreSeries(@PathVariable("id") String id,
                                                                               @RequestParam("storeCode") String storeCode,
                                                                               @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         return service.getScoreSeries(id, storeCode, departmentCode);

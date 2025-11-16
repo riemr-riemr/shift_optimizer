@@ -92,6 +92,10 @@ public class ShiftScheduleService {
     // 開発者向け: スコア推移の時系列
     private final Map<ProblemKey, List<io.github.riemr.shift.application.dto.ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
     // 進行状況可視化用のスコア系列のみ保持
+    // UUIDチケット -> ProblemKey の対応
+    private final Map<String, ProblemKey> ticketKeyMap = new ConcurrentHashMap<>();
+    // ProblemKey -> 代表チケットID（同一キーの再実行は同一ticketIdを返す）
+    private final Map<ProblemKey, String> keyTicketMap = new ConcurrentHashMap<>();
 
     /* ===================================================================== */
     /* Public API                                                            */
@@ -174,7 +178,7 @@ public class ShiftScheduleService {
      * @return 最適化ジョブの制御チケット
      */
     private SolveTicket startSolveInternal(LocalDate month, String storeCode, String departmentCode, String stage) {
-        long problemId = toProblemId(month);
+        String ticketId = java.util.UUID.randomUUID().toString();
         ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month, stage);
 
         // 事前準備処理を最適化サービス内で同期実行
@@ -226,7 +230,12 @@ public class ShiftScheduleService {
                     started = Instant.now();
                     startMap.put(key, started);
                 }
-                return new SolveTicket(problemId,
+                // 既存ジョブが走っている場合は既存のticketIdを返す（なければ今のticketIdで登録）
+                String existing = keyTicketMap.computeIfAbsent(key, k -> {
+                    ticketKeyMap.put(ticketId, k);
+                    return ticketId;
+                });
+                return new SolveTicket(existing,
                         started.toEpochMilli(),
                         started.plus(spentLimit).toEpochMilli());
             } else {
@@ -297,7 +306,10 @@ public class ShiftScheduleService {
             }, "assign-persist-" + key.hashCode()).start();
         }
 
-        return new SolveTicket(problemId,
+        // チケットとキーの対応を登録
+        ticketKeyMap.put(ticketId, key);
+        keyTicketMap.put(key, ticketId);
+        return new SolveTicket(ticketId,
                 start.toEpochMilli(),
                 start.plus(spentLimit).toEpochMilli());
     }
@@ -314,15 +326,9 @@ public class ShiftScheduleService {
      * @return 現在のステータス情報（実行状態、進捗率、経過時間等）
      * @see #getStatus(Long, String, String, String) ステージ指定版
      */
-    public SolveStatusDto getStatus(Long problemId, String storeCode, String departmentCode) {
-        // 後方互換: ステージ無指定は最初に見つかったものを返す
-        for (ProblemKey key : jobMap.keySet()) {
-            if (Objects.equals(key.getStoreCode(), storeCode) &&
-                Objects.equals(key.getDepartmentCode(), departmentCode) &&
-                toProblemId(key.getCycleStart()) == problemId) {
-                return internalStatus(key);
-            }
-        }
+    public SolveStatusDto getStatus(String ticketId, String storeCode, String departmentCode) {
+        ProblemKey key = ticketKeyMap.get(ticketId);
+        if (key != null) return internalStatus(key);
         return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
     }
 
@@ -339,15 +345,9 @@ public class ShiftScheduleService {
      * @return 現在のステータス情報（実行状態、進捗率、経過時間等）
      * @see #getStatus(Long, String, String) ステージ指定なし版
      */
-    public SolveStatusDto getStatus(Long problemId, String storeCode, String departmentCode, String stage) {
-        for (ProblemKey key : jobMap.keySet()) {
-            if (Objects.equals(key.getStoreCode(), storeCode) &&
-                Objects.equals(key.getDepartmentCode(), departmentCode) &&
-                toProblemId(key.getCycleStart()) == problemId &&
-                Objects.equals(key.getStage(), stage)) {
-                return internalStatus(key);
-            }
-        }
+    public SolveStatusDto getStatus(String ticketId, String storeCode, String departmentCode, String stage) {
+        ProblemKey key = ticketKeyMap.get(ticketId);
+        if (key != null) return internalStatus(key);
         return new SolveStatusDto("UNKNOWN", 0, 0, "未開始");
     }
 
@@ -436,24 +436,10 @@ public class ShiftScheduleService {
      * @param departmentCode 部門コード（nullまたは空文字の場合は全部門対象）
      * @return スコア推移のリスト（時系列順）
      */
-    public List<io.github.riemr.shift.application.dto.ScorePoint> getScoreSeries(long problemId, String storeCode, String departmentCode) {
-        String deptNorm = (departmentCode == null || departmentCode.isBlank()) ? null : departmentCode;
-        for (ProblemKey key : scoreSeriesMap.keySet()) {
-            boolean storeMatch = java.util.Objects.equals(key.getStoreCode(), storeCode);
-            boolean probMatch = toProblemId(key.getCycleStart()) == problemId;
-            String keyDept = key.getDepartmentCode();
-            boolean deptMatch = (deptNorm == null ? (keyDept == null || keyDept.isBlank()) : java.util.Objects.equals(keyDept, deptNorm));
-            if (storeMatch && probMatch && deptMatch) {
-                return scoreSeriesMap.getOrDefault(key, List.of());
-            }
-        }
-        // 部門が見つからない場合、store+problemId だけで近いものを返す（最後の手段）
-        for (ProblemKey key : scoreSeriesMap.keySet()) {
-            if (java.util.Objects.equals(key.getStoreCode(), storeCode) && toProblemId(key.getCycleStart()) == problemId) {
-                return scoreSeriesMap.getOrDefault(key, List.of());
-            }
-        }
-        return List.of();
+    public List<io.github.riemr.shift.application.dto.ScorePoint> getScoreSeries(String ticketId, String storeCode, String departmentCode) {
+        ProblemKey key = ticketKeyMap.get(ticketId);
+        if (key == null) return List.of();
+        return scoreSeriesMap.getOrDefault(key, List.of());
     }
 
     /**
@@ -468,15 +454,9 @@ public class ShiftScheduleService {
      * @return シフト割当結果のビューリスト
      * @see #fetchResult(Long, String, String, String) ステージ指定版
      */
-    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode, String departmentCode) {
-        // 後方互換: 最初に見つかったステージの結果
-        for (ProblemKey k : jobMap.keySet()) {
-            if (Objects.equals(k.getStoreCode(), storeCode) &&
-                Objects.equals(k.getDepartmentCode(), departmentCode) &&
-                toProblemId(k.getCycleStart()) == problemId) {
-                return internalFetchResult(k);
-            }
-        }
+    public List<ShiftAssignmentView> fetchResult(String ticketId, String storeCode, String departmentCode) {
+        ProblemKey k = ticketKeyMap.get(ticketId);
+        if (k != null) return internalFetchResult(k);
         return List.of();
     }
 
@@ -493,15 +473,9 @@ public class ShiftScheduleService {
      * @return シフト割当結果のビューリスト
      * @see #fetchResult(Long, String, String) ステージ指定なし版
      */
-    public List<ShiftAssignmentView> fetchResult(Long problemId, String storeCode, String departmentCode, String stage) {
-        for (ProblemKey k : jobMap.keySet()) {
-            if (Objects.equals(k.getStoreCode(), storeCode) &&
-                Objects.equals(k.getDepartmentCode(), departmentCode) &&
-                toProblemId(k.getCycleStart()) == problemId &&
-                Objects.equals(k.getStage(), stage)) {
-                return internalFetchResult(k);
-            }
-        }
+    public List<ShiftAssignmentView> fetchResult(String ticketId, String storeCode, String departmentCode, String stage) {
+        ProblemKey k = ticketKeyMap.get(ticketId);
+        if (k != null) return internalFetchResult(k);
         return List.of();
     }
 

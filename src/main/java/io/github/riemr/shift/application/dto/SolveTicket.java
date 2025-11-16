@@ -1,3 +1,3 @@
 package io.github.riemr.shift.application.dto;
 
-public record SolveTicket(Long problemId, long startMillis, long expectedFinishMillis) {}
+public record SolveTicket(String ticketId, long startMillis, long expectedFinishMillis) {}
