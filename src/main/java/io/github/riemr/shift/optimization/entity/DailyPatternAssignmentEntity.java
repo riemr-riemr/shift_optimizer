@@ -35,6 +35,7 @@ public class DailyPatternAssignmentEntity {
     // 当該パターン窓に適合する従業員候補（事前計算）
     private java.util.List<Employee> candidateEmployees = java.util.Collections.emptyList();
 
+    // 各パターンに対して、そのパターンを持つ従業員のみを候補とする
     @org.optaplanner.core.api.domain.valuerange.ValueRangeProvider(id = "eligibleEmployees")
     public java.util.List<Employee> getEligibleEmployees() {
         return candidateEmployees == null ? java.util.List.of() : candidateEmployees;

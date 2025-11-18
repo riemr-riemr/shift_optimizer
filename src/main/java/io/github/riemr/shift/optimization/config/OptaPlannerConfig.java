@@ -6,6 +6,7 @@ import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
+import io.github.riemr.shift.optimization.phase.AttendanceInitialSolutionBuilder;
 import org.optaplanner.core.api.solver.SolverFactory;
 import org.optaplanner.core.api.solver.SolverManager;
 import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicPhaseConfig;
@@ -16,6 +17,7 @@ import org.optaplanner.core.config.heuristic.selector.common.SelectionOrder;
 import org.optaplanner.core.config.localsearch.LocalSearchPhaseConfig;
 import org.optaplanner.core.config.localsearch.LocalSearchType;
 import org.optaplanner.core.config.phase.PhaseConfig;
+import org.optaplanner.core.config.phase.custom.CustomPhaseConfig;
 // pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
@@ -29,11 +31,12 @@ import java.util.List;
 @Configuration
 public class OptaPlannerConfig {
 
-    // アプリ設定と揃えるため同じキーを参照（デフォルト: PT5M に統一）
-    @org.springframework.beans.factory.annotation.Value("${shift.solver.spent-limit:PT5M}")
+    // アプリ設定と揃えるため同じキーを参照（デフォルト: PT30M に統一）
+    @org.springframework.beans.factory.annotation.Value("${shift.solver.spent-limit:PT30M}")
     private Duration solverSpentLimit;
-    @org.springframework.beans.factory.annotation.Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
-    private Duration unimprovedScoreLimit;
+    // アーリーストッピングを無効化
+    // @org.springframework.beans.factory.annotation.Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
+    // private Duration unimprovedScoreLimit;
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverFactory.class)
@@ -108,8 +111,20 @@ public class OptaPlannerConfig {
         alsConverge.setMoveSelectorConfig(aUnion);
         //（デフォルト設定の Tabu 構成を使用）
 
+        // カスタム初期解生成フェーズ
+        CustomPhaseConfig customInitialPhase = new CustomPhaseConfig();
+        customInitialPhase.setCustomPhaseCommandClassList(List.of(
+            AttendanceInitialSolutionBuilder.class
+        ));
+        
+        // Construction Heuristic で補完
+        ConstructionHeuristicPhaseConfig constructionPhase = new ConstructionHeuristicPhaseConfig();
+        constructionPhase.setConstructionHeuristicType(
+            org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicType.FIRST_FIT);
+        
         solverConfig.setPhaseConfigList(List.of(
-                new ConstructionHeuristicPhaseConfig(),
+                customInitialPhase,    // カスタム初期解生成
+                constructionPhase,     // 残りを補完
                 alsDiversify,
                 alsConverge
         ));
@@ -123,11 +138,13 @@ public class OptaPlannerConfig {
     }
 
     private TerminationConfig terminationConfig() {
+        // アーリーストッピングを無効化して時間制限のみで実行
         TerminationConfig t = new TerminationConfig().withSpentLimit(solverSpentLimit);
-        if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
-            // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
-            t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
-        }
+        // アーリーストッピングのコードをコメントアウト
+        // if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
+        //     // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
+        //     t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
+        // }
         return t;
     }
 

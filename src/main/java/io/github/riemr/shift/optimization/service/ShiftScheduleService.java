@@ -253,14 +253,21 @@ public class ShiftScheduleService {
         // Solver 起動 (listen)
         currentPhaseMap.put(key, "初期解生成中");
         if ("ATTENDANCE".equals(stage)) {
+            log.error("=== STARTING ATTENDANCE OPTIMIZATION ==="); // デバッグ用
             SolverJob<AttendanceSolution, ProblemKey> job = attendanceSolverManager.solveAndListen(
                     key,
                     this::loadAttendanceProblem,
                     best -> {
                         // 進捗更新・スコア記録（表示用）
                         if (best != null && best.getScore() != null) {
+                            log.debug("ATTENDANCE CALLBACK: score={}, assignments={}", 
+                                    best.getScore(),
+                                    best.getPatternAssignments().stream()
+                                            .filter(p -> p.getAssignedEmployee() != null).count());
                             updatePhaseScore(key, best.getScore());
                             recordScorePointGeneric(key, best.getScore());
+                        } else {
+                            log.warn("ATTENDANCE CALLBACK: best solution is null or has no score");
                         }
                         // 中間ベストは保存しない（最終ベストのみ保存）
                     },
@@ -272,6 +279,36 @@ public class ShiftScheduleService {
             new Thread(() -> {
                 try {
                     var finalBest = job.getFinalBestSolution();
+                    log.info("ATTENDANCE final solution received: score={}, patterns={}", 
+                            finalBest != null ? finalBest.getScore() : "null",
+                            finalBest != null && finalBest.getPatternAssignments() != null ? finalBest.getPatternAssignments().size() : 0);
+                    
+                    // 最終スコアも強制記録（画面表示用）
+                    if (finalBest != null && finalBest.getScore() != null) {
+                        recordScorePointGeneric(key, finalBest.getScore());
+                        log.info("FINAL ATTENDANCE SCORE RECORDED: {}", finalBest.getScore());
+                    }
+                    
+                    // デバッグ: 従業員別の割り当て状況を出力
+                    if (finalBest != null && finalBest.getPatternAssignments() != null) {
+                        var assignedPatterns = finalBest.getPatternAssignments().stream()
+                                .filter(p -> p.getAssignedEmployee() != null)
+                                .collect(java.util.stream.Collectors.groupingBy(
+                                        p -> p.getAssignedEmployee().getEmployeeCode(),
+                                        java.util.stream.Collectors.counting()));
+                        log.info("ATTENDANCE assignment by employee: {}", assignedPatterns);
+                        
+                        if (assignedPatterns.isEmpty()) {
+                            log.warn("No patterns assigned to any employee - analyzing first few patterns:");
+                            finalBest.getPatternAssignments().stream()
+                                    .limit(5)
+                                    .forEach(p -> log.warn("Pattern: date={}, time={}-{}, candidates={}, assigned={}", 
+                                            p.getDate(), p.getPatternStart(), p.getPatternEnd(),
+                                            p.getCandidateEmployees() != null ? p.getCandidateEmployees().size() : "null",
+                                            p.getAssignedEmployee()));
+                        }
+                    }
+                    
                     TransactionTemplate tt = new TransactionTemplate(transactionManager);
                     tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
                     tt.execute(s -> { persistAttendanceResult(finalBest, key); return null; });
@@ -414,6 +451,8 @@ public class ShiftScheduleService {
         long now = System.currentTimeMillis();
         scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
                 .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        log.debug("SCORE RECORDED: key={}, score={}hard/{}soft, points_count={}", 
+                key, hard, soft, scoreSeriesMap.get(key).size());
         // 改善検出は OptaPlanner の終了条件に委譲（記録のみ）
         var list = scoreSeriesMap.get(key);
         if (list.size() > 1000) {
@@ -438,8 +477,13 @@ public class ShiftScheduleService {
      */
     public List<io.github.riemr.shift.application.dto.ScorePoint> getScoreSeries(String ticketId, String storeCode, String departmentCode) {
         ProblemKey key = ticketKeyMap.get(ticketId);
-        if (key == null) return List.of();
-        return scoreSeriesMap.getOrDefault(key, List.of());
+        if (key == null) {
+            log.debug("SCORE SERIES: ticketId {} not found", ticketId);
+            return List.of();
+        }
+        var scores = scoreSeriesMap.getOrDefault(key, List.of());
+        log.debug("SCORE SERIES: ticketId={}, key={}, points_count={}", ticketId, key, scores.size());
+        return scores;
     }
 
     /**
@@ -844,6 +888,7 @@ public class ShiftScheduleService {
     }
 
     private AttendanceSolution loadAttendanceProblem(ProblemKey key) {
+        log.error("=== LOAD ATTENDANCE PROBLEM STARTED ==="); // デバッグ用
         LocalDate cycleStart = key.getCycleStart();
         ShiftSchedule base = repository.fetchShiftSchedule(cycleStart, key.getStoreCode(), key.getDepartmentCode());
         AttendanceSolution sol = new AttendanceSolution();
@@ -855,8 +900,23 @@ public class ShiftScheduleService {
         sol.setEmployeeShiftPatternList(base.getEmployeeShiftPatternList());
         sol.setEmployeeWeeklyPreferenceList(base.getEmployeeWeeklyPreferenceList());
         sol.setEmployeeRequestList(base.getEmployeeRequestList());
+        sol.setEmployeeMonthlySettingList(base.getEmployeeMonthlySettingList());
         sol.setDemandList(base.getDemandList());
-        sol.setPatternAssignments(buildPatternAssignmentsFromDemand(sol));
+        var patterns = buildPatternAssignmentsFromDemand(sol);
+        sol.setPatternAssignments(patterns);
+        
+        // デバッグ用: パターン詳細を出力
+        long assignedCount = patterns.stream().filter(p -> p.getAssignedEmployee() != null).count();
+        long unassignedCount = patterns.size() - assignedCount;
+        log.info("Generated {} pattern assignments for ATTENDANCE optimization (assigned: {}, unassigned: {})", 
+                patterns.size(), assignedCount, unassignedCount);
+        
+        // 需要と供給の詳細分析
+        var demand = Optional.ofNullable(sol.getDemandList()).orElse(List.of());
+        int totalDemandUnits = demand.stream().mapToInt(io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter::getRequiredUnits).sum();
+        log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {:.1f}%", 
+                totalDemandUnits, patterns.size(), (double)patterns.size() / totalDemandUnits * 100);
+        
         return sol;
     }
 
@@ -918,7 +978,12 @@ public class ShiftScheduleService {
                     var ent = new io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity(
                             id, sol.getStoreCode(), sol.getDepartmentCode(), date, ps, pe, i);
                     // 候補従業員（パターン境界完全一致＋週次/希望休/基本時間内）を事前計算
-                    ent.setCandidateEmployees(computeEligibleEmployeesForWindow(employees, patterns, weeklyPrefs, requests, date, ps, pe));
+                    var candidates = computeEligibleEmployeesForWindow(employees, patterns, weeklyPrefs, requests, date, ps, pe);
+                    ent.setCandidateEmployees(candidates);
+                    
+                    if (i == 0) { // デバッグログは最初のユニットのみ
+                        log.debug("Pattern {}-{} on {}: {} eligible employees", ps, pe, date, candidates.size());
+                    }
                     result.add(ent);
                 }
             }
@@ -980,7 +1045,15 @@ public class ShiftScheduleService {
     }
 
     private void persistAttendanceResult(AttendanceSolution best, ProblemKey key) {
-        if (best == null || best.getPatternAssignments() == null) return;
+        if (best == null || best.getPatternAssignments() == null) {
+            log.warn("Cannot persist attendance result - solution or pattern assignments are null");
+            return;
+        }
+        
+        long assignedPatterns = best.getPatternAssignments().stream().filter(p -> p.getAssignedEmployee() != null).count();
+        log.info("Persisting attendance result: score={}, total_patterns={}, assigned_patterns={}", 
+                best.getScore(), best.getPatternAssignments().size(), assignedPatterns);
+        
         LocalDate from = best.getMonth();
         LocalDate to = from.plusMonths(1);
         String store = best.getStoreCode();
@@ -1009,7 +1082,7 @@ public class ShiftScheduleService {
                 ins++;
             }
         }
-        log.info("[attendance] Persisted rows: {}", ins);
+        log.info("[attendance] Persisted rows: {} (from {} assigned patterns)", ins, assignedPatterns);
     }
 
     // RegisterDemandQuarter の requiredUnits に基づき、ATTENDANCE用に15分枠のプレースホルダを合成
