@@ -3,8 +3,10 @@ package io.github.riemr.shift.optimization.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -12,11 +14,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Optional;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.LinkedHashSet;
+import java.util.HashSet;
+import java.lang.reflect.Method;
 
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
@@ -30,25 +36,35 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Propagation;
 
 import io.github.riemr.shift.application.dto.ShiftAssignmentMonthlyView;
 import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
+import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
-import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
+import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.service.TaskPlanService;
+import io.github.riemr.shift.application.dto.ScorePoint;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
+import io.github.riemr.shift.optimization.entity.WorkKind;
+import io.github.riemr.shift.optimization.entity.BreakAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -73,7 +89,6 @@ public class ShiftScheduleService {
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
-    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
     private final AppSettingService appSettingService;
@@ -90,7 +105,7 @@ public class ShiftScheduleService {
     private final Map<ProblemKey, Object> jobMap = new ConcurrentHashMap<>();
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
     // 開発者向け: スコア推移の時系列
-    private final Map<ProblemKey, List<io.github.riemr.shift.application.dto.ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, List<ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
     // 進行状況可視化用のスコア系列のみ保持
     // UUIDチケット -> ProblemKey の対応
     private final Map<String, ProblemKey> ticketKeyMap = new ConcurrentHashMap<>();
@@ -145,7 +160,7 @@ public class ShiftScheduleService {
      * @see #startSolveMonth(LocalDate) 最もシンプルな版
      * @see #startSolveMonth(LocalDate, String) 店舗指定版
      */
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
         return startSolveInternal(month, storeCode, departmentCode, "ASSIGNMENT");
     }
@@ -163,7 +178,7 @@ public class ShiftScheduleService {
      * @return 最適化ジョブの制御チケット（進捗確認やキャンセルに使用）
      * @see #startSolveMonth(LocalDate, String, String) 通常のシフト割当版
      */
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public SolveTicket startSolveAttendanceMonth(LocalDate month, String storeCode, String departmentCode) {
         return startSolveInternal(month, storeCode, departmentCode, "ATTENDANCE");
     }
@@ -178,8 +193,8 @@ public class ShiftScheduleService {
      * @return 最適化ジョブの制御チケット
      */
     private SolveTicket startSolveInternal(LocalDate month, String storeCode, String departmentCode, String stage) {
-        String ticketId = java.util.UUID.randomUUID().toString();
-        ProblemKey key = new ProblemKey(java.time.YearMonth.from(month), storeCode, departmentCode, month, stage);
+        String ticketId = UUID.randomUUID().toString();
+        ProblemKey key = new ProblemKey(YearMonth.from(month), storeCode, departmentCode, month, stage);
 
         // 事前準備処理を最適化サービス内で同期実行
         if (storeCode != null && !storeCode.isBlank()) {
@@ -293,9 +308,9 @@ public class ShiftScheduleService {
                     if (finalBest != null && finalBest.getPatternAssignments() != null) {
                         var assignedPatterns = finalBest.getPatternAssignments().stream()
                                 .filter(p -> p.getAssignedEmployee() != null)
-                                .collect(java.util.stream.Collectors.groupingBy(
+                                .collect(Collectors.groupingBy(
                                         p -> p.getAssignedEmployee().getEmployeeCode(),
-                                        java.util.stream.Collectors.counting()));
+                                        Collectors.counting()));
                         log.info("ATTENDANCE assignment by employee: {}", assignedPatterns);
                         
                         if (assignedPatterns.isEmpty()) {
@@ -432,8 +447,8 @@ public class ShiftScheduleService {
         int hard = s.hardScore();
         int soft = s.softScore();
         long now = System.currentTimeMillis();
-        scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
-                .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        scoreSeriesMap.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>())
+                .add(new ScorePoint(now, init, hard, soft));
         // 改善検出は OptaPlanner の終了条件に委譲（記録のみ）
         // keep last 1000 points to bound memory
         var list = scoreSeriesMap.get(key);
@@ -449,8 +464,8 @@ public class ShiftScheduleService {
         int hard = s.hardScore();
         int soft = s.softScore();
         long now = System.currentTimeMillis();
-        scoreSeriesMap.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
-                .add(new io.github.riemr.shift.application.dto.ScorePoint(now, init, hard, soft));
+        scoreSeriesMap.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>())
+                .add(new ScorePoint(now, init, hard, soft));
         log.debug("SCORE RECORDED: key={}, score={}hard/{}soft, points_count={}", 
                 key, hard, soft, scoreSeriesMap.get(key).size());
         // 改善検出は OptaPlanner の終了条件に委譲（記録のみ）
@@ -475,7 +490,7 @@ public class ShiftScheduleService {
      * @param departmentCode 部門コード（nullまたは空文字の場合は全部門対象）
      * @return スコア推移のリスト（時系列順）
      */
-    public List<io.github.riemr.shift.application.dto.ScorePoint> getScoreSeries(String ticketId, String storeCode, String departmentCode) {
+    public List<ScorePoint> getScoreSeries(String ticketId, String storeCode, String departmentCode) {
         ProblemKey key = ticketKeyMap.get(ticketId);
         if (key == null) {
             log.debug("SCORE SERIES: ticketId {} not found", ticketId);
@@ -664,7 +679,7 @@ public class ShiftScheduleService {
     /**
      * 出勤（shift_assignment）を月次単位で削除する（店舗単位）。
      */
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public int clearAttendance(LocalDate anyDayInMonth, String storeCode) {
         LocalDate from = computeCycleStart(anyDayInMonth);
         LocalDate to   = from.plusMonths(1);
@@ -676,7 +691,7 @@ public class ShiftScheduleService {
      * 作業割当（register_assignment, department_task_assignment）を月次単位で削除する。
      * 部門が指定されている場合はその部門のタスクのみ削除。
      */
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, readOnly = false)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public int clearWorkAssignments(LocalDate anyDayInMonth, String storeCode, String departmentCode) {
         LocalDate from = computeCycleStart(anyDayInMonth);
         LocalDate to   = from.plusMonths(1);
@@ -687,7 +702,7 @@ public class ShiftScheduleService {
             total += departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, storeCode, departmentCode);
         } else {
             try {
-                java.lang.reflect.Method m = departmentTaskAssignmentMapper.getClass().getMethod("deleteByMonthAndStore", java.time.LocalDate.class, java.time.LocalDate.class, String.class);
+                Method m = departmentTaskAssignmentMapper.getClass().getMethod("deleteByMonthAndStore", LocalDate.class, LocalDate.class, String.class);
                 Object r = m.invoke(departmentTaskAssignmentMapper, from, to, storeCode);
                 if (r instanceof Integer i) total += i;
             } catch (Exception ignore) { /* メソッドが無ければスキップ */ }
@@ -913,14 +928,14 @@ public class ShiftScheduleService {
         
         // 需要と供給の詳細分析
         var demand = Optional.ofNullable(sol.getDemandList()).orElse(List.of());
-        int totalDemandUnits = demand.stream().mapToInt(io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter::getRequiredUnits).sum();
+        int totalDemandUnits = demand.stream().mapToInt(RegisterDemandQuarter::getRequiredUnits).sum();
         log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {:.1f}%", 
                 totalDemandUnits, patterns.size(), (double)patterns.size() / totalDemandUnits * 100);
         
         return sol;
     }
 
-    private List<io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity> buildPatternAssignmentsFromDemand(
+    private List<DailyPatternAssignmentEntity> buildPatternAssignmentsFromDemand(
             AttendanceSolution sol) {
         List<DailyPatternAssignmentEntity> result = new ArrayList<>();
         var patterns = Optional.ofNullable(sol.getEmployeeShiftPatternList()).orElse(List.of());
@@ -931,22 +946,22 @@ public class ShiftScheduleService {
         if (patterns.isEmpty()) return result;
         ZoneId zone = ZoneId.systemDefault();
 
-        Map<java.time.LocalDate, List<io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter>> demandByDate = new HashMap<>();
+        Map<LocalDate, List<RegisterDemandQuarter>> demandByDate = new HashMap<>();
         for (var d : demand) {
-            java.util.Date dd = d.getDemandDate();
-            java.time.LocalDate dt;
+            Date dd = d.getDemandDate();
+            LocalDate dt;
             if (dd instanceof java.sql.Date) {
                 dt = ((java.sql.Date) dd).toLocalDate();
             } else {
                 dt = dd.toInstant().atZone(zone).toLocalDate();
             }
-            demandByDate.computeIfAbsent(dt, k -> new java.util.ArrayList<>()).add(d);
+            demandByDate.computeIfAbsent(dt, k -> new ArrayList<>()).add(d);
         }
 
         // パターン時間帯の重複（同時刻の開始/終了が複数従業員に跨る）を除外し、時間窓のユニーク集合を作る
         // ただし priority が 0,1 のパターンは「割当不可」として窓生成の対象外にする（>=2 のみ採用）
-        java.util.LinkedHashSet<String> windowKeys = new java.util.LinkedHashSet<>();
-        List<java.time.LocalTime[]> windows = new java.util.ArrayList<>();
+        LinkedHashSet<String> windowKeys = new LinkedHashSet<>();
+        List<LocalTime[]> windows = new ArrayList<>();
         for (var p : patterns) {
             if (Boolean.FALSE.equals(p.getActive())) continue;
             Short prio = p.getPriority();
@@ -955,7 +970,7 @@ public class ShiftScheduleService {
             var pe = p.getEndTime().toLocalTime();
             String key = ps + "_" + pe;
             if (windowKeys.add(key)) {
-                windows.add(new java.time.LocalTime[]{ps, pe});
+                windows.add(new LocalTime[]{ps, pe});
             }
         }
 
@@ -975,7 +990,7 @@ public class ShiftScheduleService {
                 }
                 for (int i = 0; i < maxUnits; i++) {
                     String id = sol.getStoreCode() + "|" + sol.getDepartmentCode() + "|" + date + "|" + ps + "|" + pe + "|" + i;
-                    var ent = new io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity(
+                    var ent = new DailyPatternAssignmentEntity(
                             id, sol.getStoreCode(), sol.getDepartmentCode(), date, ps, pe, i);
                     // 候補従業員（パターン境界完全一致＋週次/希望休/基本時間内）を事前計算
                     var candidates = computeEligibleEmployeesForWindow(employees, patterns, weeklyPrefs, requests, date, ps, pe);
@@ -991,31 +1006,31 @@ public class ShiftScheduleService {
         return result;
     }
 
-    private List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> computeEligibleEmployeesForWindow(
-            List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> employees,
-            List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern> patterns,
-            List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> weeklyPrefs,
-            List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest> requests,
-            java.time.LocalDate date,
-            java.time.LocalTime ps,
-            java.time.LocalTime pe) {
-        Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern>> pattByEmp =
-                patterns.stream().collect(java.util.stream.Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern::getEmployeeCode));
-        Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> weeklyByEmp =
-                weeklyPrefs.stream().collect(java.util.stream.Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference::getEmployeeCode));
-        Map<String, Set<java.time.LocalDate>> offByEmp = new HashMap<>();
+    private List<Employee> computeEligibleEmployeesForWindow(
+            List<Employee> employees,
+            List<EmployeeShiftPattern> patterns,
+            List<EmployeeWeeklyPreference> weeklyPrefs,
+            List<EmployeeRequest> requests,
+            LocalDate date,
+            LocalTime ps,
+            LocalTime pe) {
+        Map<String, List<EmployeeShiftPattern>> pattByEmp =
+                patterns.stream().collect(Collectors.groupingBy(EmployeeShiftPattern::getEmployeeCode));
+        Map<String, List<EmployeeWeeklyPreference>> weeklyByEmp =
+                weeklyPrefs.stream().collect(Collectors.groupingBy(EmployeeWeeklyPreference::getEmployeeCode));
+        Map<String, Set<LocalDate>> offByEmp = new HashMap<>();
         for (var r : requests) {
             if (r.getRequestKind() == null) continue;
             String kind = r.getRequestKind().toLowerCase();
             if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                java.time.LocalDate d = (r.getRequestDate() instanceof java.sql.Date)
+                LocalDate d = (r.getRequestDate() instanceof java.sql.Date)
                         ? ((java.sql.Date) r.getRequestDate()).toLocalDate()
-                        : r.getRequestDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
-                offByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
+                        : r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                offByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
             }
         }
         int dow = date.getDayOfWeek().getValue();
-        List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> list = new java.util.ArrayList<>();
+        List<Employee> list = new ArrayList<>();
         for (var e : employees) {
             String code = e.getEmployeeCode();
             // パターン境界完全一致 かつ priority >= 2
@@ -1063,14 +1078,14 @@ public class ShiftScheduleService {
 
         ZoneId zone = ZoneId.systemDefault();
         int ins = 0;
-        java.util.Set<String> dedup = new java.util.HashSet<>();
+        Set<String> dedup = new HashSet<>();
         for (var e : best.getPatternAssignments()) {
             if (e.getAssignedEmployee() == null) continue;
             var sa = new ShiftAssignment();
             sa.setStoreCode(store);
             sa.setEmployeeCode(e.getAssignedEmployee().getEmployeeCode());
-            var startAt = java.util.Date.from(e.getDate().atTime(e.getPatternStart()).atZone(zone).toInstant());
-            var endAt = java.util.Date.from(e.getDate().atTime(e.getPatternEnd()).atZone(zone).toInstant());
+            var startAt = Date.from(e.getDate().atTime(e.getPatternStart()).atZone(zone).toInstant());
+            var endAt = Date.from(e.getDate().atTime(e.getPatternEnd()).atZone(zone).toInstant());
             sa.setStartAt(startAt);
             sa.setEndAt(endAt);
             sa.setCreatedBy("auto");
@@ -1089,15 +1104,15 @@ public class ShiftScheduleService {
     private int synthesizeAttendanceSlotsFromDemand(ShiftSchedule schedule) {
         var demand = Optional.ofNullable(schedule.getDemandList()).orElse(List.of());
         if (demand.isEmpty()) return 0;
-        List<ShiftAssignmentPlanningEntity> list = new java.util.ArrayList<>();
-        java.time.ZoneId zone = ZoneId.systemDefault();
+        List<ShiftAssignmentPlanningEntity> list = new ArrayList<>();
+        ZoneId zone = ZoneId.systemDefault();
         for (var q : demand) {
             if (schedule.getStoreCode() != null && !schedule.getStoreCode().equals(q.getStoreCode())) continue;
             if (q.getRequiredUnits() == null || q.getRequiredUnits() <= 0) continue;
             // 15分スロットの開始・終了
-            java.time.LocalDateTime startLdt = java.time.LocalDateTime.of(
+            LocalDateTime startLdt = LocalDateTime.of(
                     q.getDemandDate().toInstant().atZone(zone).toLocalDate(), q.getSlotTime());
-            java.time.LocalDateTime endLdt = startLdt.plusMinutes(15);
+            LocalDateTime endLdt = startLdt.plusMinutes(15);
             Date startAt = Date.from(startLdt.atZone(zone).toInstant());
             Date endAt = Date.from(endLdt.atZone(zone).toInstant());
             for (int i = 0; i < q.getRequiredUnits(); i++) {
@@ -1109,7 +1124,7 @@ public class ShiftScheduleService {
                 ShiftAssignmentPlanningEntity e = new ShiftAssignmentPlanningEntity(origin);
                 e.setStage("ATTENDANCE");
                 e.setDepartmentCode(schedule.getDepartmentCode());
-                e.setWorkKind(io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP);
+                e.setWorkKind(WorkKind.REGISTER_OP);
                 list.add(e);
             }
         }
@@ -1124,31 +1139,31 @@ public class ShiftScheduleService {
         if (assignments.isEmpty() || employees.isEmpty()) return;
 
         // 日付集合
-        Set<LocalDate> dates = assignments.stream().map(ShiftAssignmentPlanningEntity::getShiftDate).collect(java.util.stream.Collectors.toSet());
+        Set<LocalDate> dates = assignments.stream().map(ShiftAssignmentPlanningEntity::getShiftDate).collect(Collectors.toSet());
 
         // 週別可用インデックス
-        Map<String, Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();
+        Map<String, Map<Integer, EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();
         for (var p : weekly) {
             weeklyPrefByEmpDow.computeIfAbsent(p.getEmployeeCode(), k -> new HashMap<>())
                     .put(p.getDayOfWeek().intValue(), p);
         }
 
         int slotMinutes = appSettingService.getTimeResolutionMinutes();
-        List<io.github.riemr.shift.optimization.entity.BreakAssignment> breakList = new java.util.ArrayList<>();
+        List<BreakAssignment> breakList = new ArrayList<>();
         for (var e : employees) {
             for (var d : dates) {
                 var cand = buildBreakCandidates(weeklyPrefByEmpDow.get(e.getEmployeeCode()), d, slotMinutes);
                 String id = e.getEmployeeCode() + ":" + d.toString();
-                breakList.add(new io.github.riemr.shift.optimization.entity.BreakAssignment(id, e, d, cand));
+                breakList.add(new BreakAssignment(id, e, d, cand));
             }
         }
         schedule.setBreakList(breakList);
     }
 
-    private List<java.util.Date> buildBreakCandidates(Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefByDow,
+    private List<Date> buildBreakCandidates(Map<Integer, EmployeeWeeklyPreference> prefByDow,
                                                                 LocalDate date, int slotMinutes) {
-        List<java.util.Date> result = new java.util.ArrayList<>();
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        List<Date> result = new ArrayList<>();
+        ZoneId zone = ZoneId.systemDefault();
         if (prefByDow == null) return result;
         var pref = prefByDow.get(date.getDayOfWeek().getValue());
         if (pref == null || "OFF".equalsIgnoreCase(pref.getWorkStyle())) return result;
@@ -1158,10 +1173,10 @@ public class ShiftScheduleService {
         // 休憩60分が入る開始の最小・最大
         var latestStart = end.minusMinutes(60);
         if (!latestStart.isAfter(start)) return result;
-        java.time.LocalTime t = start;
+        LocalTime t = start;
         while (!t.isAfter(latestStart)) {
-            var dt = java.time.LocalDateTime.of(date, t);
-            result.add(java.util.Date.from(dt.atZone(zone).toInstant()));
+            var dt = LocalDateTime.of(date, t);
+            result.add(Date.from(dt.atZone(zone).toInstant()));
             t = t.plusMinutes(slotMinutes);
         }
         return result;
@@ -1183,16 +1198,16 @@ public class ShiftScheduleService {
             String kind = r.getRequestKind().toLowerCase();
             if ("off".equals(kind) || "paid_leave".equals(kind)) {
                 LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
+                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
             }
         }
         Map<String, Set<Integer>> weeklyOffByEmp = new HashMap<>();
-        Map<String, Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();
+        Map<String, Map<Integer, EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();
         for (var p : weekly) {
             weeklyPrefByEmpDow.computeIfAbsent(p.getEmployeeCode(), k -> new HashMap<>())
                     .put(p.getDayOfWeek().intValue(), p);
             if ("OFF".equalsIgnoreCase(p.getWorkStyle()))
-                weeklyOffByEmp.computeIfAbsent(p.getEmployeeCode(), k -> new java.util.HashSet<>()).add(p.getDayOfWeek().intValue());
+                weeklyOffByEmp.computeIfAbsent(p.getEmployeeCode(), k -> new HashSet<>()).add(p.getDayOfWeek().intValue());
         }
 
         // 出勤ロスター（DBのshift_assignment）をロード（連勤上限チェックやASSIGNMENTのonDuty判定に使用）
@@ -1212,7 +1227,7 @@ public class ShiftScheduleService {
         for (var sa : attendance) {
             if (sa.getEmployeeCode() == null || sa.getStartAt() == null) continue;
             LocalDate d = sa.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-            attendanceDaysByEmp.computeIfAbsent(sa.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
+            attendanceDaysByEmp.computeIfAbsent(sa.getEmployeeCode(), k -> new HashSet<>()).add(d);
         }
 
         // レジ・部門スキルをインデックス
@@ -1230,14 +1245,14 @@ public class ShiftScheduleService {
         }
 
         // パターンを社員別にインデックス
-        Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern>> patternByEmp =
+        Map<String, List<EmployeeShiftPattern>> patternByEmp =
                 Optional.ofNullable(schedule.getEmployeeShiftPatternList()).orElse(List.of())
-                        .stream().collect(java.util.stream.Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern::getEmployeeCode));
+                        .stream().collect(Collectors.groupingBy(EmployeeShiftPattern::getEmployeeCode));
 
         int dbgCount = 0;
         for (var a : schedule.getAssignmentList()) {
             LocalDate date = a.getShiftDate();
-            List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> cands;
+            List<Employee> cands;
             if ("ATTENDANCE".equals(stage)) {
                 cands = employees.stream().filter(e -> {
                     var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
@@ -1259,7 +1274,7 @@ public class ShiftScheduleService {
                 // 当該スロット内に出勤が重なる従業員のみ（既存ロスター基準）
                 var start = a.getStartAt().toInstant();
                 var end = a.getEndAt().toInstant();
-                Set<String> onDuty = new java.util.HashSet<>();
+                Set<String> onDuty = new HashSet<>();
                 for (var sa : attendance) {
                     if (sa.getStartAt() == null || sa.getEndAt() == null) continue;
                     var s = sa.getStartAt().toInstant();
@@ -1282,13 +1297,13 @@ public class ShiftScheduleService {
                             // スキル0/1の従業員を候補から除外（REGISTER_OP/DEPARTMENT_TASK）
                             .filter(e -> {
                                 String code = e.getEmployeeCode();
-                                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                                if (a.getWorkKind() == WorkKind.REGISTER_OP) {
                                     Integer rn = a.getRegisterNo();
                                     if (rn != null) {
                                         Short lv = regSkillByEmpRegister.getOrDefault(code, Map.of()).get(rn);
                                         if (lv != null && (lv == 0 || lv == 1)) return false;
                                     }
-                                } else if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK) {
+                                } else if (a.getWorkKind() == WorkKind.DEPARTMENT_TASK) {
                                     String dept = a.getDepartmentCode();
                                     if (dept != null) {
                                         Short lv = deptSkillByEmpDept.getOrDefault(code, Map.of()).get(dept);
@@ -1317,13 +1332,13 @@ public class ShiftScheduleService {
                                         a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
                                 // スキル0/1の従業員を候補から除外
                                 String code = e.getEmployeeCode();
-                                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                                if (a.getWorkKind() == WorkKind.REGISTER_OP) {
                                     Integer rn = a.getRegisterNo();
                                     if (rn != null) {
                                         Short lv = regSkillByEmpRegister.getOrDefault(code, Map.of()).get(rn);
                                         if (lv != null && (lv == 0 || lv == 1)) return false;
                                     }
-                                } else if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK) {
+                                } else if (a.getWorkKind() == WorkKind.DEPARTMENT_TASK) {
                                     String dept = a.getDepartmentCode();
                                     if (dept != null) {
                                         Short lv = deptSkillByEmpDept.getOrDefault(code, Map.of()).get(dept);
@@ -1375,7 +1390,7 @@ public class ShiftScheduleService {
                         var offSet = offDatesByEmp.getOrDefault(emp, Set.of());
                         var offDow = weeklyOffByEmp.getOrDefault(emp, Set.of());
                         if (!offSet.contains(d) && !offDow.contains(d.getDayOfWeek().getValue())) {
-                            mandatoryByDate.computeIfAbsent(d, k -> new java.util.ArrayList<>()).add(emp);
+                            mandatoryByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(emp);
                         }
                     }
                     d = d.plusDays(1);
@@ -1385,7 +1400,7 @@ public class ShiftScheduleService {
             // 日付ごとに未予約スロットへ順に単一候補化（過度な拘束を避けるため各MANDATORYあたり1スロット）
             Map<LocalDate, List<ShiftAssignmentPlanningEntity>> byDate = new HashMap<>();
             for (var a : schedule.getAssignmentList()) {
-                byDate.computeIfAbsent(a.getShiftDate(), k -> new java.util.ArrayList<>()).add(a);
+                byDate.computeIfAbsent(a.getShiftDate(), k -> new ArrayList<>()).add(a);
             }
             for (var entry : mandatoryByDate.entrySet()) {
                 LocalDate date = entry.getKey();
@@ -1417,8 +1432,8 @@ public class ShiftScheduleService {
         }
     }
 
-    private boolean matchesAnyPattern(List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern> list,
-                                      LocalDate date, java.time.LocalTime slotStart, java.time.LocalTime slotEnd) {
+    private boolean matchesAnyPattern(List<EmployeeShiftPattern> list,
+                                      LocalDate date, LocalTime slotStart, LocalTime slotEnd) {
         // シフトパターンが設定されていない場合は制限なしとして true を返す
         if (list == null || list.isEmpty()) return true;
         for (var p : list) {
@@ -1432,8 +1447,8 @@ public class ShiftScheduleService {
         return false;
     }
 
-    private boolean withinWeeklyBase(Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefByDow,
-                                     LocalDate date, java.time.LocalTime slotStart, java.time.LocalTime slotEnd) {
+    private boolean withinWeeklyBase(Map<Integer, EmployeeWeeklyPreference> prefByDow,
+                                     LocalDate date, LocalTime slotStart, LocalTime slotEnd) {
         if (prefByDow == null) return true;
         var pref = prefByDow.get(date.getDayOfWeek().getValue());
         if (pref == null) return true;
@@ -1468,9 +1483,9 @@ public class ShiftScheduleService {
         if (s.getAssignmentList() == null || s.getEmployeeList() == null) return;
 
         // インデックス化
-        Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference>> prefByEmp =
+        Map<String, List<EmployeeWeeklyPreference>> prefByEmp =
                 Optional.ofNullable(s.getEmployeeWeeklyPreferenceList()).orElse(List.of()).stream()
-                        .collect(Collectors.groupingBy(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference::getEmployeeCode));
+                        .collect(Collectors.groupingBy(EmployeeWeeklyPreference::getEmployeeCode));
 
         Map<String, Map<Integer, Short>> skillByEmpRegister = new HashMap<>();
         for (var sk : Optional.ofNullable(s.getEmployeeRegisterSkillList()).orElse(List.of())) {
@@ -1484,7 +1499,7 @@ public class ShiftScheduleService {
             if ("off".equalsIgnoreCase(req.getRequestKind())) {
                 String emp = req.getEmployeeCode();
                 LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                dayOffByEmp.computeIfAbsent(emp, k -> new java.util.HashSet<>()).add(d);
+                dayOffByEmp.computeIfAbsent(emp, k -> new HashSet<>()).add(d);
             }
         }
 
@@ -1524,7 +1539,7 @@ public class ShiftScheduleService {
                 if (offDay || outsideBase) continue;
 
                 // レジ技能（REGISTER_OP のみチェック）
-                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                if (a.getWorkKind() == WorkKind.REGISTER_OP) {
                     registerSlots++;
                     Integer reg = a.getRegisterNo();
                     if (reg != null) {
@@ -1787,7 +1802,7 @@ public class ShiftScheduleService {
      * shift_assignmentテーブルには出勤時間を、register_assignmentテーブルにはレジアサイン時間を保存する。
      * ハード制約違反がある場合は保存を阻止し、アラートを出力する。
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     private void persistResult(ShiftSchedule best, ProblemKey key) {
         // Construction Heuristic中（未割当が残っている）なら保存をスキップ
         if (best.getScore() != null && best.getScore().initScore() < 0) {
@@ -1872,7 +1887,7 @@ public class ShiftScheduleService {
         // Group by employee, date, and register for register assignments
         Map<String, List<ShiftAssignmentPlanningEntity>> registerAssignmentsByEmployeeDateRegister = best.getAssignmentList().stream()
                 .filter(a -> a.getAssignedEmployee() != null
-                        && a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
+                        && a.getWorkKind() == WorkKind.REGISTER_OP
                         && a.getRegisterNo() != null)
                 .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + a.getShiftDate().toString() + "@" + a.getRegisterNo()));
 
@@ -1907,10 +1922,10 @@ public class ShiftScheduleService {
         }
 
         // Department task assignments (DEPARTMENT_TASK) – merge by employee/date/department/task
-        List<io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment> deptTaskAssignments = new ArrayList<>();
+        List<DepartmentTaskAssignment> deptTaskAssignments = new ArrayList<>();
         if (best.getDepartmentCode() != null) {
             Map<String, List<ShiftAssignmentPlanningEntity>> deptTaskGroups = best.getAssignmentList().stream()
-                    .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK)
+                    .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.DEPARTMENT_TASK)
                     .collect(Collectors.groupingBy(a -> String.join("@",
                             a.getAssignedEmployee().getEmployeeCode(),
                             a.getShiftDate().toString(),
@@ -1925,7 +1940,7 @@ public class ShiftScheduleService {
                 String storeCode = group.get(0).getOrigin().getStoreCode();
                 String taskCode = group.get(0).getTaskCode();
 
-                var ta = new io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment();
+                var ta = new DepartmentTaskAssignment();
                 ta.setStoreCode(storeCode);
                 ta.setDepartmentCode(best.getDepartmentCode());
                 ta.setTaskCode(taskCode);
