@@ -51,11 +51,17 @@ public class OptaPlannerConfig {
         solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
                 .withConstraintProviderClass(ShiftScheduleConstraintProvider.class));
 
-        // Phase 設定（OptaPlanner API シグネチャに合わせる）
+        // カスタム初期解（ASSIGNMENT）→ CH → LS(diversify) → LS(converge)
+        CustomPhaseConfig customInitial = new CustomPhaseConfig();
+        customInitial.setCustomPhaseCommandClassList(List.of(
+                io.github.riemr.shift.optimization.phase.AssignmentInitialSolutionBuilder.class
+        ));
+
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
+                customInitial,
                 constructionHeuristicPhaseConfig(),
-                relaxedLocalSearchPhase(), // フェーズ1: 緩めの受理で多様化
-                strictLocalSearchPhase()   // フェーズ2: タブーで収束
+                relaxedLocalSearchPhase(),
+                strictLocalSearchPhase()
         ));
 
         return SolverFactory.create(solverConfig);
@@ -63,8 +69,9 @@ public class OptaPlannerConfig {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverManager.class)
-    public SolverManager<ShiftSchedule, io.github.riemr.shift.optimization.service.ProblemKey> solverManager(
-            SolverFactory<ShiftSchedule> solverFactory) {
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public SolverManager solverManager(SolverFactory solverFactory) {
+        // Generics を回避し、条件評価時の型解決エラーを防ぐ
         return SolverManager.create(solverFactory);
     }
 

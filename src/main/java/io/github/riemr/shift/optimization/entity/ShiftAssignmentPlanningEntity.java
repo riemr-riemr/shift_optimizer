@@ -33,7 +33,7 @@ public class ShiftAssignmentPlanningEntity {
     // Optimization stage hint: ATTENDANCE or ASSIGNMENT
     private String stage;
 
-    @PlanningVariable(valueRangeProviderRefs = {"availableEmployees"})
+    @PlanningVariable(valueRangeProviderRefs = {"availableEmployees"}, nullable = true)
     private Employee assignedEmployee;
 
     // エンティティ毎に可用な従業員候補（ATTENDANCE/ASSIGNMENTでフィルタリング）

@@ -215,10 +215,15 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         // 店舗毎のレジを [SEMI 優先] & [register_no 昇順] ソートで保持
         Map<String, List<Register>> registerMap = registerList.stream()
                 .collect(Collectors.groupingBy(Register::getStoreCode, Collectors.collectingAndThen(Collectors.toList(), list -> {
-                    Comparator<Register> typeThenNo = Comparator
-                            .comparing((Register r) -> "SEMI".equalsIgnoreCase(r.getRegisterType()) ? 0 : 1)
+                    // 優先順: is_auto_open_target(=true) を最優先 → open_priority 昇順 → register_no 昇順
+                    Comparator<Register> byAutoOpen = Comparator.comparing(
+                            Register::getIsAutoOpenTarget,
+                            Comparator.nullsLast(Comparator.reverseOrder()) // true を先頭、null/false を後方
+                    );
+                    Comparator<Register> openThenNo = byAutoOpen
+                            .thenComparing(Register::getOpenPriority, Comparator.nullsLast(Comparator.naturalOrder()))
                             .thenComparing(Register::getRegisterNo);
-                    return list.stream().sorted(typeThenNo).toList();
+                    return list.stream().sorted(openThenNo).toList();
                 })));
 
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();

@@ -1215,6 +1215,20 @@ public class ShiftScheduleService {
             attendanceDaysByEmp.computeIfAbsent(sa.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
         }
 
+        // レジ・部門スキルをインデックス
+        Map<String, Map<Integer, Short>> regSkillByEmpRegister = new HashMap<>();
+        for (var sk : Optional.ofNullable(schedule.getEmployeeRegisterSkillList()).orElse(List.of())) {
+            regSkillByEmpRegister
+                    .computeIfAbsent(sk.getEmployeeCode(), k -> new HashMap<>())
+                    .put(sk.getRegisterNo(), sk.getSkillLevel());
+        }
+        Map<String, Map<String, Short>> deptSkillByEmpDept = new HashMap<>();
+        for (var sk : Optional.ofNullable(schedule.getEmployeeDepartmentSkillList()).orElse(List.of())) {
+            deptSkillByEmpDept
+                    .computeIfAbsent(sk.getEmployeeCode(), k -> new HashMap<>())
+                    .put(sk.getDepartmentCode(), sk.getSkillLevel());
+        }
+
         // パターンを社員別にインデックス
         Map<String, List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern>> patternByEmp =
                 Optional.ofNullable(schedule.getEmployeeShiftPatternList()).orElse(List.of())
@@ -1265,6 +1279,24 @@ public class ShiftScheduleService {
                             .filter(e -> matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
                                     a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
                                     a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime()))
+                            // スキル0/1の従業員を候補から除外（REGISTER_OP/DEPARTMENT_TASK）
+                            .filter(e -> {
+                                String code = e.getEmployeeCode();
+                                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                                    Integer rn = a.getRegisterNo();
+                                    if (rn != null) {
+                                        Short lv = regSkillByEmpRegister.getOrDefault(code, Map.of()).get(rn);
+                                        if (lv != null && (lv == 0 || lv == 1)) return false;
+                                    }
+                                } else if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK) {
+                                    String dept = a.getDepartmentCode();
+                                    if (dept != null) {
+                                        Short lv = deptSkillByEmpDept.getOrDefault(code, Map.of()).get(dept);
+                                        if (lv != null && (lv == 0 || lv == 1)) return false;
+                                    }
+                                }
+                                return true;
+                            })
                             // 連勤上限チェック（ASSIGNMENTでも、既存ロスター基準で7連勤を防ぐ）
                             .filter(e -> !wouldExceedConsecutiveCap(attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of()), date, maxConsecutiveDays))
                             .toList();
@@ -1283,6 +1315,21 @@ public class ShiftScheduleService {
                                 if (!matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
                                         a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
                                         a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
+                                // スキル0/1の従業員を候補から除外
+                                String code = e.getEmployeeCode();
+                                if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP) {
+                                    Integer rn = a.getRegisterNo();
+                                    if (rn != null) {
+                                        Short lv = regSkillByEmpRegister.getOrDefault(code, Map.of()).get(rn);
+                                        if (lv != null && (lv == 0 || lv == 1)) return false;
+                                    }
+                                } else if (a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK) {
+                                    String dept = a.getDepartmentCode();
+                                    if (dept != null) {
+                                        Short lv = deptSkillByEmpDept.getOrDefault(code, Map.of()).get(dept);
+                                        if (lv != null && (lv == 0 || lv == 1)) return false;
+                                    }
+                                }
                                 // 連勤上限（既存ロスターが無い場合は事実上無視されるが、念のため空集合で判定）
                                 var attDays = attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
                                 if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) return false;
@@ -1771,18 +1818,21 @@ public class ShiftScheduleService {
         String store = best.getStoreCode();
         if (store != null) {
             if ("ATTENDANCE".equals(key.getStage())) {
+                // ATTENDANCE フェーズのみ出勤テーブルを更新（上書き）
                 shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
             } else {
+                // ASSIGNMENT フェーズでは出勤時間は固定（変更しない）
+                // レジ割当／部門タスクのみ再生成
                 registerAssignmentMapper.deleteByMonthAndStore(from, to, store);
-                shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
+                // shift_assignment の削除は行わない
             }
         } else {
             // 後方互換: storeCode が無い場合は従来の削除（非推奨）
             if ("ATTENDANCE".equals(key.getStage())) {
                 shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
             } else {
+                // ASSIGNMENT フェーズでは出勤は変更しない
                 registerAssignmentMapper.deleteByProblemId(best.getProblemId());
-                shiftAssignmentMapper.deleteByProblemId(best.getProblemId());
             }
         }
 
@@ -1888,7 +1938,10 @@ public class ShiftScheduleService {
         }
 
         // -- DB に保存 --
-        shiftAssignments.forEach(shiftAssignmentMapper::insert);
+        // ASSIGNMENT フェーズでは出勤テーブルは編集しない
+        if ("ATTENDANCE".equals(key.getStage())) {
+            shiftAssignments.forEach(shiftAssignmentMapper::insert);
+        }
         mergedRegisterAssignments.forEach(registerAssignmentMapper::insert);
         if (best.getDepartmentCode() != null) {
             departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, store, best.getDepartmentCode());
