@@ -20,7 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.lang.reflect.Method;
 
@@ -43,13 +42,11 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
-import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
@@ -60,7 +57,6 @@ import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.service.TaskPlanService;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
-import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.optimization.entity.WorkKind;
 import io.github.riemr.shift.optimization.entity.BreakAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
@@ -94,6 +90,8 @@ public class ShiftScheduleService {
     private final AppSettingService appSettingService;
     private final TaskPlanService taskPlanService;
     private final PlatformTransactionManager transactionManager;
+    private final AttendanceService attendanceService;
+    private final AssignmentService assignmentCandidateService;
 
     /* === Settings === */
     @Value("${shift.solver.spent-limit:PT5M}") // ISO‑8601 Duration (default 5 minutes)
@@ -271,7 +269,7 @@ public class ShiftScheduleService {
             log.error("=== STARTING ATTENDANCE OPTIMIZATION ==="); // デバッグ用
             SolverJob<AttendanceSolution, ProblemKey> job = attendanceSolverManager.solveAndListen(
                     key,
-                    this::loadAttendanceProblem,
+                    attendanceService::loadAttendanceProblem,
                     best -> {
                         // 進捗更新・スコア記録（表示用）
                         if (best != null && best.getScore() != null) {
@@ -326,7 +324,7 @@ public class ShiftScheduleService {
                     
                     TransactionTemplate tt = new TransactionTemplate(transactionManager);
                     tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-                    tt.execute(s -> { persistAttendanceResult(finalBest, key); return null; });
+                    tt.execute(s -> { attendanceService.persistAttendanceResult(finalBest, key); return null; });
                 } catch (Exception e) {
                     log.error("Persist(final attendance) failed: {}", e.getMessage(), e);
                 }
@@ -883,7 +881,11 @@ public class ShiftScheduleService {
 
         // ステージごとの可用従業員候補を事前計算（ピン留め相当のフィルタリング）
         try {
-            prepareCandidateEmployees(unsolved, key.getStage(), cycleStart);
+            if ("ASSIGNMENT".equals(key.getStage())) {
+                assignmentCandidateService.prepareCandidateEmployeesForAssignment(unsolved, cycleStart);
+            } else if ("ATTENDANCE".equals(key.getStage())) {
+                attendanceService.prepareCandidateEmployeesForAttendance(unsolved, cycleStart);
+            }
         } catch (Exception ex) {
             log.warn("Failed to prepare candidate employees: {}", ex.getMessage());
         }
@@ -902,203 +904,13 @@ public class ShiftScheduleService {
         return unsolved;
     }
 
-    private AttendanceSolution loadAttendanceProblem(ProblemKey key) {
-        log.error("=== LOAD ATTENDANCE PROBLEM STARTED ==="); // デバッグ用
-        LocalDate cycleStart = key.getCycleStart();
-        ShiftSchedule base = repository.fetchShiftSchedule(cycleStart, key.getStoreCode(), key.getDepartmentCode());
-        AttendanceSolution sol = new AttendanceSolution();
-        sol.setProblemId(toProblemId(cycleStart));
-        sol.setMonth(cycleStart);
-        sol.setStoreCode(key.getStoreCode());
-        sol.setDepartmentCode(key.getDepartmentCode());
-        sol.setEmployeeList(base.getEmployeeList());
-        sol.setEmployeeShiftPatternList(base.getEmployeeShiftPatternList());
-        sol.setEmployeeWeeklyPreferenceList(base.getEmployeeWeeklyPreferenceList());
-        sol.setEmployeeRequestList(base.getEmployeeRequestList());
-        sol.setEmployeeMonthlySettingList(base.getEmployeeMonthlySettingList());
-        sol.setDemandList(base.getDemandList());
-        var patterns = buildPatternAssignmentsFromDemand(sol);
-        sol.setPatternAssignments(patterns);
-        
-        // デバッグ用: パターン詳細を出力
-        long assignedCount = patterns.stream().filter(p -> p.getAssignedEmployee() != null).count();
-        long unassignedCount = patterns.size() - assignedCount;
-        log.info("Generated {} pattern assignments for ATTENDANCE optimization (assigned: {}, unassigned: {})", 
-                patterns.size(), assignedCount, unassignedCount);
-        
-        // 需要と供給の詳細分析
-        var demand = Optional.ofNullable(sol.getDemandList()).orElse(List.of());
-        int totalDemandUnits = demand.stream().mapToInt(RegisterDemandQuarter::getRequiredUnits).sum();
-        log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {:.1f}%", 
-                totalDemandUnits, patterns.size(), (double)patterns.size() / totalDemandUnits * 100);
-        
-        return sol;
-    }
+    // moved to AttendanceService
 
-    private List<DailyPatternAssignmentEntity> buildPatternAssignmentsFromDemand(
-            AttendanceSolution sol) {
-        List<DailyPatternAssignmentEntity> result = new ArrayList<>();
-        var patterns = Optional.ofNullable(sol.getEmployeeShiftPatternList()).orElse(List.of());
-        var demand = Optional.ofNullable(sol.getDemandList()).orElse(List.of());
-        var employees = Optional.ofNullable(sol.getEmployeeList()).orElse(List.of());
-        var weeklyPrefs = Optional.ofNullable(sol.getEmployeeWeeklyPreferenceList()).orElse(List.of());
-        var requests = Optional.ofNullable(sol.getEmployeeRequestList()).orElse(List.of());
-        if (patterns.isEmpty()) return result;
-        ZoneId zone = ZoneId.systemDefault();
+    // moved to AttendanceService
 
-        Map<LocalDate, List<RegisterDemandQuarter>> demandByDate = new HashMap<>();
-        for (var d : demand) {
-            Date dd = d.getDemandDate();
-            LocalDate dt;
-            if (dd instanceof java.sql.Date) {
-                dt = ((java.sql.Date) dd).toLocalDate();
-            } else {
-                dt = dd.toInstant().atZone(zone).toLocalDate();
-            }
-            demandByDate.computeIfAbsent(dt, k -> new ArrayList<>()).add(d);
-        }
+    // moved to AttendanceService
 
-        // パターン時間帯の重複（同時刻の開始/終了が複数従業員に跨る）を除外し、時間窓のユニーク集合を作る
-        // ただし priority が 0,1 のパターンは「割当不可」として窓生成の対象外にする（>=2 のみ採用）
-        LinkedHashSet<String> windowKeys = new LinkedHashSet<>();
-        List<LocalTime[]> windows = new ArrayList<>();
-        for (var p : patterns) {
-            if (Boolean.FALSE.equals(p.getActive())) continue;
-            Short prio = p.getPriority();
-            if (prio == null || prio.intValue() < 2) continue; // priority 0,1 は除外
-            var ps = p.getStartTime().toLocalTime();
-            var pe = p.getEndTime().toLocalTime();
-            String key = ps + "_" + pe;
-            if (windowKeys.add(key)) {
-                windows.add(new LocalTime[]{ps, pe});
-            }
-        }
-
-        var cycleStart = sol.getMonth();
-        var cycleEnd = cycleStart.plusMonths(1);
-        for (var date = cycleStart; date.isBefore(cycleEnd); date = date.plusDays(1)) {
-            var quarters = demandByDate.getOrDefault(date, List.of());
-            for (var win : windows) {
-                var ps = win[0];
-                var pe = win[1];
-                int maxUnits = 0;
-                for (var q : quarters) {
-                    var qt = q.getSlotTime();
-                    if ((qt.equals(ps) || qt.isAfter(ps)) && qt.isBefore(pe)) {
-                        maxUnits = Math.max(maxUnits, Optional.ofNullable(q.getRequiredUnits()).orElse(0));
-                    }
-                }
-                for (int i = 0; i < maxUnits; i++) {
-                    String id = sol.getStoreCode() + "|" + sol.getDepartmentCode() + "|" + date + "|" + ps + "|" + pe + "|" + i;
-                    var ent = new DailyPatternAssignmentEntity(
-                            id, sol.getStoreCode(), sol.getDepartmentCode(), date, ps, pe, i);
-                    // 候補従業員（パターン境界完全一致＋週次/希望休/基本時間内）を事前計算
-                    var candidates = computeEligibleEmployeesForWindow(employees, patterns, weeklyPrefs, requests, date, ps, pe);
-                    ent.setCandidateEmployees(candidates);
-                    
-                    if (i == 0) { // デバッグログは最初のユニットのみ
-                        log.debug("Pattern {}-{} on {}: {} eligible employees", ps, pe, date, candidates.size());
-                    }
-                    result.add(ent);
-                }
-            }
-        }
-        return result;
-    }
-
-    private List<Employee> computeEligibleEmployeesForWindow(
-            List<Employee> employees,
-            List<EmployeeShiftPattern> patterns,
-            List<EmployeeWeeklyPreference> weeklyPrefs,
-            List<EmployeeRequest> requests,
-            LocalDate date,
-            LocalTime ps,
-            LocalTime pe) {
-        Map<String, List<EmployeeShiftPattern>> pattByEmp =
-                patterns.stream().collect(Collectors.groupingBy(EmployeeShiftPattern::getEmployeeCode));
-        Map<String, List<EmployeeWeeklyPreference>> weeklyByEmp =
-                weeklyPrefs.stream().collect(Collectors.groupingBy(EmployeeWeeklyPreference::getEmployeeCode));
-        Map<String, Set<LocalDate>> offByEmp = new HashMap<>();
-        for (var r : requests) {
-            if (r.getRequestKind() == null) continue;
-            String kind = r.getRequestKind().toLowerCase();
-            if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                LocalDate d = (r.getRequestDate() instanceof java.sql.Date)
-                        ? ((java.sql.Date) r.getRequestDate()).toLocalDate()
-                        : r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
-            }
-        }
-        int dow = date.getDayOfWeek().getValue();
-        List<Employee> list = new ArrayList<>();
-        for (var e : employees) {
-            String code = e.getEmployeeCode();
-            // パターン境界完全一致 かつ priority >= 2
-            boolean hasPattern = pattByEmp.getOrDefault(code, List.of()).stream()
-                    .anyMatch(p -> !Boolean.FALSE.equals(p.getActive())
-                            && p.getPriority() != null && p.getPriority().intValue() >= 2
-                            && p.getStartTime().toLocalTime().equals(ps)
-                            && p.getEndTime().toLocalTime().equals(pe));
-            if (!hasPattern) continue;
-            // 希望休
-            if (offByEmp.getOrDefault(code, Set.of()).contains(date)) continue;
-            // 週次OFF/基本時間
-            boolean weeklyOk = true;
-            for (var w : weeklyByEmp.getOrDefault(code, List.of())) {
-                if (w.getDayOfWeek() == null || w.getDayOfWeek().intValue() != dow) continue;
-                if ("OFF".equalsIgnoreCase(w.getWorkStyle())) { weeklyOk = false; break; }
-                if (w.getBaseStartTime() != null && w.getBaseEndTime() != null) {
-                    var bs = w.getBaseStartTime().toLocalTime();
-                    var be = w.getBaseEndTime().toLocalTime();
-                    if (ps.isBefore(bs) || pe.isAfter(be)) { weeklyOk = false; break; }
-                }
-            }
-            if (!weeklyOk) continue;
-            list.add(e);
-        }
-        return list;
-    }
-
-    private void persistAttendanceResult(AttendanceSolution best, ProblemKey key) {
-        if (best == null || best.getPatternAssignments() == null) {
-            log.warn("Cannot persist attendance result - solution or pattern assignments are null");
-            return;
-        }
-        
-        long assignedPatterns = best.getPatternAssignments().stream().filter(p -> p.getAssignedEmployee() != null).count();
-        log.info("Persisting attendance result: score={}, total_patterns={}, assigned_patterns={}", 
-                best.getScore(), best.getPatternAssignments().size(), assignedPatterns);
-        
-        LocalDate from = best.getMonth();
-        LocalDate to = from.plusMonths(1);
-        String store = best.getStoreCode();
-        if (store == null || store.isBlank()) throw new IllegalStateException("storeCode must not be null for attendance persist");
-        int del = shiftAssignmentMapper.deleteByMonthAndStore(from, to, store);
-        log.info("[attendance] Cleared shift_assignment rows: {} for store={}, from={}, to={}", del, store, from, to);
-
-        ZoneId zone = ZoneId.systemDefault();
-        int ins = 0;
-        Set<String> dedup = new HashSet<>();
-        for (var e : best.getPatternAssignments()) {
-            if (e.getAssignedEmployee() == null) continue;
-            var sa = new ShiftAssignment();
-            sa.setStoreCode(store);
-            sa.setEmployeeCode(e.getAssignedEmployee().getEmployeeCode());
-            var startAt = Date.from(e.getDate().atTime(e.getPatternStart()).atZone(zone).toInstant());
-            var endAt = Date.from(e.getDate().atTime(e.getPatternEnd()).atZone(zone).toInstant());
-            sa.setStartAt(startAt);
-            sa.setEndAt(endAt);
-            sa.setCreatedBy("auto");
-            // 一意キー (store_code, employee_code, start_at) の重複を事前に排除
-            String k = store + "|" + sa.getEmployeeCode() + "|" + sa.getStartAt().getTime();
-            if (dedup.add(k)) {
-                // 競合時（同月・同従業員・同開始）の並行保存にも耐えるようUPSERTを使用
-                shiftAssignmentMapper.upsert(sa);
-                ins++;
-            }
-        }
-        log.info("[attendance] Persisted rows: {} (from {} assigned patterns)", ins, assignedPatterns);
-    }
+    // moved to AttendanceService
 
     // RegisterDemandQuarter の requiredUnits に基づき、ATTENDANCE用に15分枠のプレースホルダを合成
     private int synthesizeAttendanceSlotsFromDemand(ShiftSchedule schedule) {
