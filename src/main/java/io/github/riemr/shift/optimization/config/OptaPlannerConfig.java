@@ -7,6 +7,8 @@ import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.optimization.phase.AttendanceInitialSolutionBuilder;
+import io.github.riemr.shift.optimization.phase.AssignmentInitialSolutionBuilder;
+import io.github.riemr.shift.optimization.service.ProblemKey;
 import org.optaplanner.core.api.solver.SolverFactory;
 import org.optaplanner.core.api.solver.SolverManager;
 import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicPhaseConfig;
@@ -18,7 +20,12 @@ import org.optaplanner.core.config.localsearch.LocalSearchPhaseConfig;
 import org.optaplanner.core.config.localsearch.LocalSearchType;
 import org.optaplanner.core.config.phase.PhaseConfig;
 import org.optaplanner.core.config.phase.custom.CustomPhaseConfig;
+import org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig;
+import org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig;
+import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicType;
 // pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
 import org.optaplanner.core.config.solver.termination.TerminationConfig;
@@ -32,14 +39,14 @@ import java.util.List;
 public class OptaPlannerConfig {
 
     // アプリ設定と揃えるため同じキーを参照（デフォルト: PT30M に統一）
-    @org.springframework.beans.factory.annotation.Value("${shift.solver.spent-limit:PT30M}")
+    @Value("${shift.solver.spent-limit:PT30M}")
     private Duration solverSpentLimit;
     // アーリーストッピングを無効化
-    // @org.springframework.beans.factory.annotation.Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
+    // @Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
     // private Duration unimprovedScoreLimit;
 
     @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverFactory.class)
+    @ConditionalOnMissingBean(SolverFactory.class)
     @SuppressWarnings({"rawtypes", "unchecked"})
     public SolverFactory<ShiftSchedule> solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
@@ -54,7 +61,7 @@ public class OptaPlannerConfig {
         // カスタム初期解（ASSIGNMENT）→ CH → LS(diversify) → LS(converge)
         CustomPhaseConfig customInitial = new CustomPhaseConfig();
         customInitial.setCustomPhaseCommandClassList(List.of(
-                io.github.riemr.shift.optimization.phase.AssignmentInitialSolutionBuilder.class
+                AssignmentInitialSolutionBuilder.class
         ));
 
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
@@ -68,7 +75,7 @@ public class OptaPlannerConfig {
     }
 
     @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(SolverManager.class)
+    @ConditionalOnMissingBean(SolverManager.class)
     @SuppressWarnings({"rawtypes", "unchecked"})
     public SolverManager solverManager(SolverFactory solverFactory) {
         // Generics を回避し、条件評価時の型解決エラーを防ぐ
@@ -95,13 +102,13 @@ public class OptaPlannerConfig {
         aChange.setValueSelectorConfig(new ValueSelectorConfig()
                 .withVariableName("assignedEmployee")
                 .withSelectionOrder(SelectionOrder.RANDOM));
-        org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig aSwap =
-                new org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig();
+        SwapMoveSelectorConfig aSwap =
+                new SwapMoveSelectorConfig();
         aSwap.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(DailyPatternAssignmentEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
-        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig aUnion =
-                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
+        UnionMoveSelectorConfig aUnion =
+                new UnionMoveSelectorConfig();
         aUnion.setMoveSelectorList(java.util.Arrays.asList(aChange, aSwap));
 
         // フェーズ1: LATE_ACCEPTANCE（悪化も一定受理して停滞回避）
@@ -127,7 +134,7 @@ public class OptaPlannerConfig {
         // Construction Heuristic で補完
         ConstructionHeuristicPhaseConfig constructionPhase = new ConstructionHeuristicPhaseConfig();
         constructionPhase.setConstructionHeuristicType(
-            org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicType.FIRST_FIT);
+            ConstructionHeuristicType.FIRST_FIT);
         
         solverConfig.setPhaseConfigList(List.of(
                 customInitialPhase,    // カスタム初期解生成
@@ -139,7 +146,7 @@ public class OptaPlannerConfig {
     }
 
     @Bean
-    public SolverManager<AttendanceSolution, io.github.riemr.shift.optimization.service.ProblemKey> attendanceSolverManager(
+    public SolverManager<AttendanceSolution, ProblemKey> attendanceSolverManager(
             SolverFactory<AttendanceSolution> solverFactory) {
         return SolverManager.create(solverFactory);
     }
@@ -172,10 +179,10 @@ public class OptaPlannerConfig {
                 .withSelectionOrder(SelectionOrder.RANDOM);
         change.setValueSelectorConfig(valueSelector);
 
-        org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig union =
-                new org.optaplanner.core.config.heuristic.selector.move.composite.UnionMoveSelectorConfig();
-        org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig swap =
-                new org.optaplanner.core.config.heuristic.selector.move.generic.SwapMoveSelectorConfig();
+        UnionMoveSelectorConfig union =
+                new UnionMoveSelectorConfig();
+        SwapMoveSelectorConfig swap =
+                new SwapMoveSelectorConfig();
         swap.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(ShiftAssignmentPlanningEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
