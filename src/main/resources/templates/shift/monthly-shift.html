@@ -571,8 +571,28 @@
                 // フェーズ2: 最適化実行（段階選択）
                 document.getElementById('optimizationStatus').textContent = '最適化を開始中...';
                 window.__currentOptimizationStage = stage;
-                const url = stage === 'ATTENDANCE' ? '/shift/api/attendance/start' : '/shift/api/assignment/start';
-                return fetch(url, {
+                // Assignment は日次で同期実行（チケット運用せず、完了を待って結果表示）
+                if (stage === 'ASSIGNMENT') {
+                    return fetch('/shift/api/assignment/start-daily', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData)
+                    })
+                    .then(res => {
+                        if (!res.ok) return res.text().then(t => { throw new Error(`HTTP ${res.status}: ${t.substring(0,200)}`); });
+                        return res.json();
+                    })
+                    .then(json => {
+                        if (!json.success) throw new Error(json.error || '日次割当の実行に失敗しました');
+                        // 成功表示
+                        document.getElementById('optimizationStatus').textContent = '日次割当の保存が完了しました';
+                        showSuccess();
+                        // ダミーのチケット返却で後続チェーンを満たす（ステータス監視は行わない）
+                        return { ticketId: null };
+                    });
+                }
+                // Attendance は既存のチケット方式で実行
+                return fetch('/shift/api/attendance/start', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -591,15 +611,15 @@
             })
             .then(ticket => {
                 console.log('Optimization ticket received:', ticket);
+                // Assignment(日次)はチケット監視しない
+                if (window.__currentOptimizationStage === 'ASSIGNMENT') {
+                    return; // ここで完了
+                }
                 optimizationTicket = ticket;
-                
                 if (!ticket || !ticket.ticketId) {
                     throw new Error('Invalid ticket received: ' + JSON.stringify(ticket));
                 }
-                
                 document.getElementById('optimizationStatus').textContent = '最適化を実行中...';
-                
-                // ステータス確認を開始
                 statusCheckInterval = setInterval(checkOptimizationStatus, 2000);
             })
             .catch(error => {

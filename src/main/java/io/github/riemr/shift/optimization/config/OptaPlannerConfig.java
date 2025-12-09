@@ -38,9 +38,12 @@ import java.util.List;
 @Configuration
 public class OptaPlannerConfig {
 
-    // アプリ設定と揃えるため同じキーを参照（デフォルト: PT30M に統一）
+    // 共通（ASSIGNMENT 月次など）デフォルト上限
     @Value("${shift.solver.spent-limit:PT30M}")
-    private Duration solverSpentLimit;
+    private String solverSpentLimit;
+    // ATTENDANCE（月次シフト）専用上限（既定: 2分）
+    @Value("${shift.attendance.spent-limit:PT2M}")
+    private String attendanceSpentLimit;
     // アーリーストッピングを無効化
     // @Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
     // private Duration unimprovedScoreLimit;
@@ -48,15 +51,16 @@ public class OptaPlannerConfig {
     @Bean
     @ConditionalOnMissingBean(SolverFactory.class)
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public SolverFactory<ShiftSchedule> solverFactory() {
+    public SolverFactory solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(ShiftSchedule.class)
                 .withEntityClasses(ShiftAssignmentPlanningEntity.class)
                 .withTerminationConfig(terminationConfig());
 
-        // Constraint Streams を設定
-        solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
-                .withConstraintProviderClass(ShiftScheduleConstraintProvider.class));
+        // Constraint Streams を設定（ConstraintMatchはバージョン互換のためsetter使用）
+        ScoreDirectorFactoryConfig sdf1 = new ScoreDirectorFactoryConfig()
+                .withConstraintProviderClass(ShiftScheduleConstraintProvider.class);
+        solverConfig.setScoreDirectorFactoryConfig(sdf1);
 
         // カスタム初期解（ASSIGNMENT）→ CH → LS(diversify) → LS(converge)
         CustomPhaseConfig customInitial = new CustomPhaseConfig();
@@ -66,7 +70,7 @@ public class OptaPlannerConfig {
 
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
                 customInitial,
-                constructionHeuristicPhaseConfig(),
+                // constructionHeuristicPhaseConfig(), // 無効化：カスタム初期解が完全なため  
                 relaxedLocalSearchPhase(),
                 strictLocalSearchPhase()
         ));
@@ -88,10 +92,12 @@ public class OptaPlannerConfig {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(AttendanceSolution.class)
                 .withEntityClasses(DailyPatternAssignmentEntity.class)
-                .withTerminationConfig(terminationConfig());
+                // ATTENDANCEは専用の時間上限を使用
+                .withTerminationConfig(new TerminationConfig().withSpentLimit(parseDurationTolerant(attendanceSpentLimit, java.time.Duration.ofMinutes(2))));
 
-        solverConfig.setScoreDirectorFactoryConfig(new ScoreDirectorFactoryConfig()
-                .withConstraintProviderClass(AttendanceConstraintProvider.class));
+        ScoreDirectorFactoryConfig sdf2 = new ScoreDirectorFactoryConfig()
+                .withConstraintProviderClass(AttendanceConstraintProvider.class);
+        solverConfig.setScoreDirectorFactoryConfig(sdf2);
 
         // ATTENDANCE: CH + LS（第1段: LATE_ACCEPTANCE で多様化, 第2段: TABU_SEARCH で収束）
         // 共通のムーブ（Change + Swap）
@@ -116,7 +122,8 @@ public class OptaPlannerConfig {
         alsDiversify.setLocalSearchType(LocalSearchType.LATE_ACCEPTANCE);
         alsDiversify.setMoveSelectorConfig(aUnion);
         // 先行フェーズには必ずフェーズ終了条件が必要（全体終了条件だけでは到達不能エラーになる）
-        alsDiversify.setTerminationConfig(new TerminationConfig().withSpentLimit(solverSpentLimit.dividedBy(2)));
+        alsDiversify.setTerminationConfig(new TerminationConfig().withSpentLimit(
+                parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)).dividedBy(2)));
         //（デフォルト設定の Late Acceptance を使用）
 
         // フェーズ2: TABU_SEARCH（重複探索を避けつつ収束）
@@ -145,21 +152,47 @@ public class OptaPlannerConfig {
         return SolverFactory.create(solverConfig);
     }
 
+    // ScoreManager は explainScore に利用（デバッグ用途）
+    @Bean
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public org.optaplanner.core.api.score.ScoreManager shiftScoreManager(SolverFactory solverFactory) {
+        return org.optaplanner.core.api.score.ScoreManager.create(solverFactory);
+    }
+
     @Bean
     public SolverManager<AttendanceSolution, ProblemKey> attendanceSolverManager(
             SolverFactory<AttendanceSolution> solverFactory) {
         return SolverManager.create(solverFactory);
     }
 
+
     private TerminationConfig terminationConfig() {
         // アーリーストッピングを無効化して時間制限のみで実行
-        TerminationConfig t = new TerminationConfig().withSpentLimit(solverSpentLimit);
+        TerminationConfig t = new TerminationConfig().withSpentLimit(parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)));
         // アーリーストッピングのコードをコメントアウト
         // if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
         //     // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
         //     t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
         // }
         return t;
+    }
+
+    private java.time.Duration parseDurationTolerant(String raw, java.time.Duration def) {
+        if (raw == null || raw.isBlank()) return def;
+        String s = raw.trim();
+        try {
+            if (s.startsWith("P")) {
+                if (s.matches("^PT\\d+$")) s = s + "S"; // fix common mistake
+                return java.time.Duration.parse(s);
+            }
+            String ls = s.toLowerCase();
+            if (ls.endsWith("ms")) return java.time.Duration.ofMillis(Long.parseLong(ls.substring(0, ls.length()-2)));
+            if (ls.endsWith("s")) return java.time.Duration.ofSeconds(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("m")) return java.time.Duration.ofMinutes(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("h")) return java.time.Duration.ofHours(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.matches("^\\d+$")) return java.time.Duration.ofSeconds(Long.parseLong(ls));
+        } catch (Exception ignore) {}
+        return def;
     }
 
     private ConstructionHeuristicPhaseConfig constructionHeuristicPhaseConfig() {
@@ -205,7 +238,8 @@ public class OptaPlannerConfig {
                 .withSelectionOrder(SelectionOrder.RANDOM));
         ls.setMoveSelectorConfig(change);
         // 後続フェーズがあるため、このフェーズ単体の終了条件を必須で設定
-        ls.setTerminationConfig(new TerminationConfig().withSpentLimit(solverSpentLimit.dividedBy(2)));
+        ls.setTerminationConfig(new TerminationConfig().withSpentLimit(
+                parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)).dividedBy(2)));
         return ls;
     }
 }

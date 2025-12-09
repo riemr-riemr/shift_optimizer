@@ -269,6 +269,13 @@
       and end_at = #{endAt}
   </delete>
 
+  <delete id="deleteByStoreEmployeeAndStartAt">
+    delete from public.register_assignment
+    where store_code = #{storeCode}
+      and employee_code = #{employeeCode}
+      and start_at = #{startAt}
+  </delete>
+
   <delete id="deleteByMonthAndStore">
     delete from public.register_assignment
     where start_at &gt;= #{from}

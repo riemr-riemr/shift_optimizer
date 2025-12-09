@@ -7,6 +7,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.entity.BreakAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
@@ -99,6 +100,10 @@ public class ShiftSchedule {
     @ProblemFactCollectionProperty
     private List<EmployeeShiftPattern> employeeShiftPatternList = new java.util.ArrayList<>();
 
+    /** 従業員の出勤時間（レジ割り当て可能時間制約用） */
+    @ProblemFactCollectionProperty
+    private List<ShiftAssignment> shiftAssignmentList = new java.util.ArrayList<>();
+
     /* === Planning entities === */
 
     /** 15分×レジ × 日付 × シフトを割り当てる単位 */
@@ -135,6 +140,7 @@ public class ShiftSchedule {
                          List<EmployeeWeeklyPreference> employeeWeeklyPreferenceList,
                          List<EmployeeMonthlySetting> employeeMonthlySettingList,
                          List<EmployeeShiftPattern> employeeShiftPatternList,
+                         List<ShiftAssignment> shiftAssignmentList,
                          List<ShiftAssignmentPlanningEntity> assignmentList,
                          List<BreakAssignment> breakList) {
         this.problemId = problemId;
@@ -153,6 +159,7 @@ public class ShiftSchedule {
         this.employeeWeeklyPreferenceList = employeeWeeklyPreferenceList;
         this.employeeMonthlySettingList = employeeMonthlySettingList;
         this.employeeShiftPatternList = employeeShiftPatternList;
+        this.shiftAssignmentList = shiftAssignmentList;
         this.assignmentList = assignmentList;
         this.breakList = breakList;
     }

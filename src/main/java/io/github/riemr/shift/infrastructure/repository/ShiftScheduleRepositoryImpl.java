@@ -40,6 +40,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final ConstraintSettingMapper     constraintSettingMapper;
     private final StoreMapper                 storeMapper;
     private final RegisterAssignmentMapper    assignmentMapper; // 前回結果 (warm‑start) 用
+    private final ShiftAssignmentMapper       shiftAssignmentMapper; // 出勤時間制約用
     private final io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeDepartmentMapper    employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
@@ -110,6 +111,13 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         java.util.Date monthStartDate = java.sql.Date.valueOf(cycleStart.withDayOfMonth(1));
         List<EmployeeMonthlySetting> monthlySettings = employeeMonthlySettingMapper.selectByMonth(monthStartDate);
         List<EmployeeShiftPattern> shiftPatterns = employeeShiftPatternMapper.selectAllActive();
+
+        // 出勤時間データを取得（制約用）
+        List<io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment> shiftAssignments = 
+                shiftAssignmentMapper.selectByMonth(cycleStart, cycleEnd)
+                .stream()
+                .filter(s -> storeCode == null || storeCode.equals(s.getStoreCode()))
+                .toList();
 
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
@@ -192,6 +200,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
         schedule.setEmployeeMonthlySettingList(monthlySettings);
         schedule.setEmployeeShiftPatternList(shiftPatterns);
+        schedule.setShiftAssignmentList(shiftAssignments);
         return schedule;
     }
 
