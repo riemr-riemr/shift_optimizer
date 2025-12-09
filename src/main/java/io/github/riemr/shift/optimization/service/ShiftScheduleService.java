@@ -109,6 +109,10 @@ public class ShiftScheduleService {
     private String assignmentDailySpentLimitProp;
     @Value("${shift.solver.daily.parallelism:2}")
     private int dailyParallelism;
+    @Value("${shift.attendance.unimproved-limit:PT30S}")
+    private String attendanceUnimprovedLimitProp;
+    @Value("${shift.assignment.daily.unimproved-limit:PT10S}")
+    private String assignmentDailyUnimprovedLimitProp;
     // 終了条件（未改善時間）は OptaPlanner の TerminationConfig で設定
 
     /* === Runtime State === */
@@ -117,6 +121,7 @@ public class ShiftScheduleService {
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
     // 開発者向け: スコア推移の時系列
     private final Map<ProblemKey, List<ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, Long> lastImprovementMap = new ConcurrentHashMap<>();
     // 進行状況可視化用のスコア系列のみ保持
     // UUIDチケット -> ProblemKey の対応
     private final Map<String, ProblemKey> ticketKeyMap = new ConcurrentHashMap<>();
@@ -470,6 +475,14 @@ public class ShiftScheduleService {
         return parseDurationTolerant(assignmentDailySpentLimitProp, Duration.ofMinutes(1));
     }
 
+    private Duration getAttendanceUnimprovedLimit() {
+        return parseDurationTolerant(attendanceUnimprovedLimitProp, Duration.ofSeconds(30));
+    }
+
+    private Duration getAssignmentDailyUnimprovedLimit() {
+        return parseDurationTolerant(assignmentDailyUnimprovedLimitProp, Duration.ofSeconds(10));
+    }
+
     private Duration parseDurationTolerant(String raw, Duration def) {
         if (raw == null || raw.isBlank()) return def;
         String s = raw.trim();
@@ -509,6 +522,7 @@ public class ShiftScheduleService {
         if (list.size() > 1000) {
             list.subList(0, list.size() - 1000).clear();
         }
+        lastImprovementMap.put(key, System.currentTimeMillis());
     }
 
     // ATTENDANCE 用（スコアのみからポイントを作成）
@@ -527,6 +541,7 @@ public class ShiftScheduleService {
         if (list.size() > 1000) {
             list.subList(0, list.size() - 1000).clear();
         }
+        lastImprovementMap.put(key, System.currentTimeMillis());
     }
 
     // 早期終了（未改善）は OptaPlanner の TerminationConfig.withUnimprovedScoreSpentLimit に委譲
@@ -1945,8 +1960,20 @@ public class ShiftScheduleService {
                     killer.schedule(() -> {
                         try { solverManager.terminateEarly(key); } catch (Exception ignore) {}
                     }, Math.max(1, getAssignmentDailyLimit().toSeconds()), java.util.concurrent.TimeUnit.SECONDS);
+                    // 未改善終了（デフォルト10秒）モニタ
+                    lastImprovementMap.put(key, System.currentTimeMillis());
+                    java.util.concurrent.ScheduledExecutorService unimprovedMonitor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+                    unimprovedMonitor.scheduleAtFixedRate(() -> {
+                        try {
+                            long last = lastImprovementMap.getOrDefault(key, System.currentTimeMillis());
+                            if (System.currentTimeMillis() - last >= getAssignmentDailyUnimprovedLimit().toMillis()) {
+                                solverManager.terminateEarly(key);
+                            }
+                        } catch (Exception ignore) {}
+                    }, 5, 1, java.util.concurrent.TimeUnit.SECONDS);
                     ShiftSchedule finalBest = job.getFinalBestSolution();
                     killer.shutdown();
+                    unimprovedMonitor.shutdown();
                     // 当日分のみ永続化（独立トランザクション）
                     TransactionTemplate tt = new TransactionTemplate(transactionManager);
                     tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -2006,8 +2033,20 @@ public class ShiftScheduleService {
             killer.schedule(() -> {
                 try { solverManager.terminateEarly(key); } catch (Exception ignore) {}
             }, Math.max(1, getAssignmentDailyLimit().toSeconds()), java.util.concurrent.TimeUnit.SECONDS);
+            // 未改善終了（デフォルト10秒）モニタ
+            lastImprovementMap.put(key, System.currentTimeMillis());
+            java.util.concurrent.ScheduledExecutorService unimprovedMonitor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+            unimprovedMonitor.scheduleAtFixedRate(() -> {
+                try {
+                    long last = lastImprovementMap.getOrDefault(key, System.currentTimeMillis());
+                    if (System.currentTimeMillis() - last >= getAssignmentDailyUnimprovedLimit().toMillis()) {
+                        solverManager.terminateEarly(key);
+                    }
+                } catch (Exception ignore) {}
+            }, 5, 1, java.util.concurrent.TimeUnit.SECONDS);
             ShiftSchedule finalBest = job.getFinalBestSolution();
             killer.shutdown();
+            unimprovedMonitor.shutdown();
             
             
             TransactionTemplate tt = new TransactionTemplate(transactionManager);

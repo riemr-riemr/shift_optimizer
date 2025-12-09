@@ -44,6 +44,9 @@ public class OptaPlannerConfig {
     // ATTENDANCE（月次シフト）専用上限（既定: 2分）
     @Value("${shift.attendance.spent-limit:PT2M}")
     private String attendanceSpentLimit;
+    // ATTENDANCE 未改善終了（既定: 30秒）
+    @Value("${shift.attendance.unimproved-limit:PT30S}")
+    private String attendanceUnimprovedLimit;
     // アーリーストッピングを無効化
     // @Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
     // private Duration unimprovedScoreLimit;
@@ -70,7 +73,7 @@ public class OptaPlannerConfig {
 
         solverConfig.setPhaseConfigList(List.<PhaseConfig>of(
                 customInitial,
-                // constructionHeuristicPhaseConfig(), // 無効化：カスタム初期解が完全なため  
+                constructionHeuristicPhaseConfig(), // カスタム初期解で漏れたエンティティを補完  
                 relaxedLocalSearchPhase(),
                 strictLocalSearchPhase()
         ));
@@ -92,8 +95,10 @@ public class OptaPlannerConfig {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(AttendanceSolution.class)
                 .withEntityClasses(DailyPatternAssignmentEntity.class)
-                // ATTENDANCEは専用の時間上限を使用
-                .withTerminationConfig(new TerminationConfig().withSpentLimit(parseDurationTolerant(attendanceSpentLimit, java.time.Duration.ofMinutes(2))));
+                // ATTENDANCEは専用の時間上限＋未改善終了を使用
+                .withTerminationConfig(new TerminationConfig()
+                        .withSpentLimit(parseDurationTolerant(attendanceSpentLimit, java.time.Duration.ofMinutes(2)))
+                        .withUnimprovedSpentLimit(parseDurationTolerant(attendanceUnimprovedLimit, java.time.Duration.ofSeconds(30))));
 
         ScoreDirectorFactoryConfig sdf2 = new ScoreDirectorFactoryConfig()
                 .withConstraintProviderClass(AttendanceConstraintProvider.class);
