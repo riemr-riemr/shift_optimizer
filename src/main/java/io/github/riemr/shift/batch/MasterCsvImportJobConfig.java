@@ -2,15 +2,18 @@ package io.github.riemr.shift.batch;
 
 import io.github.riemr.shift.infrastructure.persistence.entity.*;
 import io.github.riemr.shift.infrastructure.mapper.*;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.Path;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.time.ZoneId;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.sql.Date;
+import java.time.YearMonth;
 
+import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.batch.MyBatisBatchItemWriter;
 import org.springframework.batch.core.*;
@@ -20,17 +23,16 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.mapping.FieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.propertyeditors.CustomDateEditor;
 import org.springframework.context.annotation.*;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @Configuration
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class MasterCsvImportJobConfig {
     private final JobRepository jobRepository;
     private final PlatformTransactionManager txManager;
     private final SqlSessionFactory sqlSessionFactory;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
+    private final EmployeeWeeklyPreferenceMapper weeklyPrefMapper;
     private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeRegisterSkillMapper skillMapper;
@@ -47,11 +49,6 @@ public class MasterCsvImportJobConfig {
     private final RegisterMapper registerMapper;
     private final RegisterTypeMapper registerTypeMapper;
     private final StoreMapper storeMapper;
-    private final DepartmentMasterMapper departmentMasterMapper;
-    private final StoreDepartmentMapper storeDepartmentMapper;
-    private final EmployeeDepartmentMapper employeeDepartmentMapper;
-    private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeTaskSkillMapper employeeTaskSkillMapper;
 
     /* === Job =========================================================== */
     @Bean
@@ -116,19 +113,19 @@ public class MasterCsvImportJobConfig {
 
     /* === Step : task_category_master.csv ====================================== */
     @Bean
-    public Step taskCategoryMasterStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster> taskCategoryMasterReader) {
+    public Step taskCategoryMasterStep(FlatFileItemReader<TaskCategoryMaster> taskCategoryMasterReader) {
         return new StepBuilder("taskCategoryMasterStep", jobRepository)
-                .<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster, io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster>chunk(1000, txManager)
+                .<TaskCategoryMaster, TaskCategoryMaster>chunk(1000, txManager)
                 .reader(taskCategoryMasterReader)
                 .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.TaskCategoryMasterMapper.upsert"))
                 .build();
     }
 
     @Bean
-    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster> taskCategoryMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
+    public FlatFileItemReader<TaskCategoryMaster> taskCategoryMasterReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("task_category_master.csv"),
                 new String[] { "categoryCode", "categoryName", "displayOrder", "color", "icon", "active" },
-                io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster.class);
+                TaskCategoryMaster.class);
     }
 
     /* === Step : cleanup (optional by job parameter 'clean') ======== */
@@ -226,13 +223,13 @@ public class MasterCsvImportJobConfig {
 
     /* === Step : work_demand_interval.csv ========================================== */
     @Bean
-    public Step workDemandIntervalStep(FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> workDemandIntervalReader) {
+    public Step workDemandIntervalStep(FlatFileItemReader<DemandIntervalDto> workDemandIntervalReader) {
         return new StepBuilder("workDemandIntervalStep", jobRepository)
-                .<io.github.riemr.shift.application.dto.DemandIntervalDto, io.github.riemr.shift.application.dto.DemandIntervalDto>chunk(1000, txManager)
+                .<DemandIntervalDto, DemandIntervalDto>chunk(1000, txManager)
                 .reader(workDemandIntervalReader)
                 .writer(items -> {
                     for (var r : items) {
-                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        SqlSession session = sqlSessionFactory.openSession();
                         try {
                             session.insert("io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper.insert", r);
                             session.commit();
@@ -243,7 +240,7 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> workDemandIntervalReader(
+    public FlatFileItemReader<DemandIntervalDto> workDemandIntervalReader(
             @Value("${csv.dir:/csv}") Path csvDir) {
         // Tokenizer that tolerates missing optional trailing fields (e.g., taskCode)
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
@@ -251,23 +248,23 @@ public class MasterCsvImportJobConfig {
         tokenizer.setNames("storeCode","departmentCode","targetDate","fromTime","toTime","demand","taskCode");
         tokenizer.setStrict(false);
 
-        FieldSetMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> mapper = fs -> {
-            io.github.riemr.shift.application.dto.DemandIntervalDto d = new io.github.riemr.shift.application.dto.DemandIntervalDto();
+        FieldSetMapper<DemandIntervalDto> mapper = fs -> {
+            DemandIntervalDto d = new DemandIntervalDto();
             d.setStoreCode(fs.readString("storeCode"));
             d.setDepartmentCode(fs.readString("departmentCode"));
-            d.setTargetDate(java.time.LocalDate.parse(fs.readString("targetDate")));
-            d.setFrom(java.time.LocalTime.parse(fs.readString("fromTime")));
-            d.setTo(java.time.LocalTime.parse(fs.readString("toTime")));
+            d.setTargetDate(LocalDate.parse(fs.readString("targetDate")));
+            d.setFrom(LocalTime.parse(fs.readString("fromTime")));
+            d.setTo(LocalTime.parse(fs.readString("toTime")));
             d.setDemand(fs.readInt("demand"));
             try { d.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
             return d;
         };
 
-        DefaultLineMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> lm = new DefaultLineMapper<>();
+        DefaultLineMapper<DemandIntervalDto> lm = new DefaultLineMapper<>();
         lm.setLineTokenizer(tokenizer);
         lm.setFieldSetMapper(mapper);
 
-        return new FlatFileItemReaderBuilder<io.github.riemr.shift.application.dto.DemandIntervalDto>()
+        return new FlatFileItemReaderBuilder<DemandIntervalDto>()
                 .name("workDemandIntervalReader")
                 .resource(new FileSystemResource(csvDir.resolve("work_demand_interval.csv")))
                 .linesToSkip(1)
@@ -339,24 +336,24 @@ public class MasterCsvImportJobConfig {
 
     /* === Step : employee_monthly_hours_setting.csv ===================== */
     @Bean
-    public Step employeeMonthlyHoursStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader) {
+    public Step employeeMonthlyHoursStep(FlatFileItemReader<EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader) {
         return new StepBuilder("employeeMonthlyHoursStep", jobRepository)
-                .<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting>chunk(1000, txManager)
+                .<EmployeeMonthlyHoursSetting, EmployeeMonthlyHoursSetting>chunk(1000, txManager)
                 .reader(employeeMonthlyHoursReader)
                 .writer(myBatisWriter("io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper.upsert"))
                 .build();
     }
 
     @Bean
-    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader(@Value("${csv.dir:/csv}") Path csvDir) {
+    public FlatFileItemReader<EmployeeMonthlyHoursSetting> employeeMonthlyHoursReader(@Value("${csv.dir:/csv}") Path csvDir) {
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
         tokenizer.setDelimiter(",");
         // month は yyyy-MM または yyyy-MM-01 を受け付ける
         tokenizer.setNames("employeeCode", "month", "minWorkHours", "maxWorkHours");
         tokenizer.setStrict(false);
 
-        FieldSetMapper<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> mapper = fs -> {
-            var row = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting();
+        FieldSetMapper<EmployeeMonthlyHoursSetting> mapper = fs -> {
+            var row = new EmployeeMonthlyHoursSetting();
             String code = fs.readString("employeeCode");
             String month = null;
             try { month = fs.readString("month"); } catch (Exception ignore) {}
@@ -368,25 +365,25 @@ public class MasterCsvImportJobConfig {
                 // スキップ用に空レコードを返さないよう例外で弾く
                 throw new IllegalArgumentException("employeeCode/month is required");
             }
-            java.time.LocalDate firstDay;
+            LocalDate firstDay;
             if (month.length() == 7) {
-                firstDay = java.time.YearMonth.parse(month).atDay(1);
+                firstDay = YearMonth.parse(month).atDay(1);
             } else {
                 // yyyy-MM-01 等
-                firstDay = java.time.LocalDate.parse(month);
+                firstDay = LocalDate.parse(month);
             }
             row.setEmployeeCode(code);
-            row.setMonthStart(java.sql.Date.valueOf(firstDay));
+            row.setMonthStart(Date.valueOf(firstDay));
             row.setMinWorkHours(minH);
             row.setMaxWorkHours(maxH);
             return row;
         };
 
-        DefaultLineMapper<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> lm = new DefaultLineMapper<>();
+        DefaultLineMapper<EmployeeMonthlyHoursSetting> lm = new DefaultLineMapper<>();
         lm.setLineTokenizer(tokenizer);
         lm.setFieldSetMapper(mapper);
 
-        return new FlatFileItemReaderBuilder<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting>()
+        return new FlatFileItemReaderBuilder<EmployeeMonthlyHoursSetting>()
                 .name("employeeMonthlyHoursReader")
                 .resource(new FileSystemResource(csvDir.resolve("employee_monthly_hours_setting.csv")))
                 .linesToSkip(1)
@@ -436,7 +433,7 @@ public class MasterCsvImportJobConfig {
                 .writer(items -> {
                     for (EmployeeAuthRecord r : items) {
                         // MyBatis直呼び出し
-                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        SqlSession session = sqlSessionFactory.openSession();
                         try {
                             session.update("io.github.riemr.shift.infrastructure.mapper.EmployeeMapper.updateAuthFields", r);
                             session.commit();
@@ -450,7 +447,7 @@ public class MasterCsvImportJobConfig {
 
     @Bean
     public FlatFileItemReader<EmployeeAuthRecord> employeeAuthReader(@Value("${csv.dir:/csv}") Path csvDir) {
-        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
         FieldSetMapper<EmployeeAuthRecord> mapper = fs -> {
             String code = fs.readString("employeeCode");
@@ -508,14 +505,14 @@ public class MasterCsvImportJobConfig {
 
     /* === Step : employee_task_skill.csv ========================================== */
     @Bean
-    public Step employeeTaskSkillStep(FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill> employeeTaskSkillReader) {
+    public Step employeeTaskSkillStep(FlatFileItemReader<EmployeeTaskSkill> employeeTaskSkillReader) {
         return new StepBuilder("employeeTaskSkillStep", jobRepository)
-                .<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill>chunk(1000, txManager)
+                .<EmployeeTaskSkill, EmployeeTaskSkill>chunk(1000, txManager)
                 .reader(employeeTaskSkillReader)
                 .writer(items -> {
                     for (var r : items) {
                         // upsert
-                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        SqlSession session = sqlSessionFactory.openSession();
                         try {
                             session.insert("io.github.riemr.shift.infrastructure.mapper.EmployeeTaskSkillMapper.upsert", r);
                             session.commit();
@@ -526,10 +523,10 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill> employeeTaskSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
+    public FlatFileItemReader<EmployeeTaskSkill> employeeTaskSkillReader(@Value("${csv.dir:/csv}") Path csvDir) {
         return csvReader(csvDir.resolve("employee_task_skill.csv"),
                 new String[] { "employeeCode", "storeCode", "departmentCode", "taskCode", "skillLevel" },
-                io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill.class);
+                EmployeeTaskSkill.class);
     }
 
     /* === Step : employee_weekly_preference.csv ========================= */
@@ -553,11 +550,11 @@ public class MasterCsvImportJobConfig {
             String s = fs.readString("baseStartTime");
             String e = fs.readString("baseEndTime");
             if (s != null && !s.isBlank()) {
-                java.time.LocalTime lt = java.time.LocalTime.parse(s);
+                LocalTime lt = LocalTime.parse(s);
                 p.setBaseStartTime(java.sql.Time.valueOf(lt));
             }
             if (e != null && !e.isBlank()) {
-                java.time.LocalTime lt = java.time.LocalTime.parse(e);
+                LocalTime lt = LocalTime.parse(e);
                 p.setBaseEndTime(java.sql.Time.valueOf(lt));
             }
             // storeCode は任意
@@ -577,13 +574,13 @@ public class MasterCsvImportJobConfig {
 
     /* === Step : register_demand_interval.csv ========================================== */
     @Bean
-    public Step registerDemandIntervalStep(FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> registerDemandIntervalReader) {
+    public Step registerDemandIntervalStep(FlatFileItemReader<DemandIntervalDto> registerDemandIntervalReader) {
         return new StepBuilder("registerDemandIntervalStep", jobRepository)
-                .<io.github.riemr.shift.application.dto.DemandIntervalDto, io.github.riemr.shift.application.dto.DemandIntervalDto>chunk(1000, txManager)
+                .<DemandIntervalDto, DemandIntervalDto>chunk(1000, txManager)
                 .reader(registerDemandIntervalReader)
                 .writer(items -> {
                     for (var r : items) {
-                        org.apache.ibatis.session.SqlSession session = sqlSessionFactory.openSession();
+                        SqlSession session = sqlSessionFactory.openSession();
                         try {
                             session.insert("io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper.upsert", r);
                             session.commit();
@@ -594,29 +591,29 @@ public class MasterCsvImportJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<io.github.riemr.shift.application.dto.DemandIntervalDto> registerDemandIntervalReader(
+    public FlatFileItemReader<DemandIntervalDto> registerDemandIntervalReader(
             @Value("${csv.dir:/csv}") Path csvDir) {
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
         tokenizer.setDelimiter(",");
         tokenizer.setNames("storeCode","targetDate","fromTime","toTime","demand","taskCode");
         tokenizer.setStrict(false);
 
-        FieldSetMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> mapper = fs -> {
-            io.github.riemr.shift.application.dto.DemandIntervalDto d = new io.github.riemr.shift.application.dto.DemandIntervalDto();
+        FieldSetMapper<DemandIntervalDto> mapper = fs -> {
+            DemandIntervalDto d = new DemandIntervalDto();
             d.setStoreCode(fs.readString("storeCode"));
-            d.setTargetDate(java.time.LocalDate.parse(fs.readString("targetDate")));
-            d.setFrom(java.time.LocalTime.parse(fs.readString("fromTime")));
-            d.setTo(java.time.LocalTime.parse(fs.readString("toTime")));
+            d.setTargetDate(LocalDate.parse(fs.readString("targetDate")));
+            d.setFrom(LocalTime.parse(fs.readString("fromTime")));
+            d.setTo(LocalTime.parse(fs.readString("toTime")));
             d.setDemand(fs.readInt("demand"));
             try { d.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
             return d;
         };
 
-        DefaultLineMapper<io.github.riemr.shift.application.dto.DemandIntervalDto> lm = new DefaultLineMapper<>();
+        DefaultLineMapper<DemandIntervalDto> lm = new DefaultLineMapper<>();
         lm.setLineTokenizer(tokenizer);
         lm.setFieldSetMapper(mapper);
 
-        return new FlatFileItemReaderBuilder<io.github.riemr.shift.application.dto.DemandIntervalDto>()
+        return new FlatFileItemReaderBuilder<DemandIntervalDto>()
                 .name("registerDemandIntervalReader")
                 .resource(new FileSystemResource(
                         csvDir.resolve("register_demand_interval.csv")))

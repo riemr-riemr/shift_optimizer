@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import java.time.LocalDate;
 
 @Controller
 @RequestMapping("/settings")
@@ -13,13 +15,13 @@ public class SettingController {
     private final AppSettingService appSettingService;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String view(Model model) {
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
-        java.time.LocalDate now = java.time.LocalDate.now();
-        java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
-        java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
+        LocalDate now = LocalDate.now();
+        LocalDate cycleStart = computeCycleStart(now, startDay);
+        LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
         model.addAttribute("cycleStart", cycleStart);
@@ -28,14 +30,14 @@ public class SettingController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String update(@RequestParam("startDay") int day, Model model) {
         appSettingService.updateShiftCycleStartDay(day);
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
-        java.time.LocalDate now = java.time.LocalDate.now();
-        java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
-        java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
+        LocalDate now = LocalDate.now();
+        LocalDate cycleStart = computeCycleStart(now, startDay);
+        LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
         model.addAttribute("cycleStart", cycleStart);
@@ -45,14 +47,14 @@ public class SettingController {
     }
 
     @PostMapping("/time-resolution")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String updateTimeResolution(@RequestParam("timeResolutionMinutes") int minutes, Model model) {
         appSettingService.updateTimeResolutionMinutes(minutes);
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
-        java.time.LocalDate now = java.time.LocalDate.now();
-        java.time.LocalDate cycleStart = computeCycleStart(now, startDay);
-        java.time.LocalDate cycleEnd = cycleStart.plusMonths(1);
+        LocalDate now = LocalDate.now();
+        LocalDate cycleStart = computeCycleStart(now, startDay);
+        LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
         model.addAttribute("cycleStart", cycleStart);
@@ -61,13 +63,13 @@ public class SettingController {
         return "settings/index";
     }
 
-    private java.time.LocalDate computeCycleStart(java.time.LocalDate anyDate, int startDay) {
+    private LocalDate computeCycleStart(LocalDate anyDate, int startDay) {
         int dom = anyDate.getDayOfMonth();
         if (dom >= startDay) {
             int fixedDay = Math.min(startDay, anyDate.lengthOfMonth());
             return anyDate.withDayOfMonth(fixedDay);
         } else {
-            java.time.LocalDate prev = anyDate.minusMonths(1);
+            LocalDate prev = anyDate.minusMonths(1);
             int fixedDay = Math.min(startDay, prev.lengthOfMonth());
             return prev.withDayOfMonth(fixedDay);
         }

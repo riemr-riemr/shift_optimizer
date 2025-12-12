@@ -30,6 +30,8 @@ import io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
+import io.github.riemr.shift.application.dto.ScorePoint;
+import io.github.riemr.shift.application.dto.DailySolveRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -45,8 +47,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.time.temporal.ChronoUnit;
+import java.sql.Date;
 
 @Controller
 @RequiredArgsConstructor
@@ -68,7 +76,6 @@ public class ShiftCalcController {
     private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
-    private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @GetMapping("/calc")
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
@@ -181,7 +188,7 @@ public class ShiftCalcController {
     // 開発者向け: スコア推移を返す
     @GetMapping("/api/calc/score-series/{id}")
     @ResponseBody
-    public List<io.github.riemr.shift.application.dto.ScorePoint> scoreSeries(@PathVariable("id") String id,
+    public List<ScorePoint> scoreSeries(@PathVariable("id") String id,
                                                                               @RequestParam("storeCode") String storeCode,
                                                                               @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         return service.getScoreSeries(id, storeCode, departmentCode);
@@ -197,7 +204,7 @@ public class ShiftCalcController {
         var from = date;
         var to = date.plusDays(1);
 
-        List<ShiftAssignmentView> results = new java.util.ArrayList<>();
+        List<ShiftAssignmentView> results = new ArrayList<>();
 
         // 従業員名マップ
         var employees = employeeMapper.selectByStoreCode(storeCode);
@@ -245,7 +252,7 @@ public class ShiftCalcController {
             }
         }
 
-        results.sort(java.util.Comparator.comparing(ShiftAssignmentView::startAt));
+        results.sort(Comparator.comparing(ShiftAssignmentView::startAt));
         return results;
     }
 
@@ -254,7 +261,7 @@ public class ShiftCalcController {
     public List<ShiftAssignmentMonthlyView> getMonthlyShifts(@PathVariable("ym") String yearMonth,
                                                              @RequestParam("storeCode") String storeCode,
                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
-        var ym = java.time.YearMonth.parse(yearMonth);
+        var ym = YearMonth.parse(yearMonth);
         var from = ym.atDay(1);
         var to = ym.plusMonths(1).atDay(1);
 
@@ -269,7 +276,7 @@ public class ShiftCalcController {
         var shifts = shiftAssignmentMapper.selectByMonth(from, to).stream()
                 .filter(s -> storeCode.equals(s.getStoreCode()))
                 .toList();
-        List<ShiftAssignmentMonthlyView> out = new java.util.ArrayList<>(shifts.size());
+        List<ShiftAssignmentMonthlyView> out = new ArrayList<>(shifts.size());
         for (var s : shifts) {
             String code = s.getEmployeeCode();
             String name = (code == null) ? null : empName.getOrDefault(code, code);
@@ -305,7 +312,7 @@ public class ShiftCalcController {
         for (QuarterSlot qs : quarters) {
             RegisterDemandQuarter ent = new RegisterDemandQuarter();
             ent.setStoreCode(qs.getStoreCode());
-            ent.setDemandDate(java.sql.Date.valueOf(qs.getDate()));
+            ent.setDemandDate(Date.valueOf(qs.getDate()));
             ent.setSlotTime(qs.getStart());
             ent.setRequiredUnits(qs.getDemand());
             result.add(ent);
@@ -328,7 +335,7 @@ public class ShiftCalcController {
                 WorkDemandQuarter wq = new WorkDemandQuarter();
                 wq.setStoreCode(di.getStoreCode());
                 wq.setDepartmentCode(di.getDepartmentCode());
-                wq.setDemandDate(java.sql.Date.valueOf(di.getTargetDate()));
+                wq.setDemandDate(Date.valueOf(di.getTargetDate()));
                 wq.setSlotTime(t);
                 wq.setTaskCode(di.getTaskCode());
                 wq.setRequiredUnits(di.getDemand());
@@ -338,7 +345,7 @@ public class ShiftCalcController {
         }
         // sort by time and task for stable output
         result.sort(Comparator.comparing(WorkDemandQuarter::getSlotTime)
-                .thenComparing(w -> java.util.Objects.toString(w.getTaskCode(), "")));
+                .thenComparing(w -> Objects.toString(w.getTaskCode(), "")));
         return result;
     }
 
@@ -366,9 +373,9 @@ public class ShiftCalcController {
     @PostMapping("/api/assignment/start-day")
     @ResponseBody
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
-    public Map<String, Object> startAssignmentForDay(@RequestBody io.github.riemr.shift.application.dto.DailySolveRequest req) {
+    public Map<String, Object> startAssignmentForDay(@RequestBody DailySolveRequest req) {
         try {
-            LocalDate date = LocalDate.parse(req.date(), java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+            LocalDate date = LocalDate.parse(req.date(), DateTimeFormatter.ISO_LOCAL_DATE);
             boolean ok = service.startSolveAssignmentForDate(date, req.storeCode(), req.departmentCode());
             return Map.of("success", ok, "date", req.date());
         } catch (Exception e) {
@@ -382,32 +389,32 @@ public class ShiftCalcController {
                                               @RequestParam("date") String dateString,
                                               @RequestParam(value = "departmentCode", required = false) String departmentCode) {
         // 指定日の出勤者のみ（shift_assignment）
-        java.time.LocalDate date = java.time.LocalDate.parse(dateString, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var from = date;
         var to = date.plusDays(1);
         var attendances = shiftAssignmentMapper.selectByDate(from, to).stream()
                 .filter(a -> storeCode.equals(a.getStoreCode()))
                 .toList();
-        java.util.Set<String> attendEmp = attendances.stream()
+        Set<String> attendEmp = attendances.stream()
                 .map(a -> a.getEmployeeCode())
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (attendEmp.isEmpty()) return java.util.List.of();
+        if (attendEmp.isEmpty()) return List.of();
 
         var list = employeeMapper.selectByStoreCode(storeCode).stream()
                 .filter(e -> attendEmp.contains(e.getEmployeeCode()))
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
 
         // 部門指定（非レジ部門）の場合は部門所属者でさらにフィルタ
         if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
             var edList = employeeDepartmentMapper.selectByDepartment(departmentCode);
-            var allowed = edList.stream().map(ed -> ed.getEmployeeCode()).collect(java.util.stream.Collectors.toSet());
+            var allowed = edList.stream().map(ed -> ed.getEmployeeCode()).collect(Collectors.toSet());
             list = list.stream().filter(e -> allowed.contains(e.getEmployeeCode())).toList();
         }
 
         // 安定出力のため社員コードでソート
-        list.sort(java.util.Comparator.comparing(Employee::getEmployeeCode));
+        list.sort(Comparator.comparing(Employee::getEmployeeCode));
         return list;
     }
 
@@ -432,7 +439,7 @@ public class ShiftCalcController {
     @PostMapping("/api/clear/attendance")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
-    public Map<String, Object> clearAttendance(@RequestBody io.github.riemr.shift.application.dto.SolveRequest req) {
+    public Map<String, Object> clearAttendance(@RequestBody SolveRequest req) {
         try {
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
@@ -447,7 +454,7 @@ public class ShiftCalcController {
     @PostMapping("/api/clear/assignment")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
-    public Map<String, Object> clearAssignment(@RequestBody io.github.riemr.shift.application.dto.SolveRequest req) {
+    public Map<String, Object> clearAssignment(@RequestBody SolveRequest req) {
         try {
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
@@ -554,18 +561,18 @@ public class ShiftCalcController {
                 staffingBalanceService.getDailyStaffingSummaryForMonth(storeCode, cycleStart, storeCode == null ? null : (departmentCode == null || departmentCode.isEmpty() ? "520" : departmentCode));
             
             // 日別人時サマリーを作成
-            int daysInMonth = (int) java.time.temporal.ChronoUnit.DAYS.between(cycleStart, cycleEnd);
+            int daysInMonth = (int) ChronoUnit.DAYS.between(cycleStart, cycleEnd);
             // 検索フォームと見出しは「ユーザーが選択した月」を表示する
             int year = yearMonth.getYear();
             int month = yearMonth.getMonthValue();
             
             // サイクル期間の日付リストを生成
-            List<LocalDate> cycleDateList = java.util.stream.Stream
+            List<LocalDate> cycleDateList = Stream
                     .iterate(cycleStart, d -> d.plusDays(1))
                     .limit(daysInMonth)
                     .toList();
             
-            Map<Integer, DailyStaffingSummaryInfo> dailyStaffingInfo = new java.util.HashMap<>();
+            Map<Integer, DailyStaffingSummaryInfo> dailyStaffingInfo = new HashMap<>();
             for (int day = 1; day <= daysInMonth; day++) {
                 LocalDate date = cycleStart.plusDays(day - 1);
                 StaffingBalanceService.DailyStaffingSummary summary = staffingSummaries.get(date);

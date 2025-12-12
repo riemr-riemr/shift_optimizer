@@ -4,15 +4,19 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
 import org.optaplanner.core.api.score.stream.ConstraintFactory;
 import org.optaplanner.core.api.score.stream.ConstraintProvider;
 import org.optaplanner.core.api.score.stream.Joiners;
+import org.optaplanner.core.api.score.stream.ConstraintCollectors;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
 
 public class AttendanceConstraintProvider implements ConstraintProvider {
     @Override
@@ -98,7 +102,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandQuarter::getDemandDate, e -> java.sql.Date.valueOf(e.getDate())),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null
                                 && timeWithin(e, d.getSlotTime())))
-                .groupBy((d, e) -> d, org.optaplanner.core.api.score.stream.ConstraintCollectors.countBi())
+                .groupBy((d, e) -> d, ConstraintCollectors.countBi())
                 .penalize(HardSoftScore.ofSoft(100), (d, assigned) -> Math.abs(d.getRequiredUnits() - assigned))
                 .asConstraint("Quarter headcount balance");
     }
@@ -110,7 +114,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandQuarter::getStoreCode, e -> e.getStoreCode()),
                         Joiners.equal(RegisterDemandQuarter::getDemandDate, e -> java.sql.Date.valueOf(e.getDate())),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
-                .groupBy((d, e) -> d, org.optaplanner.core.api.score.stream.ConstraintCollectors.countBi())
+                .groupBy((d, e) -> d, ConstraintCollectors.countBi())
                 .filter((d, assigned) -> assigned > (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
                 .penalize(HardSoftScore.ofSoft(10), (d, assigned) -> assigned - (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
                 .asConstraint("Attendance: overstaff light penalty");
@@ -157,14 +161,14 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter(pattern -> pattern.getAssignedEmployee() != null)
                 .groupBy(DailyPatternAssignmentEntity::getAssignedEmployee,
                         pattern -> getWeekStart(pattern.getDate()),
-                        org.optaplanner.core.api.score.stream.ConstraintCollectors.toList())
+                        ConstraintCollectors.toList())
                 .filter((emp, weekStart, patterns) -> {
                     int totalMinutes = patterns.stream()
                             .mapToInt(AttendanceConstraintProvider::calculatePatternMinutes)
                             .sum();
                     // 月をまたぐ週は最小制約を無視
-                    boolean crossesMonth = !java.time.YearMonth.from(weekStart)
-                            .equals(java.time.YearMonth.from(weekStart.plusDays(6)));
+                    boolean crossesMonth = !YearMonth.from(weekStart)
+                            .equals(YearMonth.from(weekStart.plusDays(6)));
                     boolean belowMin = !crossesMonth && emp.getMinWorkHoursWeek() != null 
                             && totalMinutes < emp.getMinWorkHoursWeek() * 60;
                     boolean aboveMax = emp.getMaxWorkHoursWeek() != null 
@@ -177,8 +181,8 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                             .sum();
                     int penalty = 0;
                     // 月をまたぐ週は最小制約を無視
-                    boolean crossesMonth = !java.time.YearMonth.from(weekStart)
-                            .equals(java.time.YearMonth.from(weekStart.plusDays(6)));
+                    boolean crossesMonth = !YearMonth.from(weekStart)
+                            .equals(YearMonth.from(weekStart.plusDays(6)));
                     if (!crossesMonth && emp.getMinWorkHoursWeek() != null 
                             && totalMinutes < emp.getMinWorkHoursWeek() * 60) {
                         // 最小時間制約（最高優先度）
@@ -199,15 +203,15 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     private Constraint monthlyWorkHoursRange(ConstraintFactory f) {
         return f.forEach(DailyPatternAssignmentEntity.class)
                 .filter(pattern -> pattern.getAssignedEmployee() != null)
-                .join(io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting.class,
+                .join(EmployeeMonthlySetting.class,
                         Joiners.equal(p -> p.getAssignedEmployee().getEmployeeCode(),
-                                     io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting::getEmployeeCode),
+                                     EmployeeMonthlySetting::getEmployeeCode),
                         Joiners.filtering((p, setting) -> 
-                            java.time.YearMonth.from(p.getDate()).equals(
-                                java.time.YearMonth.from(setting.getMonthStart()
-                                    .toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()))))
+                            YearMonth.from(p.getDate()).equals(
+                                YearMonth.from(setting.getMonthStart()
+                                    .toInstant().atZone(ZoneId.systemDefault()).toLocalDate()))))
                 .groupBy((pattern, setting) -> setting,
-                        org.optaplanner.core.api.score.stream.ConstraintCollectors.sum((pattern, setting) -> 
+                        ConstraintCollectors.sum((pattern, setting) -> 
                             calculatePatternMinutes(pattern)))
                 .filter((setting, totalMinutes) -> {
                     boolean belowMin = setting.getMinWorkHours() != null 
@@ -231,7 +235,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .asConstraint("Attendance: monthly work hours range");
     }
 
-    private static java.time.LocalDate toLocalDateSafe(java.util.Date date) {
+    private static LocalDate toLocalDateSafe(java.util.Date date) {
         if (date == null) return null;
         if (date instanceof java.sql.Date) return ((java.sql.Date) date).toLocalDate();
         return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();

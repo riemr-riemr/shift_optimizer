@@ -7,9 +7,12 @@ import lombok.ToString;
 import org.optaplanner.core.api.domain.entity.PlanningEntity;
 import org.optaplanner.core.api.domain.lookup.PlanningId;
 import org.optaplanner.core.api.domain.variable.PlanningVariable;
+import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
+import java.util.Collections;
 
 /**
  * 日次のシフトパターン（連続時間帯）単位での出勤最適化用エンティティ。
@@ -33,12 +36,12 @@ public class DailyPatternAssignmentEntity {
     private int unitIndex;
 
     // 当該パターン窓に適合する従業員候補（事前計算）
-    private java.util.List<Employee> candidateEmployees = java.util.Collections.emptyList();
+    private List<Employee> candidateEmployees = Collections.emptyList();
 
     // 各パターンに対して、そのパターンを持つ従業員のみを候補とする
-    @org.optaplanner.core.api.domain.valuerange.ValueRangeProvider(id = "eligibleEmployees")
-    public java.util.List<Employee> getEligibleEmployees() {
-        return candidateEmployees == null ? java.util.List.of() : candidateEmployees;
+    @ValueRangeProvider(id = "eligibleEmployees")
+    public List<Employee> getEligibleEmployees() {
+        return candidateEmployees == null ? List.of() : candidateEmployees;
     }
 
     @PlanningVariable(valueRangeProviderRefs = {"eligibleEmployees"}, nullable = true)

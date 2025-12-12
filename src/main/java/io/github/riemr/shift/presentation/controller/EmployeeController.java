@@ -2,24 +2,39 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.EmployeeService;
 import io.github.riemr.shift.presentation.form.EmployeeForm;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.time.LocalDate;
+import java.time.Year;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @Controller
 @RequestMapping("/employees")
 @RequiredArgsConstructor
 public class EmployeeController {
     private final EmployeeService service;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
+    private final EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
+    private final EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
 
     /* 一覧 */
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String list(Model model) {
         model.addAttribute("employees", service.findAll());
         return "employee/list";
@@ -27,7 +42,7 @@ public class EmployeeController {
 
     /* 新規フォーム */
     @GetMapping("/new")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String create(Model model) {
         EmployeeForm form = new EmployeeForm();
         // 曜日行を初期化（OPTIONAL）
@@ -43,7 +58,7 @@ public class EmployeeController {
         // 月次設定の初期行（3行空行）
         for (int i = 0; i < 3; i++) form.getMonthlyHours().add(new EmployeeForm.MonthlyHoursRow());
         // 年選択の初期値（今年）
-        form.setSelectedYear(java.time.Year.now().getValue());
+        form.setSelectedYear(Year.now().getValue());
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
         model.addAttribute("stores", service.findAllStores());
@@ -53,12 +68,12 @@ public class EmployeeController {
 
     /* 編集フォーム */
     @GetMapping("/{code}")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String edit(@PathVariable String code, Model model) {
         EmployeeForm form = EmployeeForm.from(service.find(code));
         var prefs = service.findWeekly(code);
         form.getWeeklyPreferences().clear();
-        java.util.Map<Short, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> map = new java.util.HashMap<>();
+        Map<Short, EmployeeWeeklyPreference> map = new HashMap<>();
         for (var p : prefs) map.put(p.getDayOfWeek(), p);
         for (short d = 1; d <= 7; d++) {
             var row = new EmployeeForm.WeeklyPrefRow();
@@ -74,11 +89,11 @@ public class EmployeeController {
             form.getWeeklyPreferences().add(row);
         }
         // 月次設定をロード
-        var monthlyList = new java.util.ArrayList<EmployeeForm.MonthlyHoursRow>();
+        var monthlyList = new ArrayList<EmployeeForm.MonthlyHoursRow>();
         var monthlyEntities = monthlyHoursMapper.selectByEmployee(code);
         for (var m : monthlyEntities) {
             var r = new EmployeeForm.MonthlyHoursRow();
-            java.time.LocalDate md = m.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            LocalDate md = m.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
             r.setMonth(md.toString().substring(0,7));
             r.setMinHours(m.getMinWorkHours());
             r.setMaxHours(m.getMaxWorkHours());
@@ -88,7 +103,7 @@ public class EmployeeController {
         form.setMonthlyHours(monthlyList);
         
         // 年選択の初期値設定とテーブル形式データ変換
-        Integer currentYear = java.time.Year.now().getValue();
+        Integer currentYear = Year.now().getValue();
         form.setSelectedYear(currentYear);
         loadMonthlyHoursForYear(form, code, currentYear);
         loadMonthlyOffdaysForYear(form, code, currentYear);
@@ -102,7 +117,7 @@ public class EmployeeController {
 
     /* 保存 */
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String save(@Valid @ModelAttribute("employeeForm") EmployeeForm form,
                        BindingResult result, @RequestParam("edit") boolean edit, Model model) {
         if (result.hasErrors()) {
@@ -112,10 +127,10 @@ public class EmployeeController {
             return "employee/form";
         }
         // Map weekly prefs
-        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference> prefs = new java.util.ArrayList<>();
+        List<EmployeeWeeklyPreference> prefs = new ArrayList<>();
         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm");
         for (var row : form.getWeeklyPreferences()) {
-            var p = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference();
+            var p = new EmployeeWeeklyPreference();
             p.setDayOfWeek(row.getDayOfWeek());
             p.setWorkStyle(row.getWorkStyle());
             if (!"OFF".equals(row.getWorkStyle())) {
@@ -131,14 +146,14 @@ public class EmployeeController {
             prefs.add(p);
         }
         // Map monthly work-hours settings from table format
-        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthly = new java.util.ArrayList<>();
+        List<EmployeeMonthlyHoursSetting> monthly = new ArrayList<>();
         if (form.getSelectedYear() != null && form.getMonthlyHoursTable() != null) {
             for (int month = 1; month <= 12; month++) {
                 Integer minHours = form.getMonthlyHoursTable().getMinHours()[month - 1];
                 Integer maxHours = form.getMonthlyHoursTable().getMaxHours()[month - 1];
                 if (minHours != null || maxHours != null) {
-                    var m = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting();
-                    java.time.YearMonth ym = java.time.YearMonth.of(form.getSelectedYear(), month);
+                    var m = new EmployeeMonthlyHoursSetting();
+                    YearMonth ym = YearMonth.of(form.getSelectedYear(), month);
                     java.util.Date ms = java.sql.Date.valueOf(ym.atDay(1));
                     m.setMonthStart(ms);
                     m.setMinWorkHours(minHours);
@@ -148,14 +163,14 @@ public class EmployeeController {
             }
         }
         // Map monthly off-days settings from table format
-        java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting> offdays = new java.util.ArrayList<>();
+        List<EmployeeMonthlyOffdaysSetting> offdays = new ArrayList<>();
         if (form.getSelectedYear() != null && form.getMonthlyOffdaysTable() != null) {
             for (int month = 1; month <= 12; month++) {
                 Integer minOff = form.getMonthlyOffdaysTable().getMinOffDays()[month - 1];
                 Integer maxOff = form.getMonthlyOffdaysTable().getMaxOffDays()[month - 1];
                 if (minOff != null || maxOff != null) {
-                    var m = new io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting();
-                    java.time.YearMonth ym = java.time.YearMonth.of(form.getSelectedYear(), month);
+                    var m = new EmployeeMonthlyOffdaysSetting();
+                    YearMonth ym = YearMonth.of(form.getSelectedYear(), month);
                     java.util.Date ms = java.sql.Date.valueOf(ym.atDay(1));
                     m.setMonthStart(ms);
                     m.setMinOffDays(minOff);
@@ -170,7 +185,7 @@ public class EmployeeController {
 
     /* 削除 */
     @PostMapping("/{code}/delete")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String delete(@PathVariable String code) {
         service.delete(code);
         return "redirect:/employees";
@@ -179,16 +194,16 @@ public class EmployeeController {
     /* Ajax: 指定年の月別勤務時間を取得 */
     @GetMapping("/{code}/monthly-hours/{year}")
     @ResponseBody
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
-    public java.util.Map<String, Object> getMonthlyHoursByYear(@PathVariable String code, @PathVariable Integer year) {
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    public Map<String, Object> getMonthlyHoursByYear(@PathVariable String code, @PathVariable Integer year) {
+        Map<String, Object> response = new HashMap<>();
         
         try {
             var monthlyEntities = monthlyHoursMapper.selectByEmployee(code);
-            java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthMap = new java.util.HashMap<>();
+            Map<Integer, EmployeeMonthlyHoursSetting> monthMap = new HashMap<>();
             
             for (var entity : monthlyEntities) {
-                java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                LocalDate date = entity.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
                 if (date.getYear() == year) {
                     monthMap.put(date.getMonthValue(), entity);
                 }
@@ -219,14 +234,14 @@ public class EmployeeController {
     /* Ajax: 指定年の月別公休日数を取得 */
     @GetMapping("/{code}/monthly-offdays/{year}")
     @ResponseBody
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
-    public java.util.Map<String, Object> getMonthlyOffdaysByYear(@PathVariable String code, @PathVariable Integer year) {
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
+    public Map<String, Object> getMonthlyOffdaysByYear(@PathVariable String code, @PathVariable Integer year) {
+        Map<String, Object> response = new HashMap<>();
         try {
             var monthlyEntities = monthlyOffdaysMapper.selectByEmployee(code);
-            java.util.Map<Integer, io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting> monthMap = new java.util.HashMap<>();
+            Map<Integer, EmployeeMonthlyOffdaysSetting> monthMap = new HashMap<>();
             for (var entity : monthlyEntities) {
-                java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                LocalDate date = entity.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
                 if (date.getYear() == year) {
                     monthMap.put(date.getMonthValue(), entity);
                 }
@@ -256,7 +271,7 @@ public class EmployeeController {
         Integer[] minHours = new Integer[12];
         Integer[] maxHours = new Integer[12];
         for (var entity : monthlyEntities) {
-            java.time.LocalDate date = entity.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            LocalDate date = entity.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
             if (date.getYear() == year) {
                 minHours[date.getMonthValue() - 1] = entity.getMinWorkHours();
                 maxHours[date.getMonthValue() - 1] = entity.getMaxWorkHours();
@@ -274,7 +289,7 @@ public class EmployeeController {
         Integer[] minOff = new Integer[12];
         Integer[] maxOff = new Integer[12];
         for (var e : entities) {
-            java.time.LocalDate date = e.getMonthStart().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            LocalDate date = e.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
             if (date.getYear() == year) {
                 minOff[date.getMonthValue() - 1] = e.getMinOffDays();
                 maxOff[date.getMonthValue() - 1] = e.getMaxOffDays();
@@ -287,8 +302,8 @@ public class EmployeeController {
     }
     
     // 年選択オプションを生成（システム年の+-1年）
-    private java.util.List<Integer> getAvailableYears() {
-        Integer currentYear = java.time.Year.now().getValue();
+    private List<Integer> getAvailableYears() {
+        Integer currentYear = Year.now().getValue();
         return java.util.Arrays.asList(currentYear - 1, currentYear, currentYear + 1);
     }
     

@@ -54,7 +54,6 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPre
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
-import java.util.Objects;
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.service.TaskPlanService;
@@ -84,7 +83,6 @@ public class ShiftScheduleService {
     /* === Collaborators === */
     private final SolverManager<ShiftSchedule, ProblemKey> solverManager;
     private final SolverManager<AttendanceSolution, ProblemKey> attendanceSolverManager;
-    private final SolverFactory<ShiftSchedule> solverFactory;
     private final ShiftScheduleRepository repository;
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;

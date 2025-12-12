@@ -7,6 +7,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Collections;
+
 @Controller
 @RequestMapping("/tasks/categories")
 public class TaskCategoryMasterController {
@@ -19,7 +22,7 @@ public class TaskCategoryMasterController {
     @GetMapping
     public String list(Model model) {
         try {
-            java.util.List<TaskCategoryMaster> categories = service.list();
+            List<TaskCategoryMaster> categories = service.list();
             System.out.println("Retrieved " + categories.size() + " categories:");
             for (TaskCategoryMaster cat : categories) {
                 System.out.println("Category: " + cat.getCategoryCode() + " - " + cat.getCategoryName() + " - " + cat.getColor() + " - " + cat.getIcon());
@@ -32,7 +35,7 @@ public class TaskCategoryMasterController {
             e.printStackTrace();
             // Log the error and return a simple error message
             model.addAttribute("error", "データの取得に失敗しました: " + e.getMessage());
-            model.addAttribute("categories", java.util.Collections.emptyList());
+            model.addAttribute("categories", Collections.emptyList());
             model.addAttribute("form", new TaskCategoryMaster());
             return "tasks/categories/list";
         }

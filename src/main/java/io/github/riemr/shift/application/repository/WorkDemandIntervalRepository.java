@@ -3,7 +3,6 @@ package io.github.riemr.shift.application.repository;
 import io.github.riemr.shift.application.dto.DemandIntervalDto;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 public interface WorkDemandIntervalRepository {

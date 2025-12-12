@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,7 +17,7 @@ public class DepartmentSkillMatrixController {
     private final DepartmentSkillMatrixService service;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)")
     public String view(@RequestParam(value = "departmentCode", required = false) String departmentCode,
                        Model model) {
         model.addAttribute("departments", service.listDepartments());
@@ -27,7 +28,7 @@ public class DepartmentSkillMatrixController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)")
     public String save(@RequestParam("departmentCode") String departmentCode,
                        @RequestParam Map<String, String> params) {
         Map<String, Short> map = new HashMap<>();

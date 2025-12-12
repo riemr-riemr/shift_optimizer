@@ -1,11 +1,11 @@
 package io.github.riemr.shift.presentation.controller;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
+import java.util.Comparator;
+import java.util.Collections;
+import java.util.Arrays;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Controller;
@@ -17,13 +17,18 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 
-import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
+import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.presentation.form.RegisterDemandHourForm;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
+import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import io.github.riemr.shift.infrastructure.mapper.RegisterMapper;
+
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -35,7 +40,7 @@ import lombok.RequiredArgsConstructor;
 class RegisterDemandHourController {
 
     private final RegisterDemandHourService service;
-    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
+    private final AppSettingService appSettingService;
     private final StoreMapper storeMapper;
     private final RegisterMapper registerMapper;
 
@@ -43,7 +48,7 @@ class RegisterDemandHourController {
      * 編集画面を表示 (GET)。
      */
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
     public String show(@RequestParam(name = "date", required = false)
                        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                        @RequestParam(name = "storeCode", required = false) String storeCode,
@@ -51,7 +56,7 @@ class RegisterDemandHourController {
         LocalDate target = (date == null ? LocalDate.now() : date);
 
         List<Store> stores = storeMapper.selectByExample(null);
-        stores.sort(java.util.Comparator.comparing(Store::getStoreCode));
+        stores.sort(Comparator.comparing(Store::getStoreCode));
         String effectiveStore = (storeCode != null && !storeCode.isBlank())
                 ? storeCode
                 : (stores.isEmpty() ? null : stores.get(0).getStoreCode());
@@ -59,16 +64,16 @@ class RegisterDemandHourController {
         int res = appSettingService.getTimeResolutionMinutes();
         int slotCount = 1440 / res;
         int[] quarterDemands = effectiveStore == null ? new int[slotCount] : service.getQuarterDemands(effectiveStore, target, res);
-        var registers = (effectiveStore == null) ? java.util.List.<io.github.riemr.shift.infrastructure.persistence.entity.Register>of()
+        var registers = (effectiveStore == null) ? List.<Register>of()
                 : registerMapper.selectByStoreCode(effectiveStore);
-        registers.sort(java.util.Comparator.comparing(io.github.riemr.shift.infrastructure.persistence.entity.Register::getRegisterNo));
+        registers.sort(Comparator.comparing(Register::getRegisterNo));
 
-        RegisterDemandHourForm form = new RegisterDemandHourForm(effectiveStore, target, java.util.Collections.emptyList());
+        RegisterDemandHourForm form = new RegisterDemandHourForm(effectiveStore, target, Collections.emptyList());
         model.addAttribute("command", form);
         model.addAttribute("stores", stores);
         model.addAttribute("selectedStoreCode", effectiveStore);
         model.addAttribute("registers", registers);
-        model.addAttribute("quarterDemands", java.util.Arrays.stream(quarterDemands).boxed().toList());
+        model.addAttribute("quarterDemands", Arrays.stream(quarterDemands).boxed().toList());
         model.addAttribute("timeResolutionMinutes", res);
         model.addAttribute("slotCount", slotCount);
         return "registerDemand/form";
@@ -78,7 +83,7 @@ class RegisterDemandHourController {
      * 保存 (POST)。
      */
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).REGISTER_DEMAND)")
     public String save(@ModelAttribute("command") RegisterDemandHourForm form,
                        BindingResult br, RedirectAttributes redirect) {
         if (br.hasErrors()) {
@@ -87,12 +92,12 @@ class RegisterDemandHourController {
         // Accept interval grid via demandsCsv
         String demandsCsv = null;
         try {
-            demandsCsv = (String) ((org.springframework.web.context.request.ServletRequestAttributes)
-                    org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes())
+            demandsCsv = (String) ((ServletRequestAttributes)
+                    RequestContextHolder.currentRequestAttributes())
                     .getRequest().getParameter("demandsCsv");
         } catch (Exception ignore) {}
         if (demandsCsv != null && !demandsCsv.isBlank()) {
-            java.util.List<Integer> slots = java.util.Arrays.stream(demandsCsv.split(","))
+            List<Integer> slots = Arrays.stream(demandsCsv.split(","))
                     .filter(s -> !s.isBlank())
                     .map(Integer::parseInt)
                     .toList();

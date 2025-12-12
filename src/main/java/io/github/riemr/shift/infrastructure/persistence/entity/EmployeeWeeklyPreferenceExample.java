@@ -1,6 +1,5 @@
 package io.github.riemr.shift.infrastructure.persistence.entity;
 
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.List;
 

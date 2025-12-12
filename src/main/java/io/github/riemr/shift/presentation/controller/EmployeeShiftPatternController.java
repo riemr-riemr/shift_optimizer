@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.*;
 
@@ -20,7 +21,7 @@ public class EmployeeShiftPatternController {
     private final EmployeeShiftPatternMapper employeeShiftPatternMapper;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String matrix(Model model) {
         var employees = employeeMapper.selectAll();
         var patterns = shiftPatternMapper.selectAll();
@@ -36,8 +37,8 @@ public class EmployeeShiftPatternController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
-    public String update(@RequestParam java.util.Map<String,String> form) {
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    public String update(@RequestParam Map<String,String> form) {
         // 一括保存: p_{employeeCode}_{patternCode} -> priority(0..4)
         for (var entry : form.entrySet()) {
             String key = entry.getKey();

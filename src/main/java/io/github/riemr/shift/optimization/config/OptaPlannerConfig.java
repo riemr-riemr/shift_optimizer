@@ -26,6 +26,7 @@ import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicTy
 // pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.optaplanner.core.api.score.ScoreManager;
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
 import org.optaplanner.core.config.solver.termination.TerminationConfig;
@@ -34,6 +35,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Arrays;
 
 @Configuration
 public class OptaPlannerConfig {
@@ -97,8 +99,8 @@ public class OptaPlannerConfig {
                 .withEntityClasses(DailyPatternAssignmentEntity.class)
                 // ATTENDANCEは専用の時間上限＋未改善終了を使用
                 .withTerminationConfig(new TerminationConfig()
-                        .withSpentLimit(parseDurationTolerant(attendanceSpentLimit, java.time.Duration.ofMinutes(2)))
-                        .withUnimprovedSpentLimit(parseDurationTolerant(attendanceUnimprovedLimit, java.time.Duration.ofSeconds(30))));
+                        .withSpentLimit(parseDurationTolerant(attendanceSpentLimit, Duration.ofMinutes(2)))
+                        .withUnimprovedSpentLimit(parseDurationTolerant(attendanceUnimprovedLimit, Duration.ofSeconds(30))));
 
         ScoreDirectorFactoryConfig sdf2 = new ScoreDirectorFactoryConfig()
                 .withConstraintProviderClass(AttendanceConstraintProvider.class);
@@ -128,7 +130,7 @@ public class OptaPlannerConfig {
         alsDiversify.setMoveSelectorConfig(aUnion);
         // 先行フェーズには必ずフェーズ終了条件が必要（全体終了条件だけでは到達不能エラーになる）
         alsDiversify.setTerminationConfig(new TerminationConfig().withSpentLimit(
-                parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)).dividedBy(2)));
+                parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)).dividedBy(2)));
         //（デフォルト設定の Late Acceptance を使用）
 
         // フェーズ2: TABU_SEARCH（重複探索を避けつつ収束）
@@ -160,8 +162,8 @@ public class OptaPlannerConfig {
     // ScoreManager は explainScore に利用（デバッグ用途）
     @Bean
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public org.optaplanner.core.api.score.ScoreManager shiftScoreManager(SolverFactory solverFactory) {
-        return org.optaplanner.core.api.score.ScoreManager.create(solverFactory);
+    public ScoreManager shiftScoreManager(SolverFactory solverFactory) {
+        return ScoreManager.create(solverFactory);
     }
 
     @Bean
@@ -173,7 +175,7 @@ public class OptaPlannerConfig {
 
     private TerminationConfig terminationConfig() {
         // アーリーストッピングを無効化して時間制限のみで実行
-        TerminationConfig t = new TerminationConfig().withSpentLimit(parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)));
+        TerminationConfig t = new TerminationConfig().withSpentLimit(parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)));
         // アーリーストッピングのコードをコメントアウト
         // if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
         //     // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
@@ -182,20 +184,20 @@ public class OptaPlannerConfig {
         return t;
     }
 
-    private java.time.Duration parseDurationTolerant(String raw, java.time.Duration def) {
+    private Duration parseDurationTolerant(String raw, Duration def) {
         if (raw == null || raw.isBlank()) return def;
         String s = raw.trim();
         try {
             if (s.startsWith("P")) {
                 if (s.matches("^PT\\d+$")) s = s + "S"; // fix common mistake
-                return java.time.Duration.parse(s);
+                return Duration.parse(s);
             }
             String ls = s.toLowerCase();
-            if (ls.endsWith("ms")) return java.time.Duration.ofMillis(Long.parseLong(ls.substring(0, ls.length()-2)));
-            if (ls.endsWith("s")) return java.time.Duration.ofSeconds(Long.parseLong(ls.substring(0, ls.length()-1)));
-            if (ls.endsWith("m")) return java.time.Duration.ofMinutes(Long.parseLong(ls.substring(0, ls.length()-1)));
-            if (ls.endsWith("h")) return java.time.Duration.ofHours(Long.parseLong(ls.substring(0, ls.length()-1)));
-            if (ls.matches("^\\d+$")) return java.time.Duration.ofSeconds(Long.parseLong(ls));
+            if (ls.endsWith("ms")) return Duration.ofMillis(Long.parseLong(ls.substring(0, ls.length()-2)));
+            if (ls.endsWith("s")) return Duration.ofSeconds(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("m")) return Duration.ofMinutes(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("h")) return Duration.ofHours(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.matches("^\\d+$")) return Duration.ofSeconds(Long.parseLong(ls));
         } catch (Exception ignore) {}
         return def;
     }
@@ -224,7 +226,7 @@ public class OptaPlannerConfig {
         swap.setEntitySelectorConfig(new EntitySelectorConfig()
                 .withEntityClass(ShiftAssignmentPlanningEntity.class)
                 .withSelectionOrder(SelectionOrder.RANDOM));
-        union.setMoveSelectorList(java.util.Arrays.asList(change, swap));
+        union.setMoveSelectorList(Arrays.asList(change, swap));
 
         ls.setMoveSelectorConfig(union);
         return ls;
@@ -244,7 +246,7 @@ public class OptaPlannerConfig {
         ls.setMoveSelectorConfig(change);
         // 後続フェーズがあるため、このフェーズ単体の終了条件を必須で設定
         ls.setTerminationConfig(new TerminationConfig().withSpentLimit(
-                parseDurationTolerant(solverSpentLimit, java.time.Duration.ofMinutes(30)).dividedBy(2)));
+                parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)).dividedBy(2)));
         return ls;
     }
 }

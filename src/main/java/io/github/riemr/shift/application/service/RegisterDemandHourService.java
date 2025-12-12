@@ -2,10 +2,8 @@ package io.github.riemr.shift.application.service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,7 +16,6 @@ import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.dto.DemandIntervalDto;
 import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import lombok.RequiredArgsConstructor;
 
 /**

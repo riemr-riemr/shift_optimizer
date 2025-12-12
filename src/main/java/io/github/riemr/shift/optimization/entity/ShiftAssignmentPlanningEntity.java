@@ -13,6 +13,7 @@ import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
+import java.util.List;
 import java.util.Collections;
 
 @PlanningEntity
@@ -38,7 +39,7 @@ public class ShiftAssignmentPlanningEntity {
     private Employee assignedEmployee;
 
     // エンティティ毎に可用な従業員候補（ATTENDANCE/ASSIGNMENTでフィルタリング）
-    private java.util.List<Employee> candidateEmployees = java.util.Collections.emptyList();
+    private List<Employee> candidateEmployees = Collections.emptyList();
 
     public ShiftAssignmentPlanningEntity() {
     }
@@ -80,7 +81,7 @@ public class ShiftAssignmentPlanningEntity {
 
     // エンティティ依存の従業員候補レンジ
     @ValueRangeProvider(id = "availableEmployees")
-    public java.util.List<Employee> getAvailableEmployees() {
+    public List<Employee> getAvailableEmployees() {
         return candidateEmployees == null ? Collections.emptyList() : candidateEmployees;
     }
 }

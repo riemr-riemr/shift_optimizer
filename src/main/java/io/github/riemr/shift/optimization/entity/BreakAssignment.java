@@ -11,6 +11,7 @@ import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
+import java.util.Collections;
 
 /**
  * 従業員×日ごとの60分休憩の開始時刻を決定するエンティティ。
@@ -28,7 +29,7 @@ public class BreakAssignment {
     private LocalDate date;
 
     // 候補の開始時刻リスト（分解能に合わせて事前計算）
-    private List<Date> candidateStarts = java.util.Collections.emptyList();
+    private List<Date> candidateStarts = Collections.emptyList();
 
     @PlanningVariable(valueRangeProviderRefs = {"breakStartRange"})
     private Date breakStartAt; // 60分休憩の開始
@@ -39,12 +40,12 @@ public class BreakAssignment {
         this.id = id;
         this.employee = employee;
         this.date = date;
-        this.candidateStarts = candidateStarts == null ? java.util.List.of() : candidateStarts;
+        this.candidateStarts = candidateStarts == null ? List.of() : candidateStarts;
     }
 
     @ValueRangeProvider(id = "breakStartRange")
     public List<Date> getBreakStartRange() {
-        return candidateStarts == null ? java.util.List.of() : candidateStarts;
+        return candidateStarts == null ? List.of() : candidateStarts;
     }
 }
 

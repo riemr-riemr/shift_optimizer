@@ -10,6 +10,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAss
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
 import io.github.riemr.shift.application.dto.DemandIntervalDto;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,20 +79,20 @@ public class TaskPlanService {
      * - FIXED: 指定開始/終了で requiredStaffCount 件を作成
      * - FLEXIBLE: 窓全体を1件（requiredStaffCount 件）として作成（所要は反映せず）
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int materializeDepartmentAssignments(String storeCode,
                                                 String departmentCode,
-                                                java.time.LocalDate from,
-                                                java.time.LocalDate to,
+                                                LocalDate from,
+                                                LocalDate to,
                                                 String createdBy) {
         if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) return 0;
         // まず既存を削除（半開区間）
         deptTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, storeCode, departmentCode);
         int created = 0;
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+        ZoneId zone = ZoneId.systemDefault();
+        for (LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
             short dow = (short) d.getDayOfWeek().getValue();
-            java.util.Date dd = java.util.Date.from(d.atStartOfDay(zone).toInstant());
+            Date dd = Date.from(d.atStartOfDay(zone).toInstant());
             // 週次有効
             var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd);
             // 月次（DOM/WOM）有効
@@ -119,19 +120,19 @@ public class TaskPlanService {
     }
 
     private int toDeptAssignments(String storeCode, String departmentCode, String taskCode, String scheduleType,
-                                  java.time.LocalTime fixedStart, java.time.LocalTime fixedEnd,
-                                  java.time.LocalTime winStart, java.time.LocalTime winEnd,
-                                  Integer requiredStaff, java.time.LocalDate date, String createdBy) {
+                                  LocalTime fixedStart, LocalTime fixedEnd,
+                                  LocalTime winStart, LocalTime winEnd,
+                                  Integer requiredStaff, LocalDate date, String createdBy) {
         int count = Math.max(1, nvl(requiredStaff, 1));
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        java.util.Date startAt;
-        java.util.Date endAt;
+        ZoneId zone = ZoneId.systemDefault();
+        Date startAt;
+        Date endAt;
         if ("FIXED".equalsIgnoreCase(scheduleType) && fixedStart != null && fixedEnd != null) {
-            startAt = java.util.Date.from(date.atTime(fixedStart).atZone(zone).toInstant());
-            endAt = java.util.Date.from(date.atTime(fixedEnd).atZone(zone).toInstant());
+            startAt = Date.from(date.atTime(fixedStart).atZone(zone).toInstant());
+            endAt = Date.from(date.atTime(fixedEnd).atZone(zone).toInstant());
         } else if (winStart != null && winEnd != null) {
-            startAt = java.util.Date.from(date.atTime(winStart).atZone(zone).toInstant());
-            endAt = java.util.Date.from(date.atTime(winEnd).atZone(zone).toInstant());
+            startAt = Date.from(date.atTime(winStart).atZone(zone).toInstant());
+            endAt = Date.from(date.atTime(winEnd).atZone(zone).toInstant());
         } else {
             return 0;
         }
@@ -172,7 +173,7 @@ public class TaskPlanService {
         return c;
     }
 
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int applyReplacing(String storeCode, LocalDate from, LocalDate to, String createdBy) {
         Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
         Date toDate = Date.from(to.atStartOfDay(ZoneId.systemDefault()).toInstant());
@@ -247,9 +248,9 @@ public class TaskPlanService {
      * 週次・月次の作業計画から、work_demand_interval を再生成（指定範囲/店舗/部門）。
      * demand には requiredStaffCount を使用。FLEXIBLE は窓全体を1区間として扱う。
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int materializeWorkDemands(String storeCode, String departmentCode,
-                                      java.time.LocalDate from, java.time.LocalDate to) {
+                                      LocalDate from, LocalDate to) {
         if (storeCode == null || storeCode.isBlank() || departmentCode == null || departmentCode.isBlank()) {
             System.out.println("DEBUG: materializeWorkDemands - invalid parameters, returning 0");
             return 0;
@@ -257,9 +258,9 @@ public class TaskPlanService {
         System.out.println("DEBUG: materializeWorkDemands starting for store: " + storeCode + ", dept: " + departmentCode + ", range: " + from + " to " + to);
         workDemandIntervalMapper.deleteByStoreDeptAndRange(storeCode, departmentCode, from, to);
         int created = 0;
-        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+        for (LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
             short dow = (short) d.getDayOfWeek().getValue();
-            java.util.Date dd = java.util.Date.from(d.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+            Date dd = Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());
             var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd)
                     .stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
             var monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, dd)
@@ -292,19 +293,19 @@ public class TaskPlanService {
      * 全部門の作業計画からwork_demand_intervalを物質化
      * 部門未指定時の最適化で使用
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int materializeWorkDemandsForAllDepartments(String storeCode, 
-                                                       java.time.LocalDate from, 
-                                                       java.time.LocalDate to) {
+                                                       LocalDate from, 
+                                                       LocalDate to) {
         if (storeCode == null || storeCode.isBlank()) return 0;
         
         // 既存のwork_demand_intervalを全削除（店舗・期間指定）
         workDemandIntervalMapper.deleteByStoreAndRange(storeCode, from, to);
         
         int totalCreated = 0;
-        for (java.time.LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
+        for (LocalDate d = from; d.isBefore(to); d = d.plusDays(1)) {
             short dow = (short) d.getDayOfWeek().getValue();
-            java.util.Date dd = java.util.Date.from(d.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+            Date dd = Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());
             
             // 全部門の週次計画を取得
             var weekly = planRepository.listWeeklyEffective(storeCode, dow, dd);
@@ -334,14 +335,14 @@ public class TaskPlanService {
         return totalCreated;
     }
 
-    private int toWorkDemandRows(String storeCode, String departmentCode, java.time.LocalDate date, String taskCode,
-                                 String scheduleType, java.time.LocalTime fixedStart, java.time.LocalTime fixedEnd,
-                                 java.time.LocalTime winStart, java.time.LocalTime winEnd, Integer requiredStaff) {
+    private int toWorkDemandRows(String storeCode, String departmentCode, LocalDate date, String taskCode,
+                                 String scheduleType, LocalTime fixedStart, LocalTime fixedEnd,
+                                 LocalTime winStart, LocalTime winEnd, Integer requiredStaff) {
         System.out.println("DEBUG: toWorkDemandRows - task: " + taskCode + ", scheduleType: " + scheduleType + ", fixedStart: " + fixedStart + ", fixedEnd: " + fixedEnd + ", winStart: " + winStart + ", winEnd: " + winEnd);
         
         int demand = Math.max(1, nvl(requiredStaff, 1));
-        java.time.LocalTime from;
-        java.time.LocalTime to;
+        LocalTime from;
+        LocalTime to;
         if ("FIXED".equalsIgnoreCase(scheduleType) && fixedStart != null && fixedEnd != null) {
             from = fixedStart; to = fixedEnd;
             System.out.println("DEBUG: Using FIXED schedule - from: " + from + ", to: " + to);
@@ -420,9 +421,9 @@ public class TaskPlanService {
     private static String resolveType(TaskPlan p) { return p.getScheduleType() != null ? p.getScheduleType() : "FIXED"; }
     private static String resolveType(String scheduleType) { return scheduleType != null ? scheduleType : "FIXED"; }
     private static int nvl(Integer v, int def) { return v == null ? def : v; }
-    private static java.util.Date toDate(LocalDate d) { return java.util.Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
-    private static java.util.Date toDate(LocalDateTime dt) { return java.util.Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }
-    private static LocalTime toLocalTime(java.util.Date timeOnly) { 
+    private static Date toDate(LocalDate d) { return Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
+    private static Date toDate(LocalDateTime dt) { return Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }
+    private static LocalTime toLocalTime(Date timeOnly) { 
         if (timeOnly == null) return null;
         return timeOnly.toInstant().atZone(ZoneId.systemDefault()).toLocalTime(); 
     }

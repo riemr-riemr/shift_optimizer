@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.service.StaffingBalanceService;
@@ -24,7 +25,7 @@ public class StaffingBalanceController {
     private final StaffingBalanceService staffingBalanceService;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).STAFFING_BALANCE)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).STAFFING_BALANCE)")
     public String index(@RequestParam(required = false) String date, Model model) {
         if (date == null) {
             date = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);

@@ -8,6 +8,10 @@ import io.github.riemr.shift.infrastructure.persistence.entity.StoreExample;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,8 +24,8 @@ public class EmployeeService {
     private final EmployeeMapper mapper;
     private final EmployeeWeeklyPreferenceMapper weeklyMapper;
     private final StoreMapper storeMapper;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
-    private final io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
+    private final EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
+    private final EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
 
     public List<Employee> findAll() {
         EmployeeExample example = new EmployeeExample();
@@ -35,7 +39,7 @@ public class EmployeeService {
         return mapper.selectByPrimaryKey(code);
     }
 
-    public java.util.List<EmployeeWeeklyPreference> findWeekly(String employeeCode) {
+    public List<EmployeeWeeklyPreference> findWeekly(String employeeCode) {
         return weeklyMapper.selectByEmployee(employeeCode);
     }
 
@@ -46,9 +50,9 @@ public class EmployeeService {
     }
 
     @Transactional
-    public void save(Employee e, boolean isNew, java.util.List<EmployeeWeeklyPreference> prefs,
-                     java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyHoursSetting> monthlyHours,
-                     java.util.List<io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting> monthlyOffdays) {
+    public void save(Employee e, boolean isNew, List<EmployeeWeeklyPreference> prefs,
+                     List<EmployeeMonthlyHoursSetting> monthlyHours,
+                     List<EmployeeMonthlyOffdaysSetting> monthlyOffdays) {
         if (isNew) {
             mapper.insertSelective(e);
         } else {

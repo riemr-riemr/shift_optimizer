@@ -1,7 +1,6 @@
 package io.github.riemr.shift.infrastructure.persistence.entity;
 
 import java.io.Serializable;
-import java.util.Date;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 

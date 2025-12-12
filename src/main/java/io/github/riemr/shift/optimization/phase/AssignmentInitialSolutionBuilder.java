@@ -5,6 +5,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmen
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.Register;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.WorkKind;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import org.optaplanner.core.api.score.director.ScoreDirector;
 import org.optaplanner.core.impl.phase.custom.CustomPhaseCommand;
@@ -13,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,8 +40,6 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
         if (!isAssignment) {
             return;
         }
-
-        ZoneId zone = ZoneId.systemDefault();
 
         // スロット分解能（分）を推定（最初のエンティティから）
         int slotMinutes = 15;
@@ -96,7 +94,7 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
 
             // レジ: 優先順に処理
             Map<Integer, List<ShiftAssignmentPlanningEntity>> byRegister = dayList.stream()
-                    .filter(a -> a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP)
+                    .filter(a -> a.getWorkKind() == WorkKind.REGISTER_OP)
                     .filter(a -> a.getRegisterNo() != null)
                     .collect(Collectors.groupingBy(ShiftAssignmentPlanningEntity::getRegisterNo));
 
@@ -162,7 +160,7 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
 
             // 部門タスク: 部門スキルを優先（簡易実装、ブロック長は 60 分）
             Map<String, List<ShiftAssignmentPlanningEntity>> byTask = dayList.stream()
-                    .filter(a -> a.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK)
+                    .filter(a -> a.getWorkKind() == WorkKind.DEPARTMENT_TASK)
                     .collect(Collectors.groupingBy(a -> a.getTaskCode() == null ? "" : a.getTaskCode()));
 
             for (var tEntry : byTask.entrySet()) {

@@ -4,7 +4,6 @@ import io.github.riemr.shift.infrastructure.persistence.entity.DaysMaster;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.util.Date;
 import java.util.List;
 
 @Mapper

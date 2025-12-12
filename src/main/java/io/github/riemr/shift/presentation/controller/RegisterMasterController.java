@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @Controller
 @RequestMapping("/masters/register")
@@ -16,7 +17,7 @@ public class RegisterMasterController {
     private final RegisterMapper registerMapper;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String list(Model model) {
         model.addAttribute("form", new Register());
         model.addAttribute("list", registerMapper.selectAll());
@@ -24,7 +25,7 @@ public class RegisterMasterController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String create(@ModelAttribute("form") Register form) {
         if (form.getStoreCode() != null && !form.getStoreCode().isBlank() && form.getRegisterNo() != null) {
             try { registerMapper.upsert(form); }
@@ -34,7 +35,7 @@ public class RegisterMasterController {
     }
 
     @PostMapping("/{storeCode}/{registerNo}/delete")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String delete(@PathVariable("storeCode") @NotBlank String storeCode,
                          @PathVariable("registerNo") Integer registerNo) {
         RegisterKey key = new RegisterKey();

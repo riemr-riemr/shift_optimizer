@@ -2,16 +2,12 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.repository.TaskPlanRepository;
 import io.github.riemr.shift.application.service.TaskPlanService;
-import io.github.riemr.shift.application.repository.DaysMasterRepository;
-import io.github.riemr.shift.infrastructure.persistence.entity.DaysMaster;
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
-import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.TaskCategoryMasterMapper;
-import io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,11 +18,17 @@ import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.beans.propertyeditors.CustomDateEditor;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.time.LocalDate;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Calendar;
 
 @Controller
 @RequestMapping("/tasks")
@@ -34,7 +36,6 @@ public class TaskPlanController {
     private final TaskPlanRepository planRepository;
     private final TaskPlanService planService;
     private final TaskMasterService taskMasterService;
-    private final DaysMasterRepository daysMasterRepository;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
     private final StoreMapper storeMapper;
     private final TaskCategoryMasterMapper taskCategoryMasterMapper;
@@ -43,7 +44,6 @@ public class TaskPlanController {
     public TaskPlanController(TaskPlanRepository planRepository,
                               TaskPlanService planService,
                               TaskMasterService taskMasterService,
-                              DaysMasterRepository daysMasterRepository,
                               DepartmentSkillMatrixService departmentSkillMatrixService,
                               StoreMapper storeMapper,
                               TaskCategoryMasterMapper taskCategoryMasterMapper,
@@ -51,7 +51,6 @@ public class TaskPlanController {
         this.planRepository = planRepository;
         this.planService = planService;
         this.taskMasterService = taskMasterService;
-        this.daysMasterRepository = daysMasterRepository;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
         this.storeMapper = storeMapper;
         this.taskCategoryMasterMapper = taskCategoryMasterMapper;
@@ -113,10 +112,10 @@ public class TaskPlanController {
                 model.addAttribute("list", results);
             } else {
                 // Special-day mode is no longer supported for task_plan
-                model.addAttribute("list", java.util.Collections.emptyList());
+                model.addAttribute("list", Collections.emptyList());
             }
         } else {
-            model.addAttribute("list", java.util.Collections.emptyList());
+            model.addAttribute("list", Collections.emptyList());
         }
         model.addAttribute("masters", taskMasterService.list());
         model.addAttribute("form", new TaskPlan());
@@ -130,14 +129,14 @@ public class TaskPlanController {
                         ? planRepository.listWeeklyByStoreAndDowAndDept(storeCode, dow, departmentCode)
                         : planRepository.listWeeklyByStoreAndDow(storeCode, dow);
             } else {
-                gridResults = java.util.Collections.emptyList();
+                gridResults = Collections.emptyList();
             }
             // Serialize to list of maps
             SimpleDateFormat hm = new SimpleDateFormat("HH:mm");
-            List<java.util.Map<String,Object>> serialized = new java.util.ArrayList<>();
+            List<Map<String,Object>> serialized = new ArrayList<>();
             for (Object o : gridResults) {
                 if (o instanceof TaskPlan p) {
-                    java.util.Map<String,Object> m = new java.util.HashMap<>();
+                    Map<String,Object> m = new HashMap<>();
                     m.put("planId", p.getPlanId());
                     m.put("taskCode", p.getTaskCode());
                     m.put("departmentCode", p.getDepartmentCode());
@@ -154,7 +153,7 @@ public class TaskPlanController {
             }
             model.addAttribute("gridPlans", serialized);
         } else {
-            model.addAttribute("gridPlans", java.util.Collections.emptyList());
+            model.addAttribute("gridPlans", Collections.emptyList());
         }
         
         return "tasks/plan/index";
@@ -165,7 +164,7 @@ public class TaskPlanController {
     @PostMapping(value = "/plan")
     public Object create(@RequestParam("mode") String mode,
                          @ModelAttribute("form") TaskPlan form,
-                         jakarta.servlet.http.HttpServletRequest request) {
+                         HttpServletRequest request) {
         // Set safe defaults for quick grid posts
         if (form.getActive() == null) form.setActive(Boolean.TRUE);
         if (form.getRequiredStaffCount() == null) form.setRequiredStaffCount(1);
@@ -176,7 +175,7 @@ public class TaskPlanController {
         } catch (Exception ignored) {}
         // weekly のみサポート
         if (!"weekly".equalsIgnoreCase(mode)) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", "weekly mode only"));
+            return ResponseEntity.badRequest().body(Map.of("error", "weekly mode only"));
         }
         planRepository.save(form);
         String redirect = "redirect:/tasks/plan?store=" + form.getStoreCode() + "&mode=weekly&day=" + (form.getDayOfWeek() == null ? 1 : form.getDayOfWeek());
@@ -184,12 +183,12 @@ public class TaskPlanController {
             redirect += "&dept=" + form.getDepartmentCode();
         }
         if (isAjax(request)) {
-            return ResponseEntity.ok(java.util.Map.of("id", form.getPlanId()));
+            return ResponseEntity.ok(Map.of("id", form.getPlanId()));
         }
         return redirect;
     }
 
-    private boolean isAjax(jakarta.servlet.http.HttpServletRequest request) {
+    private boolean isAjax(HttpServletRequest request) {
         String xrw = request.getHeader("X-Requested-With");
         String accept = request.getHeader("Accept");
         return (xrw != null && !xrw.isBlank()) || (accept != null && accept.contains(MediaType.APPLICATION_JSON_VALUE));
@@ -336,14 +335,14 @@ public class TaskPlanController {
 
     private Date roundToResolution(Date date, int resMin) {
         try {
-            java.util.Calendar cal = java.util.Calendar.getInstance();
+            Calendar cal = Calendar.getInstance();
             cal.setTime(date);
-            int total = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
+            int total = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE);
             int rounded = Math.max(0, Math.min(24 * 60 - resMin, Math.round((float) total / resMin) * resMin));
-            cal.set(java.util.Calendar.HOUR_OF_DAY, rounded / 60);
-            cal.set(java.util.Calendar.MINUTE, rounded % 60);
-            cal.set(java.util.Calendar.SECOND, 0);
-            cal.set(java.util.Calendar.MILLISECOND, 0);
+            cal.set(Calendar.HOUR_OF_DAY, rounded / 60);
+            cal.set(Calendar.MINUTE, rounded % 60);
+            cal.set(Calendar.SECOND, 0);
+            cal.set(Calendar.MILLISECOND, 0);
             return cal.getTime();
         } catch (Exception e) { return date; }
     }
