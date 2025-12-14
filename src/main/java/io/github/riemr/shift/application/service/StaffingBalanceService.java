@@ -1,14 +1,13 @@
 package io.github.riemr.shift.application.service;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
@@ -78,8 +77,8 @@ public class StaffingBalanceService {
             for (ShiftAssignment assignment : assignments) {
                 if (!storeCode.equals(assignment.getStoreCode())) continue;
 
-                LocalDateTime startDateTime = assignment.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-                LocalDateTime endDateTime = assignment.getEndAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime startDateTime = assignment.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime endDateTime = assignment.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
                 if (!startDateTime.toLocalDate().equals(targetDate) && !endDateTime.toLocalDate().equals(targetDate)) continue;
 
                 LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
@@ -106,13 +105,11 @@ public class StaffingBalanceService {
                 if (b != null) b.setRequiredStaff(e.getValue());
             }
 
-            var fromTs = Timestamp.valueOf(LocalDateTime.of(targetDate, startTime));
-            var toTs = Timestamp.valueOf(LocalDateTime.of(targetDate, endTime));
             // Use month range-like query by date boundaries via selectByMonth or add a date method; we will scan by month proxy
             var dayAssignments = departmentTaskAssignmentMapper.selectByMonth(targetDate, targetDate.plusDays(1), storeCode, departmentCode);
             for (var a : dayAssignments) {
-                LocalDateTime startDateTime = a.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
-                LocalDateTime endDateTime = a.getEndAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime startDateTime = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime endDateTime = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
                 LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
                 while (!slotDateTime.isAfter(LocalDateTime.of(targetDate, endTime))) {
                     if (!slotDateTime.isBefore(startDateTime) && slotDateTime.isBefore(endDateTime)) {

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import io.github.riemr.shift.application.service.CsvImportService;
 
@@ -25,13 +26,13 @@ public class CsvImportController {
     private final CsvImportService csvImportService;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String view() {
         return "csv/import";
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String run(@RequestParam(name = "clean", defaultValue = "true") boolean clean,
                       Model model) {
         try {
@@ -51,7 +52,7 @@ public class CsvImportController {
 
     // ===== UI: per-file upsert endpoints =====
     @PostMapping("/store")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadStore(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertStoresCsv(file.getInputStream());
@@ -65,7 +66,7 @@ public class CsvImportController {
     }
 
     @PostMapping("/register-type")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadRegisterType(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertRegisterTypesCsv(file.getInputStream());
@@ -79,7 +80,7 @@ public class CsvImportController {
     }
 
     @PostMapping("/register")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadRegister(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertRegistersCsv(file.getInputStream());
@@ -93,7 +94,7 @@ public class CsvImportController {
     }
 
     @PostMapping("/employee")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadEmployee(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertEmployeesCsv(file.getInputStream());
@@ -107,7 +108,7 @@ public class CsvImportController {
     }
 
     @PostMapping("/employee-weekly-preference")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadWeeklyPref(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertWeeklyPreferencesCsv(file.getInputStream());
@@ -121,7 +122,7 @@ public class CsvImportController {
     }
 
     @PostMapping("/employee-register-skill")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadSkill(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertEmployeeSkillsCsv(file.getInputStream());
@@ -135,7 +136,7 @@ public class CsvImportController {
     }
 
     @PostMapping({"/register-demand-quarter", "/register-demand-interval"})
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String uploadDemandQuarter(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertRegisterDemandIntervalCsv(file.getInputStream());

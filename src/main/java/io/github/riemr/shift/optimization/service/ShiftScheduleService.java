@@ -27,6 +27,8 @@ import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
 import org.optaplanner.core.api.solver.SolverJob;
 import org.optaplanner.core.api.solver.SolverManager;
+import org.optaplanner.core.api.solver.SolverFactory;
+import org.optaplanner.core.api.score.ScoreManager;
 import org.optaplanner.core.api.solver.SolverStatus;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.springframework.beans.factory.annotation.Value;
@@ -92,10 +94,23 @@ public class ShiftScheduleService {
     private final PlatformTransactionManager transactionManager;
     private final AttendanceService attendanceService;
     private final AssignmentService assignmentCandidateService;
+    private final ScoreManager<ShiftSchedule, HardSoftScore> shiftScoreManager;
+    @Value("${shift.solver.mode:ASSIGNMENT}")
+    private String defaultStage;
 
     /* === Settings === */
     @Value("${shift.solver.spent-limit:PT5M}") // ISO‑8601 Duration (default 5 minutes)
     private Duration spentLimit;
+    @Value("${shift.attendance.spent-limit:PT2M}")
+    private String attendanceSpentLimitProp;
+    @Value("${shift.assignment.daily.spent-limit:PT1M}")
+    private String assignmentDailySpentLimitProp;
+    @Value("${shift.solver.daily.parallelism:2}")
+    private int dailyParallelism;
+    @Value("${shift.attendance.unimproved-limit:PT30S}")
+    private String attendanceUnimprovedLimitProp;
+    @Value("${shift.assignment.daily.unimproved-limit:PT10S}")
+    private String assignmentDailyUnimprovedLimitProp;
     // 終了条件（未改善時間）は OptaPlanner の TerminationConfig で設定
 
     /* === Runtime State === */
@@ -104,6 +119,7 @@ public class ShiftScheduleService {
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
     // 開発者向け: スコア推移の時系列
     private final Map<ProblemKey, List<ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, Long> lastImprovementMap = new ConcurrentHashMap<>();
     // 進行状況可視化用のスコア系列のみ保持
     // UUIDチケット -> ProblemKey の対応
     private final Map<String, ProblemKey> ticketKeyMap = new ConcurrentHashMap<>();
@@ -160,7 +176,8 @@ public class ShiftScheduleService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public SolveTicket startSolveMonth(LocalDate month, String storeCode, String departmentCode) {
-        return startSolveInternal(month, storeCode, departmentCode, "ASSIGNMENT");
+        String stage = (defaultStage == null || defaultStage.isBlank()) ? "ASSIGNMENT" : defaultStage.trim().toUpperCase();
+        return startSolveInternal(month, storeCode, departmentCode, stage);
     }
 
     /**
@@ -359,9 +376,11 @@ public class ShiftScheduleService {
         // チケットとキーの対応を登録
         ticketKeyMap.put(ticketId, key);
         keyTicketMap.put(key, ticketId);
+        // フェーズ毎の上限時間を用いて表示用の終了予定時刻を計算
+        Duration uiLimit = "ATTENDANCE".equals(stage) ? getAttendanceLimit() : spentLimit;
         return new SolveTicket(ticketId,
                 start.toEpochMilli(),
-                start.plus(spentLimit).toEpochMilli());
+                start.plus(uiLimit).toEpochMilli());
     }
 
     /**
@@ -413,7 +432,8 @@ public class ShiftScheduleService {
             started = Instant.now();
         }
         long start = started.toEpochMilli();
-        long finish = started.plus(spentLimit).toEpochMilli();
+        // キーに埋め込まれたステージから上限時間を判定
+        long finish = started.plus(resolveLimitFor(key)).toEpochMilli();
         int pct = (int) Math.min(100, Math.max(0,
                 Math.round((System.currentTimeMillis() - start) * 100.0 / Math.max(1, finish - start))))
                 ;
@@ -438,6 +458,53 @@ public class ShiftScheduleService {
         return new SolveStatusDto(status == null ? "UNKNOWN" : status.name(), pct, finish, currentPhase == null ? "完了" : currentPhase);
     }
 
+    private Duration resolveLimitFor(ProblemKey key) {
+        String st = (key == null) ? null : key.getStage();
+        if (st != null && st.startsWith("ATTENDANCE")) return getAttendanceLimit();
+        return spentLimit;
+    }
+
+    // ----- Duration property parsing (tolerant) -----
+    private Duration getAttendanceLimit() {
+        return parseDurationTolerant(attendanceSpentLimitProp, Duration.ofMinutes(2));
+    }
+
+    private Duration getAssignmentDailyLimit() {
+        return parseDurationTolerant(assignmentDailySpentLimitProp, Duration.ofMinutes(1));
+    }
+
+    private Duration getAttendanceUnimprovedLimit() {
+        return parseDurationTolerant(attendanceUnimprovedLimitProp, Duration.ofSeconds(30));
+    }
+
+    private Duration getAssignmentDailyUnimprovedLimit() {
+        return parseDurationTolerant(assignmentDailyUnimprovedLimitProp, Duration.ofSeconds(10));
+    }
+
+    private Duration parseDurationTolerant(String raw, Duration def) {
+        if (raw == null || raw.isBlank()) return def;
+        String s = raw.trim();
+        try {
+            // Accept ISO-8601
+            if (s.startsWith("P")) {
+                // Fix common mistake: "PT1" -> assume seconds
+                if (s.matches("^PT\\d+$")) s = s + "S";
+                return java.time.Duration.parse(s);
+            }
+            // Accept simple style: 10s, 2m, 1h, 500ms
+            String ls = s.toLowerCase();
+            if (ls.endsWith("ms")) return java.time.Duration.ofMillis(Long.parseLong(ls.substring(0, ls.length()-2)));
+            if (ls.endsWith("s")) return java.time.Duration.ofSeconds(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("m")) return java.time.Duration.ofMinutes(Long.parseLong(ls.substring(0, ls.length()-1)));
+            if (ls.endsWith("h")) return java.time.Duration.ofHours(Long.parseLong(ls.substring(0, ls.length()-1)));
+            // Digits only -> seconds
+            if (ls.matches("^\\d+$")) return java.time.Duration.ofSeconds(Long.parseLong(ls));
+        } catch (Exception ignore) {
+        }
+        // Fallback to default
+        return def;
+    }
+
     private void recordScorePoint(ProblemKey key, ShiftSchedule best) {
         if (best == null || best.getScore() == null) return;
         var s = best.getScore();
@@ -453,6 +520,7 @@ public class ShiftScheduleService {
         if (list.size() > 1000) {
             list.subList(0, list.size() - 1000).clear();
         }
+        lastImprovementMap.put(key, System.currentTimeMillis());
     }
 
     // ATTENDANCE 用（スコアのみからポイントを作成）
@@ -471,6 +539,7 @@ public class ShiftScheduleService {
         if (list.size() > 1000) {
             list.subList(0, list.size() - 1000).clear();
         }
+        lastImprovementMap.put(key, System.currentTimeMillis());
     }
 
     // 早期終了（未改善）は OptaPlanner の TerminationConfig.withUnimprovedScoreSpentLimit に委譲
@@ -881,9 +950,10 @@ public class ShiftScheduleService {
 
         // ステージごとの可用従業員候補を事前計算（ピン留め相当のフィルタリング）
         try {
-            if ("ASSIGNMENT".equals(key.getStage())) {
+            String stage = key.getStage();
+            if (stage != null && stage.startsWith("ASSIGNMENT")) {
                 assignmentCandidateService.prepareCandidateEmployeesForAssignment(unsolved, cycleStart);
-            } else if ("ATTENDANCE".equals(key.getStage())) {
+            } else if ("ATTENDANCE".equals(stage)) {
                 attendanceService.prepareCandidateEmployeesForAttendance(unsolved, cycleStart);
             }
         } catch (Exception ex) {
@@ -1173,16 +1243,16 @@ public class ShiftScheduleService {
             a.setCandidateEmployees(cands);
 
             // Debug: 出力抑制のため先頭数件だけ候補数を記録
-            if (dbgCount < 10 && log.isDebugEnabled()) {
+            if (dbgCount < 10) {
                 var st = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
                 var et = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
-                log.debug("CandDbg date={} time={}~{} kind={} candCount={}", date, st, et, a.getWorkKind(), (cands == null ? 0 : cands.size()));
+                log.info("CandDbg date={} time={}~{} kind={} candCount={} stage={}", date, st, et, a.getWorkKind(), (cands == null ? 0 : cands.size()), stage);
                 dbgCount++;
             }
-            if ((cands == null || cands.isEmpty()) && log.isWarnEnabled()) {
+            if ((cands == null || cands.isEmpty())) {
                 var st = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
                 var et = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
-                log.warn("No candidates for slot date={} time={}~{} kind={} store={} dept={}", date, st, et, a.getWorkKind(), schedule.getStoreCode(), schedule.getDepartmentCode());
+                log.warn("No candidates for slot date={} time={}~{} kind={} store={} dept={} stage={}", date, st, et, a.getWorkKind(), schedule.getStoreCode(), schedule.getDepartmentCode(), stage);
             }
         }
 
@@ -1616,6 +1686,21 @@ public class ShiftScheduleService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     private void persistResult(ShiftSchedule best, ProblemKey key) {
+        // Debug: explain score when enabled via system property/env
+        boolean debugExplain = Boolean.parseBoolean(System.getProperty("shift.solver.debug-explain",
+                System.getenv().getOrDefault("SHIFT_SOLVER_DEBUG_EXPLAIN", "false")));
+        if (debugExplain && best != null && best.getScore() != null) {
+            try {
+                var exp = shiftScoreManager.explainScore(best);
+                log.info("[ExplainScore] score={}", best.getScore());
+                exp.getConstraintMatchTotalMap().entrySet().stream()
+                        .sorted((a,b) -> b.getValue().getScore().compareTo(a.getValue().getScore()))
+                        .limit(10)
+                        .forEach(e -> log.info("  - {} => {}", e.getKey(), e.getValue().getScore()));
+            } catch (Exception ex) {
+                log.warn("ExplainScore failed: {}", ex.getMessage());
+            }
+        }
         // Construction Heuristic中（未割当が残っている）なら保存をスキップ
         if (best.getScore() != null && best.getScore().initScore() < 0) {
             log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
@@ -1695,6 +1780,13 @@ public class ShiftScheduleService {
             log.info("Persisted attendance solution – shifts={}, score={}", shiftAssignments.size(), best.getScore());
             return;
         }
+
+        // Debug counters
+        long totalSlots = best.getAssignmentList() == null ? 0 : best.getAssignmentList().size();
+        long assignedSlots = best.getAssignmentList() == null ? 0 : best.getAssignmentList().stream().filter(a -> a.getAssignedEmployee() != null).count();
+        long registerSlots = best.getAssignmentList() == null ? 0 : best.getAssignmentList().stream().filter(a -> a.getWorkKind() == WorkKind.REGISTER_OP).count();
+        log.info("[PersistDbg] slots(total={}, assigned={}, registerSlots={}) stage={} score={} store={}",
+                totalSlots, assignedSlots, registerSlots, key.getStage(), best.getScore(), best.getStoreCode());
 
         // Group by employee, date, and register for register assignments
         Map<String, List<ShiftAssignmentPlanningEntity>> registerAssignmentsByEmployeeDateRegister = best.getAssignmentList().stream()
@@ -1829,6 +1921,302 @@ public class ShiftScheduleService {
     /* ===================================================================== */
     /* Helper                                                                */
     /* ===================================================================== */
+
+    /**
+     * 指定月のサイクル期間を日次でASSIGNMENT最適化し、各日について当日分のみ保存する。
+     * 出勤（shift_assignment）は変更しない。
+     * @return 処理した日数
+     */
+    @Transactional(readOnly = true)
+    public int startSolveAssignmentDaily(LocalDate cycleStart, String storeCode, String departmentCode) {
+        LocalDate start = computeCycleStart(cycleStart);
+        LocalDate end = start.plusMonths(1);
+
+        int parallelism = Math.max(1, dailyParallelism);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(parallelism);
+        List<java.util.concurrent.Future<Boolean>> futures = new ArrayList<>();
+
+        for (LocalDate d = start; d.isBefore(end); d = d.plusDays(1)) {
+            final LocalDate day = d;
+            futures.add(pool.submit(() -> {
+                // 日付ごとに一意なキーを使って衝突を避ける（stageに日付を含める）
+                String stageTag = "ASSIGNMENT@" + day.toString();
+                ProblemKey key = new ProblemKey(java.time.YearMonth.from(start), storeCode, departmentCode, start, stageTag);
+                try {
+                    // 問題構築（当日スロットに限定）
+                    ShiftSchedule daily = loadProblemForDate(key, day);
+                    // solveAndListenで最終解を取得
+                    SolverJob<ShiftSchedule, ProblemKey> job = solverManager.solveAndListen(
+                            key,
+                            k -> daily,
+                            best -> {
+                                if (best != null && best.getScore() != null) recordScorePoint(key, best);
+                            },
+                            this::onError);
+                    // 1分（設定可能）で早期終了させるタイマーを設定
+                    java.util.concurrent.ScheduledExecutorService killer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+                    killer.schedule(() -> {
+                        try { solverManager.terminateEarly(key); } catch (Exception ignore) {}
+                    }, Math.max(1, getAssignmentDailyLimit().toSeconds()), java.util.concurrent.TimeUnit.SECONDS);
+                    // 未改善終了（デフォルト10秒）モニタ
+                    lastImprovementMap.put(key, System.currentTimeMillis());
+                    java.util.concurrent.ScheduledExecutorService unimprovedMonitor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+                    unimprovedMonitor.scheduleAtFixedRate(() -> {
+                        try {
+                            long last = lastImprovementMap.getOrDefault(key, System.currentTimeMillis());
+                            if (System.currentTimeMillis() - last >= getAssignmentDailyUnimprovedLimit().toMillis()) {
+                                solverManager.terminateEarly(key);
+                            }
+                        } catch (Exception ignore) {}
+                    }, 5, 1, java.util.concurrent.TimeUnit.SECONDS);
+                    ShiftSchedule finalBest = job.getFinalBestSolution();
+                    killer.shutdown();
+                    unimprovedMonitor.shutdown();
+                    // 当日分のみ永続化（独立トランザクション）
+                    TransactionTemplate tt = new TransactionTemplate(transactionManager);
+                    tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                    tt.execute(s -> { persistDailyResult(finalBest, key, day); return null; });
+                    return true;
+                } catch (Exception ex) {
+                    log.error("Daily assignment failed for {}: {}", day, ex.getMessage(), ex);
+                    return false;
+                }
+            }));
+        }
+
+        pool.shutdown();
+        try {
+            // 十分長い待機（spentLimitに比例）。全ジョブの完了を待つ
+            long timeoutSec = Math.max(20L, getAssignmentDailyLimit().getSeconds() * 2);
+            boolean terminated = pool.awaitTermination(timeoutSec, java.util.concurrent.TimeUnit.SECONDS);
+            if (!terminated) {
+                log.warn("Daily assignment pool did not terminate within {}s; forcing shutdownNow", timeoutSec);
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            pool.shutdownNow();
+        }
+
+        // 成功数を集計
+        int processed = 0;
+        for (var f : futures) {
+            try { if (Boolean.TRUE.equals(f.get())) processed++; } catch (Exception ignore) {}
+        }
+        return processed;
+    }
+
+
+    /**
+     * 指定日のみASSIGNMENT最適化を実行し、当日分だけ保存する（出勤テーブルは変更しない）。
+     */
+    @Transactional(readOnly = true)
+    public boolean startSolveAssignmentForDate(LocalDate date, String storeCode, String departmentCode) {
+        // dateからサイクル開始日を導出
+        LocalDate cycleStart = computeCycleStart(date);
+        String stageTag = "ASSIGNMENT@" + date.toString();
+        ProblemKey key = new ProblemKey(YearMonth.from(cycleStart), storeCode, departmentCode, cycleStart, stageTag);
+        try {
+            ShiftSchedule daily = loadProblemForDate(key, date);
+            
+            
+            
+            SolverJob<ShiftSchedule, ProblemKey> job = solverManager.solveAndListen(
+                    key,
+                    k -> daily,
+                    best -> { if (best != null && best.getScore() != null) recordScorePoint(key, best); },
+                    this::onError);
+            // 1分（設定可能）で早期終了させるタイマーを設定
+            java.util.concurrent.ScheduledExecutorService killer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+            killer.schedule(() -> {
+                try { solverManager.terminateEarly(key); } catch (Exception ignore) {}
+            }, Math.max(1, getAssignmentDailyLimit().toSeconds()), java.util.concurrent.TimeUnit.SECONDS);
+            // 未改善終了（デフォルト10秒）モニタ
+            lastImprovementMap.put(key, System.currentTimeMillis());
+            java.util.concurrent.ScheduledExecutorService unimprovedMonitor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+            unimprovedMonitor.scheduleAtFixedRate(() -> {
+                try {
+                    long last = lastImprovementMap.getOrDefault(key, System.currentTimeMillis());
+                    if (System.currentTimeMillis() - last >= getAssignmentDailyUnimprovedLimit().toMillis()) {
+                        solverManager.terminateEarly(key);
+                    }
+                } catch (Exception ignore) {}
+            }, 5, 1, java.util.concurrent.TimeUnit.SECONDS);
+            ShiftSchedule finalBest = job.getFinalBestSolution();
+            killer.shutdown();
+            unimprovedMonitor.shutdown();
+            
+            
+            TransactionTemplate tt = new TransactionTemplate(transactionManager);
+            tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            tt.execute(s -> { persistDailyResult(finalBest, key, date); return null; });
+            return true;
+        } catch (Exception ex) {
+            log.error("Single-day assignment failed for {}: {}", date, ex.getMessage(), ex);
+            return false;
+        }
+    }
+
+    /**
+     * 既存の月次問題を当日分に絞るラッパー。
+     */
+    private ShiftSchedule loadProblemForDate(ProblemKey key, LocalDate date) {
+        ShiftSchedule monthProblem = loadProblem(key);
+        if (monthProblem.getAssignmentList() != null) {
+            List<ShiftAssignmentPlanningEntity> onlyDay = monthProblem.getAssignmentList().stream()
+                    .filter(a -> date.equals(a.getShiftDate()))
+                    .toList();
+            monthProblem.setAssignmentList(new ArrayList<>(onlyDay));
+        }
+        // 需要テーブルも当日分のみに限定（単日実行を正しく評価するため）
+        if (monthProblem.getDemandList() != null) {
+            java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+            var onlyDay = monthProblem.getDemandList().stream()
+                    .filter(d -> {
+                        java.util.Date dd = d.getDemandDate();
+                        java.time.LocalDate ld = (dd instanceof java.sql.Date sql) ? sql.toLocalDate() : dd.toInstant().atZone(zone).toLocalDate();
+                        return date.equals(ld);
+                    })
+                    .toList();
+            monthProblem.setDemandList(new ArrayList<>(onlyDay));
+        }
+        if (monthProblem.getWorkDemandList() != null) {
+            java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+            var onlyDay = monthProblem.getWorkDemandList().stream()
+                    .filter(d -> {
+                        java.util.Date dd = d.getDemandDate();
+                        java.time.LocalDate ld = (dd instanceof java.sql.Date sql) ? sql.toLocalDate() : dd.toInstant().atZone(zone).toLocalDate();
+                        return date.equals(ld);
+                    })
+                    .toList();
+            monthProblem.setWorkDemandList(new ArrayList<>(onlyDay));
+        }
+        // ステージはASSIGNMENT固定
+        if (monthProblem.getAssignmentList() != null) {
+            for (var a : monthProblem.getAssignmentList()) a.setStage("ASSIGNMENT");
+        }
+        // 念のため候補従業員を当日分に対して再構築（ASSIGNMENT専用）
+        try {
+            LocalDate cycleStart = key.getCycleStart() != null ? key.getCycleStart() : monthProblem.getMonth();
+            assignmentCandidateService.prepareCandidateEmployeesForAssignment(monthProblem, cycleStart);
+        } catch (Exception ignore) {
+            log.warn("Rebuild candidate employees for day {} failed: {}", date, ignore.getMessage());
+        }
+        return monthProblem;
+    }
+
+    /**
+     * 当日分のみ削除→挿入で永続化する（日次ASSIGNMENT用）。
+     * ATTENDANCE（出勤）は触らない。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    private void persistDailyResult(ShiftSchedule best, ProblemKey key, LocalDate date) {
+        if (best == null || best.getAssignmentList() == null) {
+            log.warn("persistDailyResult: best or assignments null for {}", date);
+            return;
+        }
+
+        String store = best.getStoreCode();
+        if (store == null || store.isBlank()) {
+            log.warn("persistDailyResult: storeCode is null, skip {}", date);
+            return;
+        }
+
+        // 集計（当日分のみ）
+        List<ShiftAssignmentPlanningEntity> dayList = best.getAssignmentList().stream()
+                .filter(a -> date.equals(a.getShiftDate()))
+                .toList();
+        if (log.isInfoEnabled()) {
+            long regSlots = dayList.stream().filter(a -> a.getWorkKind() == WorkKind.REGISTER_OP).count();
+            long deptSlots = dayList.stream().filter(a -> a.getWorkKind() == WorkKind.DEPARTMENT_TASK).count();
+            log.info("[DailyPersist] {} daySlots={} (registerSlots={}, deptTaskSlots={})", date, dayList.size(), regSlots, deptSlots);
+        }
+
+        boolean hasRegisterSlots = dayList.stream().anyMatch(a -> a.getWorkKind() == WorkKind.REGISTER_OP);
+        List<RegisterAssignment> mergedRegisters = new ArrayList<>();
+        if (hasRegisterSlots) {
+            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpReg = dayList.stream()
+                    .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.REGISTER_OP && a.getRegisterNo() != null)
+                    .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + a.getRegisterNo()));
+            for (var group : byEmpReg.values()) {
+                group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
+                RegisterAssignment cur = null;
+                for (var e : group) {
+                    if (cur == null) {
+                        cur = e.getOrigin(); cur.setAssignmentId(null);
+                        cur.setEmployeeCode(e.getAssignedEmployee().getEmployeeCode());
+                    } else if (cur.getEndAt().toInstant().equals(e.getOrigin().getStartAt().toInstant())) {
+                        cur.setEndAt(e.getOrigin().getEndAt());
+                    } else {
+                        mergedRegisters.add(cur);
+                        cur = e.getOrigin(); cur.setAssignmentId(null);
+                        cur.setEmployeeCode(e.getAssignedEmployee().getEmployeeCode());
+                    }
+                }
+                if (cur != null) mergedRegisters.add(cur);
+            }
+        }
+
+        List<DepartmentTaskAssignment> deptTasks = new ArrayList<>();
+        if (best.getDepartmentCode() != null) {
+            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpTask = dayList.stream()
+                    .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.DEPARTMENT_TASK)
+                    .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + (a.getTaskCode()==null?"":a.getTaskCode())));
+            for (var group : byEmpTask.values()) {
+                group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
+                var first = group.get(0); var last = group.get(group.size()-1);
+                var ta = new DepartmentTaskAssignment();
+                ta.setStoreCode(first.getOrigin().getStoreCode());
+                ta.setDepartmentCode(best.getDepartmentCode());
+                ta.setTaskCode(first.getTaskCode());
+                ta.setEmployeeCode(first.getAssignedEmployee().getEmployeeCode());
+                ta.setStartAt(first.getOrigin().getStartAt());
+                ta.setEndAt(last.getOrigin().getEndAt());
+                ta.setCreatedBy("auto");
+                deptTasks.add(ta);
+            }
+        }
+
+        long assigned = dayList.stream().filter(a -> a.getAssignedEmployee() != null).count();
+        long regNull = dayList.stream().filter(a -> a.getWorkKind()==WorkKind.REGISTER_OP && a.getRegisterNo()==null).count();
+        log.info("[DailyPersist] {} assignedSlots={}, regNullSlots={}, mergedRegisters={}, deptTasks={} (store={})",
+                date, assigned, regNull, mergedRegisters.size(), deptTasks.size(), store);
+
+        // 最適化が実行された場合、結果が0件でも既存データの削除は必要
+        // レジスロットまたは部門タスクスロットが存在する場合は処理を続行
+        boolean shouldProcess = hasRegisterSlots || !dayList.stream().filter(a -> a.getWorkKind() == WorkKind.DEPARTMENT_TASK).toList().isEmpty();
+        if (!shouldProcess) {
+            log.warn("[DailyPersist] No work slots for {}. Skip processing.", date);
+            return;
+        }
+
+        // 当日分のみ削除→挿入
+        boolean hasRegistersForStore = Optional.ofNullable(best.getRegisterList()).orElse(List.of())
+                .stream().anyMatch(r -> store.equals(r.getStoreCode()));
+        if (hasRegisterSlots && hasRegistersForStore) {
+            // 粒度の粗い日次削除（範囲）
+            registerAssignmentMapper.deleteByMonthAndStore(date, date.plusDays(1), store);
+            // 念押しでキー一致の削除を行ってから挿入（重複対策）
+            for (RegisterAssignment ra : mergedRegisters) {
+                if (ra.getStoreCode() == null) ra.setStoreCode(store);
+                if (ra.getCreatedBy() == null) ra.setCreatedBy("auto");
+                try {
+                    // start_at のみで既存を削除（ユニークキーに揃える）
+                    registerAssignmentMapper.deleteByStoreEmployeeAndStartAt(
+                            ra.getStoreCode(), ra.getEmployeeCode(), ra.getStartAt());
+                } catch (Exception ignore) { /* best-effort */ }
+                registerAssignmentMapper.insert(ra);
+            }
+        } else if (hasRegisterSlots) {
+            log.warn("[DailyPersist] No register master rows for store {}. Skip register_assignment delete/insert for {}.", store, date);
+        } else {
+            log.info("[DailyPersist] Skip register_assignment delete/insert for {} because no REGISTER_OP slots in problem.", date);
+        }
+        if (best.getDepartmentCode() != null) {
+            departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(date, date.plusDays(1), store, best.getDepartmentCode());
+            deptTasks.forEach(departmentTaskAssignmentMapper::insert);
+        }
+    }
 
     private static long toProblemId(LocalDate month) {
         return month.getYear() * 100L + month.getMonthValue(); // yyyyMM

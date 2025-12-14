@@ -3,6 +3,7 @@ package io.github.riemr.shift.presentation.controller;
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.application.service.TaskCategoryMasterService;
+import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -17,13 +18,13 @@ public class MonthlyTaskPlanPageController {
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
     private final TaskMasterService taskMasterService;
     private final TaskCategoryMasterService taskCategoryMasterService;
-    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
+    private final AppSettingService appSettingService;
 
     public MonthlyTaskPlanPageController(StoreMapper storeMapper,
                                          DepartmentSkillMatrixService departmentSkillMatrixService,
                                          TaskMasterService taskMasterService,
                                          TaskCategoryMasterService taskCategoryMasterService,
-                                         io.github.riemr.shift.application.service.AppSettingService appSettingService) {
+                                         AppSettingService appSettingService) {
         this.storeMapper = storeMapper;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
         this.taskMasterService = taskMasterService;

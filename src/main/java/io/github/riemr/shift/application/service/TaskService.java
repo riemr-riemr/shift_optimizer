@@ -132,14 +132,6 @@ public class TaskService {
         return ldt == null ? null : Date.from(ldt.atZone(ZoneId.systemDefault()).toInstant());
     }
 
-    private static Date toDate(LocalDateTime ldt, ZoneId zoneId) {
-        return ldt == null ? null : Date.from(ldt.atZone(zoneId).toInstant());
-    }
-
-    private static Date toDate(LocalDate ld) {
-        return ld == null ? null : Date.from(ld.atStartOfDay(ZoneId.systemDefault()).toInstant());
-    }
-
     private static LocalDate toLocalDate(Date date) {
         return date == null ? null : date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
     }

@@ -52,4 +52,8 @@ public interface RegisterAssignmentMapper {
     int deleteByMonthAndStore(@Param("from") LocalDate from,
                                @Param("to") LocalDate to,
                                @Param("storeCode") String storeCode);
+
+    int deleteByStoreEmployeeAndStartAt(@Param("storeCode") String storeCode,
+                                        @Param("employeeCode") String employeeCode,
+                                        @Param("startAt") Date startAt);
 }

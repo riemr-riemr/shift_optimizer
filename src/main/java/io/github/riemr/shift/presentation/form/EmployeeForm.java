@@ -4,9 +4,8 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.List;
+import java.util.ArrayList;
 
 @Data
 public class EmployeeForm {
@@ -49,7 +48,7 @@ public class EmployeeForm {
         private String baseStartTime; // HH:mm or null
         private String baseEndTime;   // HH:mm or null
     }
-    private java.util.List<WeeklyPrefRow> weeklyPreferences = new java.util.ArrayList<>();
+    private List<WeeklyPrefRow> weeklyPreferences = new ArrayList<>();
 
     
 
@@ -93,7 +92,7 @@ public class EmployeeForm {
         private Integer minHours;
         private Integer maxHours;
     }
-    private java.util.List<MonthlyHoursRow> monthlyHours = new java.util.ArrayList<>();
+    private List<MonthlyHoursRow> monthlyHours = new ArrayList<>();
     
     // 月別時間設定（テーブル形式用）
     @lombok.Data

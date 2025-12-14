@@ -7,17 +7,17 @@ import io.github.riemr.shift.application.dto.QuarterSlot;
 import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
 import io.github.riemr.shift.infrastructure.mapper.*;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
-import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.optimization.entity.WorkKind;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -33,13 +33,11 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     private final EmployeeMapper              employeeMapper;
     private final EmployeeRegisterSkillMapper skillMapper;
     private final RegisterMapper              registerMapper;
-    private final RegisterTypeMapper          registerTypeMapper;
-    private final io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper registerDemandIntervalMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final EmployeeRequestMapper       requestMapper;
     private final ConstraintMasterMapper      constraintMasterMapper;
-    private final ConstraintSettingMapper     constraintSettingMapper;
-    private final StoreMapper                 storeMapper;
-    private final RegisterAssignmentMapper    assignmentMapper; // 前回結果 (warm‑start) 用
+    private final RegisterAssignmentMapper    assignmentMapper;
+    private final ShiftAssignmentMapper       shiftAssignmentMapper;
     private final io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper workDemandIntervalMapper;
     private final EmployeeDepartmentMapper    employeeDepartmentMapper;
     private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
@@ -111,6 +109,13 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         List<EmployeeMonthlySetting> monthlySettings = employeeMonthlySettingMapper.selectByMonth(monthStartDate);
         List<EmployeeShiftPattern> shiftPatterns = employeeShiftPatternMapper.selectAllActive();
 
+        // 出勤時間データを取得（制約用）
+        List<ShiftAssignment> shiftAssignments = 
+                shiftAssignmentMapper.selectByMonth(cycleStart, cycleEnd)
+                .stream()
+                .filter(s -> storeCode == null || storeCode.equals(s.getStoreCode()))
+                .toList();
+
         // ウォームスタート用の前回結果は「前サイクル」範囲で取得
         List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
                 cycleStart.minusMonths(1),
@@ -133,7 +138,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         // Filter employees by department only when it's NOT a register department
         if (departmentCode != null && !departmentCode.isBlank() && !isRegisterDepartment) {
             var edList = employeeDepartmentMapper.selectByDepartment(departmentCode);
-            java.util.Set<String> allowed = edList.stream().map(EmployeeDepartment::getEmployeeCode).collect(Collectors.toSet());
+            Set<String> allowed = edList.stream().map(EmployeeDepartment::getEmployeeCode).collect(Collectors.toSet());
             employees = employees.stream().filter(e -> allowed.contains(e.getEmployeeCode())).toList();
         }
 
@@ -148,17 +153,17 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         }
 
         // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
-        List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> workDemands = List.of();
+        List<WorkDemandQuarter> workDemands = List.of();
         if (departmentCode != null && !departmentCode.isBlank()) {
             var workIntervals = workDemandIntervalMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
             // Expand intervals to quarter rows
-            Map<java.time.LocalDate, List<DemandIntervalDto>> byDate = workIntervals.stream().collect(java.util.stream.Collectors.groupingBy(DemandIntervalDto::getTargetDate));
-            List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> tmp = new ArrayList<>();
+            Map<LocalDate, List<DemandIntervalDto>> byDate = workIntervals.stream().collect(Collectors.groupingBy(DemandIntervalDto::getTargetDate));
+            List<WorkDemandQuarter> tmp = new ArrayList<>();
             for (var entry : byDate.entrySet()) {
                 for (DemandIntervalDto di : entry.getValue()) {
-                    java.time.LocalTime t = di.getFrom();
+                    LocalTime t = di.getFrom();
                     while (t.isBefore(di.getTo())) {
-                        var wq = new io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter();
+                        WorkDemandQuarter wq = new WorkDemandQuarter();
                         wq.setStoreCode(di.getStoreCode());
                         wq.setDepartmentCode(di.getDepartmentCode());
                         wq.setDemandDate(java.sql.Date.valueOf(di.getTargetDate()));
@@ -192,6 +197,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
         schedule.setEmployeeMonthlySettingList(monthlySettings);
         schedule.setEmployeeShiftPatternList(shiftPatterns);
+        schedule.setShiftAssignmentList(shiftAssignments);
         return schedule;
     }
 
@@ -261,7 +267,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
                 ent.setShiftId(sa.getAssignmentId());
                 ent.setDepartmentCode(departmentCode);
-                ent.setWorkKind(io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP);
+                ent.setWorkKind(WorkKind.REGISTER_OP);
                 result.add(ent);
             }
         }
@@ -270,7 +276,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     }
 
     private List<ShiftAssignmentPlanningEntity> buildEmptyWorkAssignments(
-            List<io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter> demandList,
+            List<WorkDemandQuarter> demandList,
             String departmentCode,
             int minutesPerSlot) {
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
@@ -298,7 +304,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
                 ent.setShiftId(sa.getAssignmentId());
                 ent.setDepartmentCode(departmentCode);
-                ent.setWorkKind(io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK);
+                ent.setWorkKind(WorkKind.DEPARTMENT_TASK);
                 ent.setTaskCode(d.getTaskCode());
                 result.add(ent);
             }

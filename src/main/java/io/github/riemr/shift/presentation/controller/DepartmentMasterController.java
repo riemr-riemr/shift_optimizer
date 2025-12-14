@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;;
 
 @Controller
 @RequestMapping("/masters/department")
@@ -15,7 +16,7 @@ public class DepartmentMasterController {
     private final DepartmentMasterMapper departmentMasterMapper;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String list(Model model) {
         model.addAttribute("form", new DepartmentMaster());
         model.addAttribute("list", departmentMasterMapper.selectAll());
@@ -23,7 +24,7 @@ public class DepartmentMasterController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String create(@ModelAttribute("form") DepartmentMaster form) {
         if (form.getDepartmentCode() != null && !form.getDepartmentCode().isBlank()) {
             try {
@@ -36,7 +37,7 @@ public class DepartmentMasterController {
     }
 
     @PostMapping("/{departmentCode}/delete")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)")
     public String delete(@PathVariable("departmentCode") @NotBlank String departmentCode) {
         departmentMasterMapper.deleteByCode(departmentCode);
         return "redirect:/masters/department";

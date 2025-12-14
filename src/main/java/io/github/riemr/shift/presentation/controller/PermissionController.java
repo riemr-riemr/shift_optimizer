@@ -11,9 +11,12 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @Controller
 @RequestMapping("/permissions")
@@ -37,16 +40,16 @@ public class PermissionController {
     );
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
     public String view(Model model) {
         List<AuthorityMaster> roles = authorityMasterMapper.selectAll();
         model.addAttribute("roles", roles);
         model.addAttribute("screens", SCREENS);
         // 現在値をロード
-        java.util.Map<String, java.util.Map<String, AuthorityScreenPermission>> matrix = new java.util.HashMap<>();
+        Map<String, Map<String, AuthorityScreenPermission>> matrix = new HashMap<>();
         for (AuthorityMaster role : roles) {
             var list = permissionMapper.findAllByAuthority(role.getAuthorityCode());
-            java.util.Map<String, AuthorityScreenPermission> map = new java.util.HashMap<>();
+            Map<String, AuthorityScreenPermission> map = new HashMap<>();
             for (var p : list) map.put(p.getScreenCode(), p);
             matrix.put(role.getAuthorityCode(), map);
         }
@@ -55,7 +58,7 @@ public class PermissionController {
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
     public String update(HttpServletRequest request) {
         List<AuthorityMaster> roles = authorityMasterMapper.selectAll();
         for (AuthorityMaster role : roles) {

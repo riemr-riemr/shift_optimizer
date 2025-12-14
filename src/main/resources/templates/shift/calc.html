@@ -136,6 +136,9 @@
           <div class="text-muted small" id="displayDate">
             表示日を選択してください
           </div>
+          <button id="btnRunAssignmentForDay" class="btn btn-primary btn-sm" title="この日の作業割当を再計算して保存">
+            <i class="bi bi-cpu"></i> 作業割当
+          </button>
           <button id="saveChangesBtn" class="btn btn-success btn-sm" style="display: none;">
             <i class="bi bi-floppy"></i> 変更を保存
           </button>
@@ -219,6 +222,16 @@
     overflow: hidden;
     white-space: nowrap;
   }
+
+  /* Work-hours row (attendance shading) */
+  .work-hours-cell {
+    position: relative;
+    background: transparent;
+    border-top: 1px dashed #e9ecef;
+  }
+  .work-hours-cell.working {
+    background: rgba(13, 110, 253, 0.15); /* bootstrap primary tint */
+  }
 </style>
 
 <script>
@@ -292,6 +305,46 @@ document.addEventListener('DOMContentLoaded', () => {
     storeSelect.addEventListener('change', loadDepartments);
     // 初期状態（未選択）では部門はプレースホルダのみにする
     loadDepartments();
+  }
+
+  // 単日作業割当の実行ボタン
+  const runBtn = $('btnRunAssignmentForDay');
+  if (runBtn) {
+    runBtn.addEventListener('click', async () => {
+      const date = $('date').value;
+      const storeCode = $('storeCode').value;
+      const departmentCode = $('departmentCode').value || '';
+      if (!date || !storeCode) {
+        alert('日付と店舗を選択してください');
+        return;
+      }
+      runBtn.disabled = true;
+      const prevHtml = runBtn.innerHTML;
+      runBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> 実行中...';
+      try {
+        const res = await fetch('/shift/api/assignment/start-day', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date, storeCode, departmentCode })
+        }).then(r => r.json());
+        if (!res.success) throw new Error(res.error || '実行に失敗しました');
+        // 再読込
+        await loadResult(date);
+        // 成功通知
+        const ok = document.createElement('div');
+        ok.className = 'alert alert-success m-3';
+        ok.textContent = '作業割当を実行し、結果を保存しました。';
+        const card = document.getElementById('resultsCard');
+        if (card) card.insertBefore(ok, card.firstChild);
+        setTimeout(()=> ok.remove(), 2500);
+      } catch (e) {
+        console.error(e);
+        alert('作業割当の実行に失敗しました: ' + e.message);
+      } finally {
+        runBtn.disabled = false;
+        runBtn.innerHTML = prevHtml;
+      }
+    });
   }
 });
 
@@ -934,7 +987,7 @@ async function loadResult(dateString){
     // 並行してデータを取得
     const [shiftData, employeeData, workTimeMonthlyResp] = await Promise.all([
       fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
-      fetch(`/shift/api/calc/employees/${storeCode}${departmentCode?`?departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
+      fetch(`/shift/api/calc/employees/${storeCode}?date=${encodeURIComponent(dateString)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
       // 月次の勤務時間（シフト）を取得し、当日分にフィルタして利用
       fetch(`/shift/api/calc/shifts/monthly/${dateString.substring(0,7)}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json())
     ]);

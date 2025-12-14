@@ -7,8 +7,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.text.SimpleDateFormat;
 import java.util.*;
+import java.time.YearMonth;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.text.SimpleDateFormat;
 
 @RestController
 @RequestMapping("/tasks/api/monthly")
@@ -102,32 +105,32 @@ public class MonthlyTaskPlanController {
     }
 
     @GetMapping(path = "/calendar", produces = MediaType.APPLICATION_JSON_VALUE)
-    public java.util.Map<String, java.util.List<java.util.Map<String,Object>>> monthCalendar(
+    public Map<String, List<Map<String,Object>>> monthCalendar(
             @RequestParam("store") String storeCode,
             @RequestParam(name = "dept", required = false) String departmentCode,
             @RequestParam("month") String yearMonthStr) {
-        java.time.YearMonth ym = java.time.YearMonth.parse(yearMonthStr);
-        java.time.LocalDate from = ym.atDay(1);
-        java.time.LocalDate to = ym.atEndOfMonth();
-        java.util.Map<String, java.util.List<java.util.Map<String,Object>>> result = new java.util.LinkedHashMap<>();
-        for (java.time.LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            java.util.Date dd = java.util.Date.from(d.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-            java.util.List<MonthlyTaskPlan> list = repository.listEffectiveByStoreAndDate(storeCode, dd);
+        YearMonth ym = YearMonth.parse(yearMonthStr);
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+        Map<String, List<Map<String,Object>>> result = new LinkedHashMap<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            Date dd = Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());
+            List<MonthlyTaskPlan> list = repository.listEffectiveByStoreAndDate(storeCode, dd);
             // Optional department filter
             if (departmentCode != null && !departmentCode.isBlank()) {
                 list = list.stream().filter(p -> departmentCode.equals(p.getDepartmentCode())).toList();
             }
-            java.util.List<java.util.Map<String,Object>> simple = new java.util.ArrayList<>();
+            List<Map<String,Object>> simple = new java.util.ArrayList<>();
             for (MonthlyTaskPlan p : list) {
-                java.util.Map<String,Object> m = new java.util.HashMap<>();
+                Map<String,Object> m = new java.util.HashMap<>();
                 m.put("planId", p.getPlanId());
                 m.put("departmentCode", p.getDepartmentCode());
                 m.put("taskCode", p.getTaskCode());
                 m.put("scheduleType", p.getScheduleType());
-                if (p.getFixedStartTime() != null) m.put("fixedStartTime", new java.text.SimpleDateFormat("HH:mm").format(p.getFixedStartTime()));
-                if (p.getFixedEndTime() != null) m.put("fixedEndTime", new java.text.SimpleDateFormat("HH:mm").format(p.getFixedEndTime()));
-                if (p.getWindowStartTime() != null) m.put("windowStartTime", new java.text.SimpleDateFormat("HH:mm").format(p.getWindowStartTime()));
-                if (p.getWindowEndTime() != null) m.put("windowEndTime", new java.text.SimpleDateFormat("HH:mm").format(p.getWindowEndTime()));
+                if (p.getFixedStartTime() != null) m.put("fixedStartTime", new SimpleDateFormat("HH:mm").format(p.getFixedStartTime()));
+                if (p.getFixedEndTime() != null) m.put("fixedEndTime", new SimpleDateFormat("HH:mm").format(p.getFixedEndTime()));
+                if (p.getWindowStartTime() != null) m.put("windowStartTime", new SimpleDateFormat("HH:mm").format(p.getWindowStartTime()));
+                if (p.getWindowEndTime() != null) m.put("windowEndTime", new SimpleDateFormat("HH:mm").format(p.getWindowEndTime()));
                 if (p.getRequiredDurationMinutes() != null) m.put("requiredDurationMinutes", p.getRequiredDurationMinutes());
                 if (p.getRequiredStaffCount() != null) m.put("requiredStaffCount", p.getRequiredStaffCount());
                 if (p.getLane() != null) m.put("lane", p.getLane());
@@ -135,8 +138,8 @@ public class MonthlyTaskPlanController {
                 if (p.getActive() != null) m.put("active", p.getActive());
                 if (p.getMustBeContiguous() != null) m.put("mustBeContiguous", p.getMustBeContiguous() != 0);
                 if (p.getNote() != null) m.put("note", p.getNote());
-                if (p.getEffectiveFrom() != null) m.put("effectiveFrom", new java.text.SimpleDateFormat("yyyy-MM-dd").format(p.getEffectiveFrom()));
-                if (p.getEffectiveTo() != null) m.put("effectiveTo", new java.text.SimpleDateFormat("yyyy-MM-dd").format(p.getEffectiveTo()));
+                if (p.getEffectiveFrom() != null) m.put("effectiveFrom", new SimpleDateFormat("yyyy-MM-dd").format(p.getEffectiveFrom()));
+                if (p.getEffectiveTo() != null) m.put("effectiveTo", new SimpleDateFormat("yyyy-MM-dd").format(p.getEffectiveTo()));
                 simple.add(m);
             }
             result.put(d.toString(), simple);
@@ -153,7 +156,7 @@ public class MonthlyTaskPlanController {
     @PutMapping(path = "/update", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> updatePlan(@RequestBody MonthlyTaskPlan req) {
         if (req.getPlanId() == null) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", "planId is required"));
+            return ResponseEntity.badRequest().body(Map.of("error", "planId is required"));
         }
         MonthlyTaskPlan existing = repository.find(req.getPlanId());
         if (existing == null) {

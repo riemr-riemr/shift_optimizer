@@ -77,6 +77,9 @@ public class AssignmentService {
                     .put(sk.getDepartmentCode(), sk.getSkillLevel());
         }
 
+        // 既存ロスター（ATTENDANCE）の有無に関わらず、候補はon-duty重なり or 週次設定で広く許容する
+        // assignedEmployeeCodes に限定してしまうと、ATTENDANCE未実行時に候補が消えるため除去
+
         for (var a : schedule.getAssignmentList()) {
             LocalDate date = a.getShiftDate();
             List<Employee> cands;
@@ -93,7 +96,8 @@ public class AssignmentService {
             }
 
             if (!onDuty.isEmpty()) {
-                cands = employees.stream().filter(e -> onDuty.contains(e.getEmployeeCode()))
+                cands = employees.stream()
+                        .filter(e -> onDuty.contains(e.getEmployeeCode()))
                         .filter(e -> withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
                                 a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
                                 a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime()))
@@ -120,7 +124,7 @@ public class AssignmentService {
                         .filter(e -> !wouldExceedConsecutiveCap(attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of()), date, maxConsecutiveDays))
                         .toList();
             } else {
-                // フォールバック: 週次設定ベース
+                // フォールバック: 週次設定・パターン・スキルで候補化（ATTENDANCE未実行でも割当可能にする）
                 cands = employees.stream()
                         .filter(e -> {
                             var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());

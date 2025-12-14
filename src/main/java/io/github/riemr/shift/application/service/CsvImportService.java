@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.sql.Time;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -192,8 +193,8 @@ public class CsvImportService {
                 pref.setEmployeeCode(a[0]);
                 pref.setDayOfWeek(Short.parseShort(a[1]));
                 pref.setWorkStyle(a[2]);
-                if (a[3] != null && !a[3].isBlank()) pref.setBaseStartTime(java.sql.Time.valueOf(LocalTime.parse(a[3])));
-                if (a[4] != null && !a[4].isBlank()) pref.setBaseEndTime(java.sql.Time.valueOf(LocalTime.parse(a[4])));
+                if (a[3] != null && !a[3].isBlank()) pref.setBaseStartTime(Time.valueOf(LocalTime.parse(a[3])));
+                if (a[4] != null && !a[4].isBlank()) pref.setBaseEndTime(Time.valueOf(LocalTime.parse(a[4])));
                 if (a.length > 5 && a[5] != null && !a[5].isBlank()) pref.setStoreCode(a[5]);
                 list.add(pref);
             }
@@ -379,8 +380,8 @@ public class CsvImportService {
                     pref.setEmployeeCode(a[0]);
                     pref.setDayOfWeek(Short.parseShort(a[1]));
                     pref.setWorkStyle(a[2]);
-                    if (a[3] != null && !a[3].isBlank()) pref.setBaseStartTime(java.sql.Time.valueOf(LocalTime.parse(a[3])));
-                    if (a[4] != null && !a[4].isBlank()) pref.setBaseEndTime(java.sql.Time.valueOf(LocalTime.parse(a[4])));
+                    if (a[3] != null && !a[3].isBlank()) pref.setBaseStartTime(Time.valueOf(LocalTime.parse(a[3])));
+                    if (a[4] != null && !a[4].isBlank()) pref.setBaseEndTime(Time.valueOf(LocalTime.parse(a[4])));
                     if (a.length > 5 && a[5] != null && !a[5].isBlank()) pref.setStoreCode(a[5]);
                     weeklyPrefMapper.upsert(pref);
                     cnt++;

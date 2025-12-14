@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.sql.Time;
 
@@ -17,14 +18,14 @@ public class ShiftPatternController {
     private final ShiftPatternMapper mapper;
 
     @GetMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String list(Model model) {
         model.addAttribute("patterns", mapper.selectAll());
         return "settings/shift_pattern_list";
     }
 
     @PostMapping
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String upsert(@RequestParam String patternCode,
                          @RequestParam String startTime,
                          @RequestParam String endTime,
@@ -40,7 +41,7 @@ public class ShiftPatternController {
     }
 
     @PostMapping("/delete")
-    @org.springframework.security.access.prepost.PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String delete(@RequestParam String patternCode) {
         mapper.delete(patternCode);
         return "redirect:/settings/shift-patterns";

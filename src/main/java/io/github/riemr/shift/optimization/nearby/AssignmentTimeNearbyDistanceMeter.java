@@ -1,6 +1,7 @@
 package io.github.riemr.shift.optimization.nearby;
 
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.WorkKind;
 import org.optaplanner.core.impl.heuristic.selector.common.nearby.NearbyDistanceMeter;
 
 import java.time.Duration;
@@ -22,12 +23,12 @@ public class AssignmentTimeNearbyDistanceMeter implements NearbyDistanceMeter<Sh
         }
 
         // 同種別かつ同一リソースの近傍を強く優先
-        boolean sameRegister = origin.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
-                && destination.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
+        boolean sameRegister = origin.getWorkKind() == WorkKind.REGISTER_OP
+                && destination.getWorkKind() == WorkKind.REGISTER_OP
                 && origin.getRegisterNo() != null && origin.getRegisterNo().equals(destination.getRegisterNo());
 
-        boolean sameDeptTask = origin.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK
-                && destination.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.DEPARTMENT_TASK
+        boolean sameDeptTask = origin.getWorkKind() == WorkKind.DEPARTMENT_TASK
+                && destination.getWorkKind() == WorkKind.DEPARTMENT_TASK
                 && safeEq(origin.getDepartmentCode(), destination.getDepartmentCode())
                 && safeEq(origin.getTaskCode(), destination.getTaskCode());
 
