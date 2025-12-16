@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
@@ -19,6 +20,7 @@ import io.github.riemr.shift.application.service.CsvImportService;
 @Controller
 @RequestMapping("/csv-import")
 @RequiredArgsConstructor
+@ConditionalOnProperty(value = "shift.csv-import.enabled", havingValue = "true", matchIfMissing = true)
 public class CsvImportController {
 
     private final JobLauncher jobLauncher;
@@ -135,9 +137,9 @@ public class CsvImportController {
         return "csv/import";
     }
 
-    @PostMapping({"/register-demand-quarter", "/register-demand-interval"})
+    @PostMapping("/register-demand-interval")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
-    public String uploadDemandQuarter(@RequestParam("file") MultipartFile file, Model model) {
+    public String uploadDemandInterval(@RequestParam("file") MultipartFile file, Model model) {
         try {
             int cnt = csvImportService.upsertRegisterDemandIntervalCsv(file.getInputStream());
             model.addAttribute("message", "需要(区間[from,to])CSVを取り込みました: " + cnt + "件");

@@ -300,10 +300,10 @@ public class ShiftCalcController {
         return registerDemandHourService.findHourlyDemands(storeCode, date);
     }
 
-    @GetMapping("/api/calc/work-model-quarter/{date}")
+    @GetMapping("/api/calc/work-model-slot/{date}")
     @ResponseBody
-    public List<RegisterDemandSlot> getWorkModelQuarterByDate(@PathVariable("date") String dateString,
-                                                              @RequestParam("storeCode") String storeCode) {
+    public List<RegisterDemandSlot> getWorkModelSlotsByDate(@PathVariable("date") String dateString,
+                                                            @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, date);
         int resMin = appSettingService.getTimeResolutionMinutes();
@@ -320,11 +320,11 @@ public class ShiftCalcController {
         return result;
     }
 
-    @GetMapping("/api/calc/work-demand-quarter/{date}")
+    @GetMapping("/api/calc/work-demand-slot/{date}")
     @ResponseBody
-    public List<WorkDemandSlot> getWorkDemandQuarterByDate(@PathVariable("date") String dateString,
-                                                           @RequestParam("storeCode") String storeCode,
-                                                           @RequestParam("departmentCode") String departmentCode) {
+    public List<WorkDemandSlot> getWorkDemandSlotsByDate(@PathVariable("date") String dateString,
+                                                         @RequestParam("storeCode") String storeCode,
+                                                         @RequestParam("departmentCode") String departmentCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, date);
         List<WorkDemandSlot> result = new ArrayList<>();

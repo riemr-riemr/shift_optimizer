@@ -1327,9 +1327,9 @@ async function loadWorkModel(dateString, shiftData) {
     const departmentCode = $('departmentCode').value || '';
     let workModelData = [];
     if (departmentCode && departmentCode !== '520') {
-      workModelData = await fetch(`/shift/api/calc/work-demand-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`).then(r=>r.json());
+      workModelData = await fetch(`/shift/api/calc/work-demand-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`).then(r=>r.json());
     } else {
-      workModelData = await fetch(`/shift/api/calc/work-model-quarter/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+      workModelData = await fetch(`/shift/api/calc/work-model-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
     }
     const workModelGrid = $('workModelGrid');
     const workModelCard = $('workModelCard');

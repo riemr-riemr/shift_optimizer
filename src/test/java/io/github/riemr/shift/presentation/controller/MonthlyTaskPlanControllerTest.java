@@ -8,9 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -23,7 +26,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = MonthlyTaskPlanController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class MonthlyTaskPlanControllerTest {
+
+    @SpringBootConfiguration
+    @Import(MonthlyTaskPlanController.class)
+    static class TestApplication {}
 
     @Autowired
     MockMvc mockMvc;
@@ -139,4 +147,3 @@ class MonthlyTaskPlanControllerTest {
         verify(repository, times(1)).delete(10L);
     }
 }
-

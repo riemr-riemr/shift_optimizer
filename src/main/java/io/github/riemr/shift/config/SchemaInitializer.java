@@ -3,12 +3,14 @@ package io.github.riemr.shift.config;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @Configuration
 @RequiredArgsConstructor
 @Slf4j
+@ConditionalOnProperty(value = "shift.schema.init.enabled", havingValue = "true", matchIfMissing = true)
 public class SchemaInitializer {
     private final JdbcTemplate jdbc;
 
