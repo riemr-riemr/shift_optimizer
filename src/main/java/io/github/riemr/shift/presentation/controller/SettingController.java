@@ -19,11 +19,13 @@ public class SettingController {
     public String view(Model model) {
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
+        boolean timeResolutionLocked = appSettingService.isTimeResolutionChangeLocked();
         LocalDate now = LocalDate.now();
         LocalDate cycleStart = computeCycleStart(now, startDay);
         LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
+        model.addAttribute("timeResolutionLocked", timeResolutionLocked);
         model.addAttribute("cycleStart", cycleStart);
         model.addAttribute("cycleEnd", cycleEnd);
         return "settings/index";
@@ -35,11 +37,13 @@ public class SettingController {
         appSettingService.updateShiftCycleStartDay(day);
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
+        boolean timeResolutionLocked = appSettingService.isTimeResolutionChangeLocked();
         LocalDate now = LocalDate.now();
         LocalDate cycleStart = computeCycleStart(now, startDay);
         LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
+        model.addAttribute("timeResolutionLocked", timeResolutionLocked);
         model.addAttribute("cycleStart", cycleStart);
         model.addAttribute("cycleEnd", cycleEnd);
         model.addAttribute("success", "保存しました");
@@ -49,17 +53,23 @@ public class SettingController {
     @PostMapping("/time-resolution")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String updateTimeResolution(@RequestParam("timeResolutionMinutes") int minutes, Model model) {
-        appSettingService.updateTimeResolutionMinutes(minutes);
+        try {
+            appSettingService.updateTimeResolutionMinutes(minutes);
+            model.addAttribute("success", "シフト粒度を更新しました");
+        } catch (RuntimeException e) {
+            model.addAttribute("error", e.getMessage());
+        }
         int startDay = appSettingService.getShiftCycleStartDay();
         int timeRes = appSettingService.getTimeResolutionMinutes();
+        boolean timeResolutionLocked = appSettingService.isTimeResolutionChangeLocked();
         LocalDate now = LocalDate.now();
         LocalDate cycleStart = computeCycleStart(now, startDay);
         LocalDate cycleEnd = cycleStart.plusMonths(1);
         model.addAttribute("startDay", startDay);
         model.addAttribute("timeResolutionMinutes", timeRes);
+        model.addAttribute("timeResolutionLocked", timeResolutionLocked);
         model.addAttribute("cycleStart", cycleStart);
         model.addAttribute("cycleEnd", cycleEnd);
-        model.addAttribute("success", "シフト粒度を更新しました");
         return "settings/index";
     }
 

@@ -28,6 +28,7 @@ public class StaffingBalanceService {
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final ShiftAssignmentMapper shiftMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
+    private final AppSettingService appSettingService;
 
     public List<StaffingBalanceDto> getStaffingBalance(String storeCode, LocalDate targetDate) {
         return getHourlyStaffingBalance(storeCode, targetDate);
@@ -39,6 +40,7 @@ public class StaffingBalanceService {
 
     public List<StaffingBalanceDto> getHourlyStaffingBalance(String storeCode, LocalDate targetDate, String departmentCode) {
         boolean isRegister = (departmentCode == null || departmentCode.isBlank() || "520".equalsIgnoreCase(departmentCode));
+        int resMin = appSettingService.getTimeResolutionMinutes();
 
         List<ShiftAssignment> assignments = new ArrayList<>();
         if (isRegister) {
@@ -48,7 +50,8 @@ public class StaffingBalanceService {
         Map<LocalTime, StaffingBalanceDto> balanceMap = new LinkedHashMap<>();
 
         LocalTime startTime = LocalTime.of(8, 0);
-        LocalTime endTime = LocalTime.of(22, 45);
+        // 8:00 - 23:00 のスロットを作る（終端は半開区間の最後の開始時刻）
+        LocalTime endTime = LocalTime.of(23, 0).minusMinutes(resMin);
         LocalTime current = startTime;
         
         while (!current.isAfter(endTime)) {
@@ -60,12 +63,12 @@ public class StaffingBalanceService {
                     .assignedStaff(0)
                     .build();
             balanceMap.put(current, balance);
-            current = current.plusMinutes(15);
+            current = current.plusMinutes(resMin);
         }
 
         if (isRegister) {
             var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, targetDate);
-            var quarters = TimeIntervalQuarterUtils.splitAll(intervals);
+            var quarters = TimeIntervalQuarterUtils.splitAll(intervals, resMin);
             for (var qs : quarters) {
                 var b = balanceMap.get(qs.getStart());
                 if (b != null) b.setRequiredStaff(qs.getDemand());
@@ -88,13 +91,13 @@ public class StaffingBalanceService {
                         StaffingBalanceDto balance = balanceMap.get(slotTime);
                         if (balance != null) balance.setAssignedStaff(balance.getAssignedStaff() + 1);
                     }
-                    slotDateTime = slotDateTime.plusMinutes(15);
+                    slotDateTime = slotDateTime.plusMinutes(resMin);
                 }
             }
         } else {
             // Department workload path: required from work_demand_interval (sum across tasks)
             var workIntervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, targetDate);
-            var quarterSlots = TimeIntervalQuarterUtils.splitAll(workIntervals);
+            var quarterSlots = TimeIntervalQuarterUtils.splitAll(workIntervals, resMin);
             // Sum across tasks for same quarter
             java.util.Map<LocalTime, Integer> reqBySlot = new java.util.HashMap<>();
             for (var qs : quarterSlots) {
@@ -117,7 +120,7 @@ public class StaffingBalanceService {
                         StaffingBalanceDto balance = balanceMap.get(slotTime);
                         if (balance != null) balance.setAssignedStaff(balance.getAssignedStaff() + 1);
                     }
-                    slotDateTime = slotDateTime.plusMinutes(15);
+                    slotDateTime = slotDateTime.plusMinutes(resMin);
                 }
             }
         }

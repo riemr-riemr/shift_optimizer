@@ -3,9 +3,9 @@ package io.github.riemr.shift.optimization.constraint;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
 import org.optaplanner.core.api.score.stream.ConstraintFactory;
@@ -96,23 +96,26 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     }
 
     private Constraint headcountBalance(ConstraintFactory f) {
-        return f.forEach(RegisterDemandQuarter.class)
+        return f.forEach(RegisterDemandSlot.class)
                 .join(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(RegisterDemandQuarter::getStoreCode, e -> e.getStoreCode()),
-                        Joiners.equal(RegisterDemandQuarter::getDemandDate, e -> java.sql.Date.valueOf(e.getDate())),
+                        Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
+                        Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null
                                 && timeWithin(e, d.getSlotTime())))
                 .groupBy((d, e) -> d, ConstraintCollectors.countBi())
-                .penalize(HardSoftScore.ofSoft(100), (d, assigned) -> Math.abs(d.getRequiredUnits() - assigned))
+                .penalize(HardSoftScore.ofSoft(100), (d, assigned) -> {
+                    int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+                    return Math.abs(required - assigned);
+                })
                 .asConstraint("Quarter headcount balance");
     }
 
     // 需要スロットに対する超過（割当人数 > requiredUnits）に軽いペナルティを課す
     private Constraint overstaffLightPenalty(ConstraintFactory f) {
-        return f.forEach(RegisterDemandQuarter.class)
+        return f.forEach(RegisterDemandSlot.class)
                 .join(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(RegisterDemandQuarter::getStoreCode, e -> e.getStoreCode()),
-                        Joiners.equal(RegisterDemandQuarter::getDemandDate, e -> java.sql.Date.valueOf(e.getDate())),
+                        Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
+                        Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
                 .groupBy((d, e) -> d, ConstraintCollectors.countBi())
                 .filter((d, assigned) -> assigned > (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
@@ -122,12 +125,12 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
 
     // 需要スロットに対して誰も割り当てが無い場合のショートペナルティ（不足分を強く誘導）
     private Constraint headcountShortageWhenNone(ConstraintFactory f) {
-        return f.forEach(RegisterDemandQuarter.class)
+        return f.forEach(RegisterDemandSlot.class)
                 .ifNotExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(RegisterDemandQuarter::getStoreCode, e -> e.getStoreCode()),
-                        Joiners.equal(RegisterDemandQuarter::getDemandDate, e -> java.sql.Date.valueOf(e.getDate())),
+                        Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
+                        Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
-                .penalize(HardSoftScore.ofSoft(50), RegisterDemandQuarter::getRequiredUnits)
+                .penalize(HardSoftScore.ofSoft(50), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
                 .asConstraint("Quarter headcount shortage (none)");
     }
 

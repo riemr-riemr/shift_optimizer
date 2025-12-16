@@ -41,9 +41,6 @@
     <table schema="public" tableName="register" domainObjectName="Register"/>
     <table schema="public" tableName="employee" domainObjectName="Employee"/>
     <table schema="public" tableName="employee_register_skill" domainObjectName="EmployeeRegisterSkill"/>
-    <table schema="public" tableName="register_demand_quarter" domainObjectName="RegisterDemandQuarter">
-      <generatedKey column="demand_id" sqlStatement="JDBC" identity="true"/>
-    </table>
     <table schema="public" tableName="shift_assignment" domainObjectName="ShiftAssignment">
       <generatedKey column="shift_id" sqlStatement="JDBC" identity="true"/>
     </table>

@@ -305,7 +305,7 @@
       if (grid && storeCode) {
         const cols = Math.floor(1440 / RES_MIN); // 24h * (60 / RES_MIN)
         const rows = 15; // lanes
-        // Build template columns: 1 sticky label + 96 slots
+        // Build template columns: 1 sticky label + slots
         grid.style.gridTemplateColumns = `60px repeat(${cols}, 50px)`;
 
         // Common metrics for pixel positioning
@@ -1133,7 +1133,7 @@
               if (!cell || cell.dataset.planId !== pid) break;
               s = c;
             }
-            for (let c = col + 1; c < 96; c++) {
+            for (let c = col + 1; c < cols; c++) {
               const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
               if (!cell || cell.dataset.planId !== pid) break;
               e = c + 1;
@@ -1240,7 +1240,7 @@
             if (!el || el.dataset.planId !== pid) break;
             start = c;
           }
-          for (let c = col + 1; c < 96; c++) {
+          for (let c = col + 1; c < cols; c++) {
             const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
             if (!el || el.dataset.planId !== pid) break;
             end = c + 1;

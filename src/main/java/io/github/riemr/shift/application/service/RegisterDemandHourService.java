@@ -83,7 +83,7 @@ public class RegisterDemandHourService {
     }
 
     /**
-     * Build quarter-level demand array (size 96) from intervals.
+     * スロット需要配列（サイズ=1440/minutesPerSlot）をintervalから構築します。
      */
     public int[] getQuarterDemands(String storeCode, LocalDate targetDate) {
         return getQuarterDemands(storeCode, targetDate, 15);
@@ -102,7 +102,7 @@ public class RegisterDemandHourService {
     }
 
     /**
-     * Save quarter demands (96 size) by merging contiguous same values into intervals.
+     * スロット需要配列（サイズ=1440/minutesPerSlot相当）を、連続区間にマージしてintervalとして保存します。
      */
     @Transactional
     public void saveQuarterDemands(String storeCode, LocalDate targetDate, List<Integer> quarterDemands) {

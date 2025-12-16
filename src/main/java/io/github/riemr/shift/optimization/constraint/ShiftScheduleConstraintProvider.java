@@ -1,11 +1,11 @@
 package io.github.riemr.shift.optimization.constraint;
 
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
-import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import io.github.riemr.shift.optimization.entity.WorkKind;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
@@ -187,11 +187,11 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @return レジ需要バランス制約
      */
     private Constraint registerDemandBalanceForAssignment(ConstraintFactory f) {
-        return f.forEach(RegisterDemandQuarter.class)
+        return f.forEach(RegisterDemandSlot.class)
                 .join(ShiftAssignmentPlanningEntity.class,
-                        Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
-                        Joiners.equal(RegisterDemandQuarter::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandQuarter::getSlotTime,
+                        Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
+                        Joiners.equal(RegisterDemandSlot::getSlotTime,
                                 sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
@@ -201,7 +201,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 // 需要不足の重みを大幅に強化（不足: ×10、過多: ×1、基底重み 50）
                 .penalize(HardSoftScore.ofSoft(50),
                         (demand, assigned) -> {
-                            int diff = assigned - demand.getRequiredUnits();
+                            int required = demand.getRequiredUnits() == null ? 0 : Math.max(0, demand.getRequiredUnits());
+                            int diff = assigned - required;
                             if (diff < 0) {
                                 // 需要不足：より重く罰する
                                 return (-diff) * 10;
@@ -215,18 +216,18 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     private Constraint registerDemandShortageWhenNoneForAssignment(ConstraintFactory f) {
-        return f.forEach(RegisterDemandQuarter.class)
+        return f.forEach(RegisterDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
-                        Joiners.equal(RegisterDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
-                        Joiners.equal(RegisterDemandQuarter::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandQuarter::getSlotTime,
+                        Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
+                        Joiners.equal(RegisterDemandSlot::getSlotTime,
                                 sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
                         ))
                 // 無配置（完全未割当）の場合はさらに強いペナルティ
-                .penalize(HardSoftScore.ofSoft(200), RegisterDemandQuarter::getRequiredUnits)
+                .penalize(HardSoftScore.ofSoft(200), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
                 .asConstraint("Register demand shortage (no assignment)");
     }
 
@@ -239,10 +240,10 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @return 部門作業需要バランス制約
      */
     private Constraint workDemandBalanceForAssignment(ConstraintFactory f) {
-        return f.forEach(WorkDemandQuarter.class)
+        return f.forEach(WorkDemandSlot.class)
                 .join(ShiftAssignmentPlanningEntity.class,
-                        Joiners.equal(WorkDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
-                        Joiners.equal(WorkDemandQuarter::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
+                        Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(WorkDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
                         Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
@@ -252,7 +253,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
                 // 部門需要も不足重みを増強（不足: ×10、過多: ×1、基底重み 30）
                 .penalize(HardSoftScore.ofSoft(30), (d, assigned) -> {
-                    int diff = assigned - d.getRequiredUnits();
+                    int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+                    int diff = assigned - required;
                     if (diff < 0) {
                         return (-diff) * 10;
                     } else if (diff > 0) {
@@ -265,15 +267,15 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     }
 
     private Constraint workDemandShortageWhenNoneForAssignment(ConstraintFactory f) {
-        return f.forEach(WorkDemandQuarter.class)
+        return f.forEach(WorkDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
-                        Joiners.equal(WorkDemandQuarter::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
                                 && d.getDepartmentCode().equals(sa.getDepartmentCode())
                                 && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
                         ))
-                .penalize(HardSoftScore.ofSoft(100), WorkDemandQuarter::getRequiredUnits)
+                .penalize(HardSoftScore.ofSoft(100), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
                 .asConstraint("Work demand shortage (no assignment)");
     }
 

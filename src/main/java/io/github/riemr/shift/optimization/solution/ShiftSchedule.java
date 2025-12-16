@@ -5,12 +5,12 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRegisterSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.Register;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.entity.BreakAssignment;
-import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
@@ -62,11 +62,11 @@ public class ShiftSchedule {
 
     /** 15 分需要 (参照のみ) */
     @ProblemFactCollectionProperty
-    private List<RegisterDemandQuarter> demandList;
+    private List<RegisterDemandSlot> demandList;
 
     /** 非レジ作業の 15 分需要 (参照のみ) */
     @ProblemFactCollectionProperty
-    private List<WorkDemandQuarter> workDemandList;
+    private List<WorkDemandSlot> workDemandList;
 
     /** 希望休日 */
     @ProblemFactCollectionProperty
@@ -130,8 +130,8 @@ public class ShiftSchedule {
                          String departmentCode,
                          List<Employee> employeeList,
                          List<Register> registerList,
-                         List<RegisterDemandQuarter> demandList,
-                         List<WorkDemandQuarter> workDemandList,
+                         List<RegisterDemandSlot> demandList,
+                         List<WorkDemandSlot> workDemandList,
                          List<EmployeeRequest> employeeRequestList,
                          List<ConstraintMaster> constraintMasterList,
                          List<RegisterAssignment> previousAssignmentList,

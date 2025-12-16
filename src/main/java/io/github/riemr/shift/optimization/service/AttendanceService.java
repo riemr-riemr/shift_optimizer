@@ -6,8 +6,8 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
@@ -54,7 +54,11 @@ public class AttendanceService {
                 patterns.size(), assignedCount, unassignedCount);
 
         var demand = Optional.ofNullable(sol.getDemandList()).orElse(List.of());
-        int totalDemandUnits = demand.stream().mapToInt(RegisterDemandQuarter::getRequiredUnits).sum();
+        int totalDemandUnits = demand.stream()
+                .map(RegisterDemandSlot::getRequiredUnits)
+                .filter(Objects::nonNull)
+                .mapToInt(i -> Math.max(0, i))
+                .sum();
         log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {:.1f}%",
                 totalDemandUnits, patterns.size(), (double) patterns.size() / Math.max(1, totalDemandUnits) * 100);
 
@@ -111,12 +115,9 @@ public class AttendanceService {
         if (patterns.isEmpty()) return result;
         ZoneId zone = ZoneId.systemDefault();
 
-        Map<LocalDate, List<RegisterDemandQuarter>> demandByDate = new HashMap<>();
+        Map<LocalDate, List<RegisterDemandSlot>> demandByDate = new HashMap<>();
         for (var d : demand) {
-            Date dd = d.getDemandDate();
-            LocalDate dt = (dd instanceof java.sql.Date)
-                    ? ((java.sql.Date) dd).toLocalDate()
-                    : dd.toInstant().atZone(zone).toLocalDate();
+            LocalDate dt = d.getDemandDate();
             demandByDate.computeIfAbsent(dt, k -> new java.util.ArrayList<>()).add(d);
         }
 

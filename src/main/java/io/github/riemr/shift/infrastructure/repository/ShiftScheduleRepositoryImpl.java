@@ -11,6 +11,8 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmen
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.optimization.entity.WorkKind;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -77,14 +79,14 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
         List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows, minutesPerSlot);
-        List<RegisterDemandQuarter> demands = new ArrayList<>(quarterSlots.size());
+        List<RegisterDemandSlot> demands = new ArrayList<>(quarterSlots.size());
         for (QuarterSlot qs : quarterSlots) {
-            RegisterDemandQuarter ent = new RegisterDemandQuarter();
-            ent.setStoreCode(qs.getStoreCode());
-            ent.setDemandDate(java.sql.Date.valueOf(qs.getDate()));
-            ent.setSlotTime(qs.getStart());
-            ent.setRequiredUnits(qs.getDemand());
-            demands.add(ent);
+            RegisterDemandSlot slot = new RegisterDemandSlot();
+            slot.setStoreCode(qs.getStoreCode());
+            slot.setDemandDate(qs.getDate());
+            slot.setSlotTime(qs.getStart());
+            slot.setRequiredUnits(qs.getDemand());
+            demands.add(slot);
         }
 
         // 希望は日付範囲APIを利用
@@ -153,24 +155,24 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         }
 
         // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
-        List<WorkDemandQuarter> workDemands = List.of();
+        List<WorkDemandSlot> workDemands = List.of();
         if (departmentCode != null && !departmentCode.isBlank()) {
             var workIntervals = workDemandIntervalMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
             // Expand intervals to quarter rows
             Map<LocalDate, List<DemandIntervalDto>> byDate = workIntervals.stream().collect(Collectors.groupingBy(DemandIntervalDto::getTargetDate));
-            List<WorkDemandQuarter> tmp = new ArrayList<>();
+            List<WorkDemandSlot> tmp = new ArrayList<>();
             for (var entry : byDate.entrySet()) {
                 for (DemandIntervalDto di : entry.getValue()) {
                     LocalTime t = di.getFrom();
                     while (t.isBefore(di.getTo())) {
-                        WorkDemandQuarter wq = new WorkDemandQuarter();
-                        wq.setStoreCode(di.getStoreCode());
-                        wq.setDepartmentCode(di.getDepartmentCode());
-                        wq.setDemandDate(java.sql.Date.valueOf(di.getTargetDate()));
-                        wq.setSlotTime(t);
-                        wq.setTaskCode(di.getTaskCode());
-                        wq.setRequiredUnits(di.getDemand());
-                        tmp.add(wq);
+                        WorkDemandSlot slot = new WorkDemandSlot();
+                        slot.setStoreCode(di.getStoreCode());
+                        slot.setDepartmentCode(di.getDepartmentCode());
+                        slot.setDemandDate(di.getTargetDate());
+                        slot.setSlotTime(t);
+                        slot.setTaskCode(di.getTaskCode());
+                        slot.setRequiredUnits(di.getDemand());
+                        tmp.add(slot);
                         t = t.plusMinutes(minutesPerSlot);
                     }
                 }
@@ -206,7 +208,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     // ============================================================================
 
     /**
-     * {@link RegisterDemandQuarter#getRequiredUnits()} で示された台数文だけ、
+     * {@link RegisterDemandSlot#getRequiredUnits()} で示された台数文だけ、
      * 15 分スロットごとに {@link ShiftAssignmentPlanningEntity} を生成します。
      * <p>
      * <ul>
@@ -214,7 +216,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
      *     <li>registerNo は <b>レジ番号の若い順</b> で、<b>SEMI → NORMAL</b> の優先で設定</li>
      * </ul>
      */
-    private List<ShiftAssignmentPlanningEntity> buildEmptyAssignments(List<RegisterDemandQuarter> demandList,
+    private List<ShiftAssignmentPlanningEntity> buildEmptyAssignments(List<RegisterDemandSlot> demandList,
                                                                      List<Register> registerList,
                                                                      String departmentCode,
                                                                      int minutesPerSlot) {
@@ -234,14 +236,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
 
-        for (RegisterDemandQuarter d : demandList) {
-            LocalDate demandDate;
-            Date dd = d.getDemandDate();
-            if (dd instanceof java.sql.Date sqlDate) {
-                demandDate = sqlDate.toLocalDate();
-            } else {
-                demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-            }
+        for (RegisterDemandSlot d : demandList) {
+            LocalDate demandDate = d.getDemandDate();
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
             LocalDateTime end   = start.plusMinutes(minutesPerSlot);
 
@@ -250,7 +246,8 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 log.warn("No registers defined for store {} – assignments will have null registerNo", d.getStoreCode());
             }
 
-            for (int i = 0; i < d.getRequiredUnits(); i++) {
+            int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            for (int i = 0; i < required; i++) {
                 // レジを必要台数分だけ順番に取得（足りない場合は null）
                 Integer registerNo = i < candidates.size() ? candidates.get(i).getRegisterNo() : null;
 
@@ -276,21 +273,16 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
     }
 
     private List<ShiftAssignmentPlanningEntity> buildEmptyWorkAssignments(
-            List<WorkDemandQuarter> demandList,
+            List<WorkDemandSlot> demandList,
             String departmentCode,
             int minutesPerSlot) {
         List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
         for (var d : demandList) {
-            LocalDate demandDate;
-            Date dd = d.getDemandDate();
-            if (dd instanceof java.sql.Date sqlDate) {
-                demandDate = sqlDate.toLocalDate();
-            } else {
-                demandDate = dd.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-            }
+            LocalDate demandDate = d.getDemandDate();
             LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
             LocalDateTime end = start.plusMinutes(minutesPerSlot);
-            for (int i = 0; i < d.getRequiredUnits(); i++) {
+            int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            for (int i = 0; i < required; i++) {
                 // Reuse RegisterAssignment as time container with null registerNo
                 RegisterAssignment sa = new RegisterAssignment();
                 sa.setAssignmentId(TEMP_ID_SEQ.getAndDecrement());

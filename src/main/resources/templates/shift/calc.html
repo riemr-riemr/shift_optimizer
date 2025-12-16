@@ -176,8 +176,7 @@
 <style>
   /* Shift-specific grid layout */
   .shift-grid-container {
-    grid-template-columns: 120px repeat(96, 50px);
-    min-width: 4920px; /* 120px + (96 * 50px) + gaps */
+    /* grid-template-columns は解像度(RES_MIN)に応じてJSで動的設定 */
   }
   
   /* Register selector (shift-specific) */
@@ -236,6 +235,11 @@
 
 <script>
 const $=id=>document.getElementById(id);
+
+// 時間解像度（分）とスロット数（24h）
+const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
+const SLOT_COUNT = Math.floor(1440 / RES_MIN);
+const PER_HOUR = Math.floor(60 / RES_MIN);
 
 // 編集状態管理
 let isEditing = false;
@@ -521,7 +525,7 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
   }
 }
 
-// 指定の従業員・時刻(HH:mm)の15分スロットを勤務時間として取り込む
+// 指定の従業員・時刻(HH:mm)のスロットを勤務時間として取り込む
 function addWorkingSlot(employeeCode, timeHHmm) {
   const dateStr = document.getElementById('date').value; // YYYY-MM-DD
   if (!dateStr) return;
@@ -530,10 +534,10 @@ function addWorkingSlot(employeeCode, timeHHmm) {
   const workCell = document.querySelector(`.work-hours-cell[data-employee="${employeeCode}"][data-time="${timeHHmm}"]`);
   if (workCell) workCell.classList.add('working');
 
-  // _workShiftsOfDay を15分スロットで拡張（隣接シフトとマージ）
+  // _workShiftsOfDay をスロットで拡張（隣接シフトとマージ）
   const [h, m] = timeHHmm.split(':').map(Number);
   const start = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
-  const end = new Date(start); end.setMinutes(end.getMinutes() + 15);
+  const end = new Date(start); end.setMinutes(end.getMinutes() + RES_MIN);
 
   if (!window._workShiftsOfDay) window._workShiftsOfDay = [];
   const shifts = window._workShiftsOfDay.filter(s => s.employeeCode === employeeCode);
@@ -969,6 +973,9 @@ async function loadResult(dateString){
   let data;
   let employees;
   let workTimeMonthly = [];
+  const shiftGrid = $('shiftGrid');
+  const noDataMessage = $('noDataMessage');
+  const tableContainer = $('tableContainer');
   
   try {
     // 表示日付を更新
@@ -995,11 +1002,7 @@ async function loadResult(dateString){
     data = shiftData;
     employees = employeeData;
     workTimeMonthly = workTimeMonthlyResp || [];
-    
-    const shiftGrid = $('shiftGrid');
-    const noDataMessage = $('noDataMessage');
-    const tableContainer = $('tableContainer');
-    
+
     shiftGrid.innerHTML = ''; // Clear previous content
     
     if (employees && employees.length > 0) {
@@ -1029,7 +1032,9 @@ async function loadResult(dateString){
   }
 
   // 時間ヘッダーを作成（解像度単位）
-  const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
+  // 解像度に応じて列数を動的化
+  shiftGrid.style.gridTemplateColumns = `120px repeat(${SLOT_COUNT}, 50px)`;
+  shiftGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
   const deptCodeForGrid = $('departmentCode').value || '';
   const IS_REGISTER_DEPT = (!deptCodeForGrid || deptCodeForGrid === '520');
   const timeHeaderRow = document.createElement('div');
@@ -1438,8 +1443,9 @@ async function loadWorkModel(dateString, shiftData) {
         }
       }
       
-      // 作業モデル用のCSSグリッドを設定（15分間隔と同じ）
-      workModelGrid.style.gridTemplateColumns = '120px repeat(96, 50px)';
+      // 作業モデル用のCSSグリッドを設定（解像度に合わせて動的化）
+      workModelGrid.style.gridTemplateColumns = `120px repeat(${SLOT_COUNT}, 50px)`;
+      workModelGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
       workModelGrid.classList.add('shift-grid-container');
     } else {
       workModelCard.style.display = 'none';
@@ -1467,7 +1473,7 @@ function updateWorkModel() {
       const startAt = new Date();
       startAt.setHours(hour, minute, 0, 0);
       const endAt = new Date(startAt);
-      endAt.setMinutes(endAt.getMinutes() + 15);
+      endAt.setMinutes(endAt.getMinutes() + RES_MIN);
       
       currentShiftData.push({
         employeeCode,
@@ -1503,7 +1509,7 @@ function updateWorkModel() {
   // 現在表示されている作業モデルを基に更新
   for (let registerNo = 1; registerNo <= 10; registerNo++) { // 最大レジ数を仮定
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 15) {
+      for (let m = 0; m < 60; m += RES_MIN) {
         const cell = workModelData[cellIndex];
         if (cell) {
           const employeeKey = `${h}_${m}_${registerNo}`;
@@ -1559,16 +1565,16 @@ function updateStaffingBalance() {
   const balanceCells = staffingGrid.querySelectorAll('.grid-cell');
   
   // 3行目の過不足セルのみ更新（0から始まるインデックスで2行目）
-  const rowSize = 97; // ヘッダー1 + 時間スロット96
+  const rowSize = 1 + SLOT_COUNT; // ヘッダー1 + 時間スロット
   const balanceRowStartIndex = rowSize * 2; // 3行目の開始インデックス
   
-  for (let i = 0; i < 96; i++) { // 96の時間スロット
+  for (let i = 0; i < SLOT_COUNT; i++) { // 時間スロット
     const cellIndex = balanceRowStartIndex + 1 + i; // +1はヘッダー分
     const cell = balanceCells[cellIndex];
     
     if (cell) {
-      const h = Math.floor(i / 4);
-      const m = (i % 4) * 15;
+      const h = Math.floor(i / PER_HOUR);
+      const m = (i % PER_HOUR) * RES_MIN;
       const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
       
       // 元の必要人数を取得（データから）
@@ -1637,7 +1643,7 @@ function updateWorkHours() {
         const hh = String(cur.getHours()).padStart(2,'0');
         const mm = String(cur.getMinutes()).padStart(2,'0');
         timeSlots.set(`${hh}:${mm}`, { working: true });
-        cur.setMinutes(cur.getMinutes() + 15);
+        cur.setMinutes(cur.getMinutes() + RES_MIN);
       }
     });
     
@@ -1672,10 +1678,10 @@ function calculateContinuousWorkPeriods(employeeCode, timeSlots, workHoursCells)
     if (status && status.working) {
       // 勤務時間
       if (!currentPeriod) {
-        currentPeriod = { start: time, end: time, duration: 15 };
+        currentPeriod = { start: time, end: time, duration: RES_MIN };
       } else {
         currentPeriod.end = time;
-        currentPeriod.duration += 15;
+        currentPeriod.duration += RES_MIN;
       }
     } else {
       // 未割り当てまたは休憩

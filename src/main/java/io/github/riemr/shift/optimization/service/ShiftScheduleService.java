@@ -49,6 +49,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
@@ -850,13 +851,14 @@ public class ShiftScheduleService {
      * シフト割当の変更をデータベースに保存する。
      * 
      * <p>フロントエンドからのシフト割当変更リクエストを受け取り、
-     * 15分スロット単位でレジ割当データを更新または挿入する。</p>
+     * 設定された解像度（10/15分）スロット単位でレジ割当データを更新または挿入する。</p>
      * 
      * @param request シフト割当変更リクエスト（日付、変更リストを含む）
      */
     @Transactional
     public void saveShiftAssignmentChanges(ShiftAssignmentSaveRequest request) {
         LocalDate date = request.date();
+        int slotMinutes = appSettingService.getTimeResolutionMinutes();
         
         for (var change : request.changes()) {
             String employeeCode = change.employeeCode();
@@ -867,10 +869,13 @@ public class ShiftScheduleService {
             String[] timeParts = timeStr.split(":");
             int hour = Integer.parseInt(timeParts[0]);
             int minute = Integer.parseInt(timeParts[1]);
+            if (minute % slotMinutes != 0) {
+                throw new IllegalArgumentException("time must be aligned to " + slotMinutes + " minutes: " + timeStr);
+            }
             
-            // 15分スロットの開始・終了時間を計算
+            // スロットの開始・終了時間を計算
             LocalDateTime startDateTime = date.atTime(hour, minute);
-            LocalDateTime endDateTime = startDateTime.plusMinutes(15);
+            LocalDateTime endDateTime = startDateTime.plusMinutes(slotMinutes);
             
             Date startAt = Date.from(startDateTime.atZone(ZoneId.systemDefault()).toInstant());
             Date endAt = Date.from(endDateTime.atZone(ZoneId.systemDefault()).toInstant());
@@ -982,22 +987,23 @@ public class ShiftScheduleService {
 
     // moved to AttendanceService
 
-    // RegisterDemandQuarter の requiredUnits に基づき、ATTENDANCE用に15分枠のプレースホルダを合成
+    // RegisterDemandSlot の requiredUnits に基づき、ATTENDANCE用にスロット枠のプレースホルダを合成
     private int synthesizeAttendanceSlotsFromDemand(ShiftSchedule schedule) {
         var demand = Optional.ofNullable(schedule.getDemandList()).orElse(List.of());
         if (demand.isEmpty()) return 0;
         List<ShiftAssignmentPlanningEntity> list = new ArrayList<>();
+        int slotMinutes = appSettingService.getTimeResolutionMinutes();
         ZoneId zone = ZoneId.systemDefault();
-        for (var q : demand) {
+        for (RegisterDemandSlot q : demand) {
             if (schedule.getStoreCode() != null && !schedule.getStoreCode().equals(q.getStoreCode())) continue;
-            if (q.getRequiredUnits() == null || q.getRequiredUnits() <= 0) continue;
-            // 15分スロットの開始・終了
-            LocalDateTime startLdt = LocalDateTime.of(
-                    q.getDemandDate().toInstant().atZone(zone).toLocalDate(), q.getSlotTime());
-            LocalDateTime endLdt = startLdt.plusMinutes(15);
+            int required = q.getRequiredUnits() == null ? 0 : Math.max(0, q.getRequiredUnits());
+            if (required <= 0) continue;
+            // スロットの開始・終了
+            LocalDateTime startLdt = LocalDateTime.of(q.getDemandDate(), q.getSlotTime());
+            LocalDateTime endLdt = startLdt.plusMinutes(slotMinutes);
             Date startAt = Date.from(startLdt.atZone(zone).toInstant());
             Date endAt = Date.from(endLdt.atZone(zone).toInstant());
-            for (int i = 0; i < q.getRequiredUnits(); i++) {
+            for (int i = 0; i < required; i++) {
                 RegisterAssignment origin = new RegisterAssignment();
                 origin.setStoreCode(q.getStoreCode());
                 origin.setStartAt(startAt);
@@ -2070,24 +2076,14 @@ public class ShiftScheduleService {
         }
         // 需要テーブルも当日分のみに限定（単日実行を正しく評価するため）
         if (monthProblem.getDemandList() != null) {
-            java.time.ZoneId zone = java.time.ZoneId.systemDefault();
             var onlyDay = monthProblem.getDemandList().stream()
-                    .filter(d -> {
-                        java.util.Date dd = d.getDemandDate();
-                        java.time.LocalDate ld = (dd instanceof java.sql.Date sql) ? sql.toLocalDate() : dd.toInstant().atZone(zone).toLocalDate();
-                        return date.equals(ld);
-                    })
+                    .filter(d -> date.equals(d.getDemandDate()))
                     .toList();
             monthProblem.setDemandList(new ArrayList<>(onlyDay));
         }
         if (monthProblem.getWorkDemandList() != null) {
-            java.time.ZoneId zone = java.time.ZoneId.systemDefault();
             var onlyDay = monthProblem.getWorkDemandList().stream()
-                    .filter(d -> {
-                        java.util.Date dd = d.getDemandDate();
-                        java.time.LocalDate ld = (dd instanceof java.sql.Date sql) ? sql.toLocalDate() : dd.toInstant().atZone(zone).toLocalDate();
-                        return date.equals(ld);
-                    })
+                    .filter(d -> date.equals(d.getDemandDate()))
                     .toList();
             monthProblem.setWorkDemandList(new ArrayList<>(onlyDay));
         }

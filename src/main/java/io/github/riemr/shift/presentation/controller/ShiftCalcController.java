@@ -12,8 +12,8 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
-import io.github.riemr.shift.infrastructure.persistence.entity.RegisterDemandQuarter;
-import io.github.riemr.shift.infrastructure.persistence.entity.WorkDemandQuarter;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
@@ -302,49 +302,49 @@ public class ShiftCalcController {
 
     @GetMapping("/api/calc/work-model-quarter/{date}")
     @ResponseBody
-    public List<RegisterDemandQuarter> getWorkModelQuarterByDate(@PathVariable("date") String dateString,
-                                                                 @RequestParam("storeCode") String storeCode) {
+    public List<RegisterDemandSlot> getWorkModelQuarterByDate(@PathVariable("date") String dateString,
+                                                              @RequestParam("storeCode") String storeCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, date);
         int resMin = appSettingService.getTimeResolutionMinutes();
         var quarters = TimeIntervalQuarterUtils.splitAll(intervals, resMin);
-        List<RegisterDemandQuarter> result = new ArrayList<>(quarters.size());
+        List<RegisterDemandSlot> result = new ArrayList<>(quarters.size());
         for (QuarterSlot qs : quarters) {
-            RegisterDemandQuarter ent = new RegisterDemandQuarter();
-            ent.setStoreCode(qs.getStoreCode());
-            ent.setDemandDate(Date.valueOf(qs.getDate()));
-            ent.setSlotTime(qs.getStart());
-            ent.setRequiredUnits(qs.getDemand());
-            result.add(ent);
+            RegisterDemandSlot slot = new RegisterDemandSlot();
+            slot.setStoreCode(qs.getStoreCode());
+            slot.setDemandDate(qs.getDate());
+            slot.setSlotTime(qs.getStart());
+            slot.setRequiredUnits(qs.getDemand());
+            result.add(slot);
         }
         return result;
     }
 
     @GetMapping("/api/calc/work-demand-quarter/{date}")
     @ResponseBody
-    public List<WorkDemandQuarter> getWorkDemandQuarterByDate(@PathVariable("date") String dateString,
-                                                               @RequestParam("storeCode") String storeCode,
-                                                               @RequestParam("departmentCode") String departmentCode) {
+    public List<WorkDemandSlot> getWorkDemandQuarterByDate(@PathVariable("date") String dateString,
+                                                           @RequestParam("storeCode") String storeCode,
+                                                           @RequestParam("departmentCode") String departmentCode) {
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, date);
-        List<WorkDemandQuarter> result = new ArrayList<>();
+        List<WorkDemandSlot> result = new ArrayList<>();
         int resMin = appSettingService.getTimeResolutionMinutes();
         for (DemandIntervalDto di : intervals) {
             var t = di.getFrom();
             while (t.isBefore(di.getTo())) {
-                WorkDemandQuarter wq = new WorkDemandQuarter();
-                wq.setStoreCode(di.getStoreCode());
-                wq.setDepartmentCode(di.getDepartmentCode());
-                wq.setDemandDate(Date.valueOf(di.getTargetDate()));
-                wq.setSlotTime(t);
-                wq.setTaskCode(di.getTaskCode());
-                wq.setRequiredUnits(di.getDemand());
-                result.add(wq);
+                WorkDemandSlot slot = new WorkDemandSlot();
+                slot.setStoreCode(di.getStoreCode());
+                slot.setDepartmentCode(di.getDepartmentCode());
+                slot.setDemandDate(di.getTargetDate());
+                slot.setSlotTime(t);
+                slot.setTaskCode(di.getTaskCode());
+                slot.setRequiredUnits(di.getDemand());
+                result.add(slot);
                 t = t.plusMinutes(resMin);
             }
         }
         // sort by time and task for stable output
-        result.sort(Comparator.comparing(WorkDemandQuarter::getSlotTime)
+        result.sort(Comparator.comparing(WorkDemandSlot::getSlotTime)
                 .thenComparing(w -> Objects.toString(w.getTaskCode(), "")));
         return result;
     }
