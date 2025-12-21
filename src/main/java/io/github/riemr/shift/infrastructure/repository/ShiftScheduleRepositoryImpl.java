@@ -78,7 +78,18 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         int minutesPerSlot = appSettingService.getTimeResolutionMinutes();
 
         List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
+        if (intervalRows.isEmpty()) {
+            log.warn("No register demand intervals found for store={} range={}..{} (register assignments will be empty)",
+                    storeCode, cycleStart, cycleEnd);
+        }
+        validateRegisterDemandIntervals(intervalRows, minutesPerSlot, storeCode, cycleStart, cycleEnd);
         List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows, minutesPerSlot);
+        boolean hasPositiveRegisterDemand = quarterSlots.stream()
+                .anyMatch(q -> q.getDemand() != null && q.getDemand() > 0);
+        if (!hasPositiveRegisterDemand) {
+            log.warn("Register demand intervals exist but all demands are zero for store={} range={}..{}",
+                    storeCode, cycleStart, cycleEnd);
+        }
         List<RegisterDemandSlot> demands = new ArrayList<>(quarterSlots.size());
         for (QuarterSlot qs : quarterSlots) {
             RegisterDemandSlot slot = new RegisterDemandSlot();
@@ -201,6 +212,33 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
         schedule.setEmployeeShiftPatternList(shiftPatterns);
         schedule.setShiftAssignmentList(shiftAssignments);
         return schedule;
+    }
+
+    private void validateRegisterDemandIntervals(List<DemandIntervalDto> intervals,
+                                                 int minutesPerSlot,
+                                                 String storeCode,
+                                                 LocalDate cycleStart,
+                                                 LocalDate cycleEnd) {
+        for (DemandIntervalDto dto : intervals) {
+            if (dto.getFrom() == null || dto.getTo() == null) {
+                throw new IllegalArgumentException("register_demand_interval has null from/to for store=" + storeCode
+                        + " range=" + cycleStart + ".." + cycleEnd);
+            }
+            if (!TimeIntervalQuarterUtils.isAligned(dto.getFrom(), minutesPerSlot)
+                    || !TimeIntervalQuarterUtils.isAligned(dto.getTo(), minutesPerSlot)) {
+                throw new IllegalArgumentException("register_demand_interval time not aligned to "
+                        + minutesPerSlot + " minutes: store=" + storeCode
+                        + ", date=" + dto.getTargetDate()
+                        + ", from=" + dto.getFrom()
+                        + ", to=" + dto.getTo());
+            }
+            if (!dto.getTo().isAfter(dto.getFrom())) {
+                throw new IllegalArgumentException("register_demand_interval has invalid time range: store=" + storeCode
+                        + ", date=" + dto.getTargetDate()
+                        + ", from=" + dto.getFrom()
+                        + ", to=" + dto.getTo());
+            }
+        }
     }
 
     // ============================================================================

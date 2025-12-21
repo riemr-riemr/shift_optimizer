@@ -19,11 +19,11 @@
         </div>
         <div class="col-auto">
           <label class="form-label">開始(HH:mm)</label>
-          <input name="startTime" type="time" class="form-control" step="900" required>
+          <input name="startTime" type="time" class="form-control" th:attr="step=${timeResolutionSeconds}" required>
         </div>
         <div class="col-auto">
           <label class="form-label">終了(HH:mm)</label>
-          <input name="endTime" type="time" class="form-control" step="900" required>
+          <input name="endTime" type="time" class="form-control" th:attr="step=${timeResolutionSeconds}" required>
         </div>
         <div class="col-auto form-check form-switch">
           <input class="form-check-input" type="checkbox" name="active" id="active" checked>

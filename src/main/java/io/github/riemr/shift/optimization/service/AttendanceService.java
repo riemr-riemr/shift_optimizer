@@ -31,7 +31,7 @@ public class AttendanceService {
     private final ShiftAssignmentMapper shiftAssignmentMapper;
 
     public AttendanceSolution loadAttendanceProblem(ProblemKey key) {
-        log.error("=== LOAD ATTENDANCE PROBLEM STARTED ===");
+        log.info("Starting attendance problem load: key={}", key);
         LocalDate cycleStart = key.getCycleStart();
         ShiftSchedule base = repository.fetchShiftSchedule(cycleStart, key.getStoreCode(), key.getDepartmentCode());
         AttendanceSolution sol = new AttendanceSolution();
@@ -59,8 +59,9 @@ public class AttendanceService {
                 .filter(Objects::nonNull)
                 .mapToInt(i -> Math.max(0, i))
                 .sum();
-        log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {:.1f}%",
-                totalDemandUnits, patterns.size(), (double) patterns.size() / Math.max(1, totalDemandUnits) * 100);
+        double coverage = (double) patterns.size() / Math.max(1, totalDemandUnits) * 100.0;
+        log.info("Total demand units: {}, Total pattern slots: {}, Coverage: {}%",
+                totalDemandUnits, patterns.size(), String.format(Locale.ROOT, "%.1f", coverage));
 
         return sol;
     }
@@ -112,13 +113,26 @@ public class AttendanceService {
         var employees = Optional.ofNullable(sol.getEmployeeList()).orElse(List.of());
         var weeklyPrefs = Optional.ofNullable(sol.getEmployeeWeeklyPreferenceList()).orElse(List.of());
         var requests = Optional.ofNullable(sol.getEmployeeRequestList()).orElse(List.of());
-        if (patterns.isEmpty()) return result;
+        if (patterns.isEmpty()) {
+            log.warn("No employee shift patterns; attendance assignments cannot be generated (store={}, dept={}, month={})",
+                    sol.getStoreCode(), sol.getDepartmentCode(), sol.getMonth());
+            return result;
+        }
         ZoneId zone = ZoneId.systemDefault();
 
         Map<LocalDate, List<RegisterDemandSlot>> demandByDate = new HashMap<>();
+        long nullDemandDate = 0;
         for (var d : demand) {
             LocalDate dt = d.getDemandDate();
+            if (dt == null) {
+                nullDemandDate++;
+                continue;
+            }
             demandByDate.computeIfAbsent(dt, k -> new java.util.ArrayList<>()).add(d);
+        }
+        if (nullDemandDate > 0) {
+            log.warn("Demand slots with null demandDate detected: {} (store={}, dept={}, month={})",
+                    nullDemandDate, sol.getStoreCode(), sol.getDepartmentCode(), sol.getMonth());
         }
 
         LinkedHashSet<String> windowKeys = new LinkedHashSet<>();
@@ -134,9 +148,26 @@ public class AttendanceService {
                 windows.add(new LocalTime[]{ps, pe});
             }
         }
+        if (windows.isEmpty()) {
+            long activeCount = patterns.stream().filter(p -> !Boolean.FALSE.equals(p.getActive())).count();
+            log.warn("No active shift pattern windows with priority>=2; attendance assignments cannot be generated (patterns={}, active={}, store={}, dept={}, month={})",
+                    patterns.size(), activeCount, sol.getStoreCode(), sol.getDepartmentCode(), sol.getMonth());
+            return result;
+        }
 
         var cycleStart = sol.getMonth();
         var cycleEnd = cycleStart.plusMonths(1);
+        long demandInCycle = demand.stream()
+                .map(RegisterDemandSlot::getDemandDate)
+                .filter(Objects::nonNull)
+                .filter(d -> !d.isBefore(cycleStart) && d.isBefore(cycleEnd))
+                .count();
+        if (!demand.isEmpty() && demandInCycle == 0) {
+            Optional<LocalDate> min = demand.stream().map(RegisterDemandSlot::getDemandDate).filter(Objects::nonNull).min(LocalDate::compareTo);
+            Optional<LocalDate> max = demand.stream().map(RegisterDemandSlot::getDemandDate).filter(Objects::nonNull).max(LocalDate::compareTo);
+            log.warn("Demand slots exist but none fall within cycle [{},{}): total={}, inCycle=0, minDate={}, maxDate={}, store={}, dept={}",
+                    cycleStart, cycleEnd, demand.size(), min.orElse(null), max.orElse(null), sol.getStoreCode(), sol.getDepartmentCode());
+        }
         // 既存ロスター（当月）の出勤日集合を取得し、7連勤抑止
         Map<String, Set<LocalDate>> attendanceDaysByEmp = new HashMap<>();
         final int maxConsecutiveDays = 6;

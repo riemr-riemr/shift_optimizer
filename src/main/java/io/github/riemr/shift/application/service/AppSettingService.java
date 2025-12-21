@@ -36,12 +36,12 @@ public class AppSettingService {
 
     public int getTimeResolutionMinutes() {
         AppSetting s = mapper.selectByKey(KEY_TIME_RES_MIN);
-        if (s == null) return 15;
+        if (s == null) return 10;
         try {
             int v = Integer.parseInt(s.getSettingValue());
-            return (v == 10 || v == 15) ? v : 15;
+            return (v == 10 || v == 15) ? v : 10;
         } catch (NumberFormatException e) {
-            return 15;
+            return 10;
         }
     }
 

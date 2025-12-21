@@ -3,6 +3,7 @@ package io.github.riemr.shift.presentation.controller;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeShiftPatternMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftPatternMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
@@ -19,6 +20,7 @@ public class EmployeeShiftPatternController {
     private final EmployeeMapper employeeMapper;
     private final ShiftPatternMapper shiftPatternMapper;
     private final EmployeeShiftPatternMapper employeeShiftPatternMapper;
+    private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
@@ -30,9 +32,11 @@ public class EmployeeShiftPatternController {
         for (var l : links) {
             map.computeIfAbsent(l.getEmployeeCode(), k -> new HashMap<>()).put(l.getPatternCode(), l);
         }
+        Map<String, Set<String>> outOfRangeMap = buildOutOfRangeMap(employees, patterns);
         model.addAttribute("employees", employees);
         model.addAttribute("patterns", patterns);
         model.addAttribute("linkMap", map);
+        model.addAttribute("outOfRangeMap", outOfRangeMap);
         return "settings/employee_shift_matrix";
     }
 
@@ -61,5 +65,41 @@ public class EmployeeShiftPatternController {
             } catch (NumberFormatException ignore) { /* skip invalid */ }
         }
         return "redirect:/settings/employee-shift-matrix";
+    }
+
+    private Map<String, Set<String>> buildOutOfRangeMap(
+            List<io.github.riemr.shift.infrastructure.persistence.entity.Employee> employees,
+            List<io.github.riemr.shift.infrastructure.persistence.entity.ShiftPattern> patterns) {
+        Map<String, Set<String>> result = new HashMap<>();
+        for (var emp : employees) {
+            var prefs = employeeWeeklyPreferenceMapper.selectByEmployee(emp.getEmployeeCode());
+            List<java.time.LocalTime[]> ranges = new ArrayList<>();
+            for (var p : prefs) {
+                if ("OFF".equalsIgnoreCase(p.getWorkStyle())) continue;
+                if (p.getBaseStartTime() == null || p.getBaseEndTime() == null) continue;
+                ranges.add(new java.time.LocalTime[]{
+                        p.getBaseStartTime().toLocalTime(),
+                        p.getBaseEndTime().toLocalTime()
+                });
+            }
+            if (ranges.isEmpty()) continue;
+            for (var pat : patterns) {
+                if (pat.getStartTime() == null || pat.getEndTime() == null) continue;
+                var ps = pat.getStartTime().toLocalTime();
+                var pe = pat.getEndTime().toLocalTime();
+                boolean fitsAny = false;
+                for (var r : ranges) {
+                    if (!ps.isBefore(r[0]) && !pe.isAfter(r[1])) {
+                        fitsAny = true;
+                        break;
+                    }
+                }
+                if (!fitsAny) {
+                    result.computeIfAbsent(emp.getEmployeeCode(), k -> new HashSet<>())
+                            .add(pat.getPatternCode());
+                }
+            }
+        }
+        return result;
     }
 }

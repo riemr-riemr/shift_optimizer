@@ -2,6 +2,7 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.infrastructure.mapper.ShiftPatternMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftPattern;
+import io.github.riemr.shift.application.service.AppSettingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -16,11 +17,14 @@ import java.sql.Time;
 public class ShiftPatternController {
 
     private final ShiftPatternMapper mapper;
+    private final AppSettingService appSettingService;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String list(Model model) {
         model.addAttribute("patterns", mapper.selectAll());
+        int minutes = appSettingService.getTimeResolutionMinutes();
+        model.addAttribute("timeResolutionSeconds", minutes * 60);
         return "settings/shift_pattern_list";
     }
 

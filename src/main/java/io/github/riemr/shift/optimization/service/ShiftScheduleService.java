@@ -284,7 +284,7 @@ public class ShiftScheduleService {
         // Solver 起動 (listen)
         currentPhaseMap.put(key, "初期解生成中");
         if ("ATTENDANCE".equals(stage)) {
-            log.error("=== STARTING ATTENDANCE OPTIMIZATION ==="); // デバッグ用
+            log.info("Starting ATTENDANCE optimization: key={}", key);
             SolverJob<AttendanceSolution, ProblemKey> job = attendanceSolverManager.solveAndListen(
                     key,
                     attendanceService::loadAttendanceProblem,

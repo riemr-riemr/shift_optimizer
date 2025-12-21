@@ -33,7 +33,10 @@
             </label>
             <select id="storeCode" class="form-select form-select-lg">
               <option value="">店舗を選択</option>
-              <option value="348">348 - テスト店舗</option>
+              <option th:each="store : ${stores}"
+                      th:value="${store.storeCode}"
+                      th:text="${store.storeCode} + ' - ' + ${store.storeName}">
+              </option>
             </select>
           </div>
           <div class="col-md-3">
@@ -233,7 +236,7 @@
   }
 </style>
 
-<script>
+<script th:inline="javascript">
 const $=id=>document.getElementById(id);
 
 // 時間解像度（分）とスロット数（24h）
