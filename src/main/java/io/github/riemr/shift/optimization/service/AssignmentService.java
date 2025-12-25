@@ -4,6 +4,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPre
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
+import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.WorkKind;
@@ -26,6 +27,7 @@ public class AssignmentService {
 
     public void prepareCandidateEmployeesForAssignment(ShiftSchedule schedule, LocalDate cycleStart) {
         final var employees = schedule.getEmployeeList();
+        if (schedule.getAssignmentList() == null || employees == null) return;
         final var requests = Optional.ofNullable(schedule.getEmployeeRequestList()).orElse(List.of());
         final var weekly = Optional.ofNullable(schedule.getEmployeeWeeklyPreferenceList()).orElse(List.of());
 
@@ -80,7 +82,11 @@ public class AssignmentService {
         // 既存ロスター（ATTENDANCE）の有無に関わらず、候補はon-duty重なり or 週次設定で広く許容する
         // assignedEmployeeCodes に限定してしまうと、ATTENDANCE未実行時に候補が消えるため除去
 
-        for (var a : schedule.getAssignmentList()) {
+        var assignments = new ArrayList<>(schedule.getAssignmentList());
+        int originalCount = assignments.size();
+        List<ShiftAssignmentPlanningEntity> toRemove = new ArrayList<>();
+
+        for (var a : assignments) {
             LocalDate date = a.getShiftDate();
             List<Employee> cands;
 
@@ -162,6 +168,21 @@ public class AssignmentService {
             }
 
             a.setCandidateEmployees(cands);
+            if (cands == null || cands.isEmpty()) {
+                var st = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+                var et = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+                log.warn("ASSIGNMENT no candidates; removing slot date={} time={}~{} kind={} registerNo={} store={} dept={}",
+                        date, st, et, a.getWorkKind(), a.getRegisterNo(), schedule.getStoreCode(), schedule.getDepartmentCode());
+                toRemove.add(a);
+            }
+        }
+
+        if (!toRemove.isEmpty()) {
+            assignments.removeAll(toRemove);
+            schedule.setAssignmentList(assignments);
+            log.warn("ASSIGNMENT removed {} slots with empty candidates (before={}, after={}).", toRemove.size(), originalCount, assignments.size());
+        } else {
+            schedule.setAssignmentList(assignments);
         }
     }
 

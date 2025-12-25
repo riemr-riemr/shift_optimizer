@@ -330,6 +330,10 @@
                         <div class="employee-info">
                             <div class="employee-name" th:text="${emp.employeeName}">従業員名</div>
                             <div class="employee-code" th:text="${emp.employeeCode}">EMP001</div>
+                            <div class="employee-hours text-muted small"
+                                 th:text="${employeeMonthlyHours != null and employeeMonthlyHours.get(emp.employeeCode) != null
+                                            ? #numbers.formatDecimal(employeeMonthlyHours.get(emp.employeeCode), 1, 2) + ' h'
+                                            : '0.00 h'}">0.00 h</div>
                         </div>
                     </td>
                     <!-- 設定に基づくサイクル（dateList） -->

@@ -318,6 +318,7 @@ public class ShiftCalcController {
             slot.setDemandDate(qs.getDate());
             slot.setSlotTime(qs.getStart());
             slot.setRequiredUnits(qs.getDemand());
+            slot.setRegisterNo(qs.getRegisterNo());
             result.add(slot);
         }
         return result;
@@ -506,6 +507,7 @@ public class ShiftCalcController {
             // 従業員一覧を作成（店舗でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();
             Map<String, List<ShiftInfo>> employeeShifts = Map.of();
+            Map<String, Double> employeeMonthlyHours = new HashMap<>();
             
             if (monthlyAssignments != null && !monthlyAssignments.isEmpty()) {
                 final String finalStoreCode = storeCode; // Make effectively final for lambda
@@ -557,6 +559,18 @@ public class ShiftCalcController {
                             assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm"))
                         ), Collectors.toList())
                     ));
+
+                // 従業員別の月次勤務時間（h）を算出
+                Map<String, Long> minutesByEmp = monthlyAssignments.stream()
+                    .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
+                    .collect(Collectors.groupingBy(
+                        ShiftAssignmentMonthlyView::employeeCode,
+                        Collectors.summingLong(assignment -> {
+                            long minutes = ChronoUnit.MINUTES.between(assignment.startAt(), assignment.endAt());
+                            return Math.max(0, minutes);
+                        })
+                    ));
+                minutesByEmp.forEach((code, minutes) -> employeeMonthlyHours.put(code, minutes / 60.0));
             }
 
             // 日別人員配置サマリーを取得
@@ -600,6 +614,7 @@ public class ShiftCalcController {
             model.addAttribute("selectedDepartmentCode", departmentCode);
             model.addAttribute("employees", employees);
             model.addAttribute("employeeShifts", employeeShifts);
+            model.addAttribute("employeeMonthlyHours", employeeMonthlyHours);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
             
             return "shift/monthly-shift";
@@ -617,6 +632,7 @@ public class ShiftCalcController {
             model.addAttribute("selectedDepartmentCode", departmentCode);
             model.addAttribute("employees", List.of());
             model.addAttribute("employeeShifts", Map.of());
+            model.addAttribute("employeeMonthlyHours", Map.of());
             model.addAttribute("dailyStaffingInfo", Map.of());
             model.addAttribute("error", "データ取得中にエラーが発生しました: " + e.getMessage());
             

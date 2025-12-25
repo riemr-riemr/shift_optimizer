@@ -15,5 +15,5 @@ public class RegisterDemandSlot {
     private LocalDate demandDate;
     private LocalTime slotTime;
     private Integer requiredUnits;
+    private Integer registerNo;
 }
-

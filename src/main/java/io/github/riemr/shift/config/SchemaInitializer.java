@@ -102,12 +102,12 @@ public class SchemaInitializer {
                     "from_time TIME NOT NULL, " +
                     "to_time TIME NOT NULL, " +
                     "demand INTEGER NOT NULL, " +
-                    "task_code VARCHAR(32), " +
+                    "register_no INT NOT NULL REFERENCES register(store_code, register_no), " +
                     "created_at TIMESTAMPTZ DEFAULT now(), " +
                     "updated_at TIMESTAMPTZ DEFAULT now(), " +
                     "CONSTRAINT chk_register_from_lt_to CHECK (to_time > from_time)" +
                     ")");
-            jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_register_demand_interval ON register_demand_interval (store_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
+            jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_register_demand_interval ON register_demand_interval (store_code, target_date, from_time, to_time, register_no)");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_register_demand_interval_date ON register_demand_interval (store_code, target_date)");
 
             jdbc.execute("CREATE TABLE IF NOT EXISTS work_demand_interval (" +

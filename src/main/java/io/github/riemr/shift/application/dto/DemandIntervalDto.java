@@ -20,6 +20,6 @@ public class DemandIntervalDto {
     private LocalTime to;
     private Integer demand;
     private String taskCode; // optional
+    private Integer registerNo; // optional, for register demand
     private String groupId; // optional, to keep continuity grouping if needed
 }
-

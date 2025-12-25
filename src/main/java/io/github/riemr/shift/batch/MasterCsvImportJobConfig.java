@@ -581,12 +581,61 @@ public class MasterCsvImportJobConfig {
                 .<DemandIntervalDto, DemandIntervalDto>chunk(1000, txManager)
                 .reader(registerDemandIntervalReader)
                 .writer(items -> {
+                    java.util.Map<String, java.util.List<DemandIntervalDto>> existingByStoreDate = new java.util.HashMap<>();
+                    java.util.Map<String, java.util.List<Register>> registersByStore = new java.util.HashMap<>();
                     for (var r : items) {
-                        SqlSession session = sqlSessionFactory.openSession();
-                        try {
-                            session.insert("io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper.upsert", r);
-                            session.commit();
-                        } finally { session.close(); }
+                        if (r.getRegisterNo() == null) {
+                            var registers = registersByStore.computeIfAbsent(r.getStoreCode(), sc ->
+                                    registerMapper.selectByStoreCode(sc).stream()
+                                            .sorted(java.util.Comparator.comparing(Register::getOpenPriority,
+                                                    java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                                                    .thenComparing(Register::getRegisterNo))
+                                            .toList());
+                            String key = r.getStoreCode() + "|" + r.getTargetDate();
+                            var existing = existingByStoreDate.computeIfAbsent(key,
+                                    k -> new java.util.ArrayList<>(
+                                            registerDemandIntervalMapper.selectByStoreAndDate(r.getStoreCode(), r.getTargetDate())));
+                            java.util.Set<Integer> used = new java.util.HashSet<>();
+                            for (var e : existing) {
+                                if (e.getRegisterNo() == null) continue;
+                                if (isOverlap(r.getFrom(), r.getTo(), e.getFrom(), e.getTo())) {
+                                    used.add(e.getRegisterNo());
+                                }
+                            }
+                            int required = r.getDemand() == null ? 0 : Math.max(0, r.getDemand());
+                            int assigned = 0;
+                            for (var reg : registers) {
+                                if (assigned >= required) break;
+                                if (used.contains(reg.getRegisterNo())) continue;
+                                DemandIntervalDto dto = DemandIntervalDto.builder()
+                                        .storeCode(r.getStoreCode())
+                                        .targetDate(r.getTargetDate())
+                                        .from(r.getFrom())
+                                        .to(r.getTo())
+                                        .demand(1)
+                                        .registerNo(reg.getRegisterNo())
+                                        .build();
+                                SqlSession session = sqlSessionFactory.openSession();
+                                try {
+                                    session.insert("io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper.upsert", dto);
+                                    session.commit();
+                                } finally { session.close(); }
+                                existing.add(dto);
+                                used.add(reg.getRegisterNo());
+                                assigned++;
+                            }
+                        } else {
+                            SqlSession session = sqlSessionFactory.openSession();
+                            try {
+                                session.insert("io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper.upsert", r);
+                                session.commit();
+                            } finally { session.close(); }
+                            String key = r.getStoreCode() + "|" + r.getTargetDate();
+                            var existing = existingByStoreDate.computeIfAbsent(key,
+                                    k -> new java.util.ArrayList<>(
+                                            registerDemandIntervalMapper.selectByStoreAndDate(r.getStoreCode(), r.getTargetDate())));
+                            existing.add(r);
+                        }
                     }
                 })
                 .build();
@@ -597,7 +646,7 @@ public class MasterCsvImportJobConfig {
             @Value("${csv.dir:/csv}") Path csvDir) {
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
         tokenizer.setDelimiter(",");
-        tokenizer.setNames("storeCode","targetDate","fromTime","toTime","demand","taskCode");
+        tokenizer.setNames("storeCode","targetDate","fromTime","toTime","demand","registerNo");
         tokenizer.setStrict(false);
 
         FieldSetMapper<DemandIntervalDto> mapper = fs -> {
@@ -607,7 +656,10 @@ public class MasterCsvImportJobConfig {
             d.setFrom(LocalTime.parse(fs.readString("fromTime")));
             d.setTo(LocalTime.parse(fs.readString("toTime")));
             d.setDemand(fs.readInt("demand"));
-            try { d.setTaskCode(fs.readString("taskCode")); } catch (Exception ignore) {}
+            try {
+                String rn = fs.readString("registerNo");
+                if (rn != null && !rn.isBlank()) d.setRegisterNo(Integer.parseInt(rn));
+            } catch (Exception ignore) {}
             return d;
         };
 
@@ -650,5 +702,10 @@ public class MasterCsvImportJobConfig {
         w.setStatementId(statementId);
         w.setAssertUpdates(false); // バッチ結果チェックを無効化
         return w;
+    }
+
+    private boolean isOverlap(LocalTime aFrom, LocalTime aTo, LocalTime bFrom, LocalTime bTo) {
+        if (aFrom == null || aTo == null || bFrom == null || bTo == null) return false;
+        return aFrom.isBefore(bTo) && bFrom.isBefore(aTo);
     }
 }

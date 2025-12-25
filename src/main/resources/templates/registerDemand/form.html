@@ -138,7 +138,9 @@
                     <tr th:each="reg,ri: ${registers}">
                       <th class="sticky-start bg-white" style="position: sticky; left: 0; z-index:1;" th:text="${reg.registerNo}"></th>
                       <td th:each="i: ${#numbers.sequence(0,slotCount-1)}" class="text-center">
-                        <input type="checkbox" class="form-check-input slotCheck" th:data-index="${i}">
+                        <input type="checkbox" class="form-check-input slotCheck"
+                               th:data-index="${i}"
+                               th:data-register="${reg.registerNo}">
                       </td>
                     </tr>
                   </tbody>
@@ -234,14 +236,16 @@
     const SLOT_COUNT = /*[[${slotCount}]]*/ 96;
     function computeQuarterDemands() {
       const checks = document.querySelectorAll('.slotCheck');
-      const perColumn = {};
+      const cells = [];
       checks.forEach(chk => {
+        if (!chk.checked) return;
         const idx = parseInt(chk.getAttribute('data-index'));
-        if (!perColumn[idx]) perColumn[idx] = 0;
-        if (chk.checked) perColumn[idx]++;
+        const reg = chk.getAttribute('data-register');
+        if (Number.isFinite(idx) && reg) {
+          cells.push(`${reg}:${idx}`);
+        }
       });
-      const arr = Array.from({length:SLOT_COUNT}, (_,i)=> perColumn[i] || 0);
-      return arr;
+      return cells;
     }
 
     function beforeSubmit() {
@@ -272,14 +276,15 @@
 
     // 初期状態の適用: quarterDemandsに基づき上からN台オン
     document.addEventListener('DOMContentLoaded', function() {
-      const quarterDemands = /*[[${quarterDemands}]]*/ [];
-      for (let i=0; i<Math.min(SLOT_COUNT, quarterDemands.length); i++) {
-        const need = parseInt(quarterDemands[i]||0);
-        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
-        for (let r=0; r<Math.min(need, colChecks.length); r++) {
-          colChecks[r].checked = true;
-        }
-      }
+      const registerCells = /*[[${registerDemandCells}]]*/ [];
+      registerCells.forEach(cell => {
+        const parts = String(cell).split(':');
+        if (parts.length !== 2) return;
+        const reg = parts[0];
+        const idx = parts[1];
+        const chk = document.querySelector('.slotCheck[data-register="'+reg+'"][data-index="'+idx+'"]');
+        if (chk) chk.checked = true;
+      });
     });
   </script>
 </div>

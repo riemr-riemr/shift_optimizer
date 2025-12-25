@@ -40,6 +40,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             // Hard constraints (ASSIGNMENT relevant only)
             forbidDepartmentLowSkillForAssignment(factory),
             employeeNotDoubleBooked(factory),
+            forbidMultipleRegistersSameSlot(factory),
             lunchBreakForLongShifts(factory),
             forbidUnassignedSlotForAssignment(factory), // ハード制約として追加
             forbidAssignmentOutsideShiftTime(factory), // 出勤時間外割り当て禁止
@@ -147,11 +148,35 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      */
     private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
         return f.forEachUniquePair(ShiftAssignmentPlanningEntity.class,
-                Joiners.equal(ShiftAssignmentPlanningEntity::getAssignedEmployee),
-                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
-                Joiners.equal(ShiftAssignmentPlanningEntity::getStartAt))
+                Joiners.equal(sa -> sa.getAssignedEmployee() != null ? sa.getAssignedEmployee().getEmployeeCode() : null),
+                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate))
+                .filter((a, b) -> a.getAssignedEmployee() != null && b.getAssignedEmployee() != null && overlaps(a, b))
                 .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Employee double booked");
+                .asConstraint("Employee overlapping assignments");
+    }
+
+    /**
+     * 同一従業員・同一スロットで複数のレジ割当が発生することを禁止する（ハード制約）。
+     */
+    private Constraint forbidMultipleRegistersSameSlot(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.REGISTER_OP
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
+                .groupBy(sa -> sa.getAssignedEmployee().getEmployeeCode(),
+                        ShiftAssignmentPlanningEntity::getShiftDate,
+                        ShiftAssignmentPlanningEntity::getStartAt,
+                        ConstraintCollectors.count())
+                .filter((emp, date, startAt, cnt) -> cnt != null && cnt > 1)
+                .penalize(HardSoftScore.ONE_HARD, (emp, date, startAt, cnt) -> cnt - 1)
+                .asConstraint("Forbid multiple registers in same slot");
+    }
+
+    private static boolean overlaps(ShiftAssignmentPlanningEntity a, ShiftAssignmentPlanningEntity b) {
+        if (a.getStartAt() == null || a.getEndAt() == null || b.getStartAt() == null || b.getEndAt() == null) {
+            return false;
+        }
+        return a.getStartAt().before(b.getEndAt()) && b.getStartAt().before(a.getEndAt());
     }
 
     /**
@@ -193,6 +218,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
                         Joiners.equal(RegisterDemandSlot::getSlotTime,
                                 sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
@@ -222,6 +248,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
                         Joiners.equal(RegisterDemandSlot::getSlotTime,
                                 sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))

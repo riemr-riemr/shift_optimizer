@@ -213,10 +213,10 @@ CREATE TABLE IF NOT EXISTS register_demand_interval (
     from_time     TIME        NOT NULL,
     to_time       TIME        NOT NULL,
     demand        INTEGER     NOT NULL,
-    task_code     VARCHAR(32)
+    register_no   INT         NOT NULL REFERENCES register(store_code, register_no)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_register_demand_interval
-  ON register_demand_interval (store_code, target_date, from_time, to_time, COALESCE(task_code, ''));
+  ON register_demand_interval (store_code, target_date, from_time, to_time, register_no);
 CREATE INDEX IF NOT EXISTS idx_register_demand_interval_date
   ON register_demand_interval (store_code, target_date);
 

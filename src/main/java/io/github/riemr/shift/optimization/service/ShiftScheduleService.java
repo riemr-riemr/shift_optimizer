@@ -1205,7 +1205,6 @@ public class ShiftScheduleService {
                             .toList();
                 } else {
                     // フォールバック: 既存ロスターが空（未生成）の場合は週次設定ベースで可用判定
-                    // これにより、事前にATTENDANCEを走らせなくてもASSIGNMENT単体で割当可能になる
                     cands = employees.stream()
                             .filter(e -> {
                                 var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
@@ -1239,7 +1238,11 @@ public class ShiftScheduleService {
                                 return true;
                             })
                             .toList();
-                    if (log.isInfoEnabled()) {
+                    if (cands.isEmpty()) {
+                        // 候補空は solver が落ちるため、最小限の候補を許可（制約で絞る）
+                        cands = employees;
+                        log.warn("ASSIGNMENT fallback candidates empty for {}. Using all employees to avoid empty range.", date);
+                    } else if (log.isInfoEnabled()) {
                         log.info("ASSIGNMENT fallback: No on-duty roster for {}. Weekly-base candidates={}", date, cands.size());
                     }
                 }

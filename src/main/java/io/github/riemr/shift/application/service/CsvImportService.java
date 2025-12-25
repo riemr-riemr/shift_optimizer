@@ -228,23 +228,71 @@ public class CsvImportService {
         try (BufferedReader br = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
             String line = br.readLine();
             int cnt = 0;
+            java.util.Map<String, java.util.List<DemandIntervalDto>> existingByStoreDate = new java.util.HashMap<>();
             while ((line = br.readLine()) != null) {
                 String[] a = line.split(",");
-                if (a.length < 5) continue;
+                if (a.length < 6) continue;
                 DemandIntervalDto dto = DemandIntervalDto.builder()
                         .storeCode(a[0])
                         .targetDate(LocalDate.parse(a[1]))
                         .from(LocalTime.parse(a[2]))
                         .to(LocalTime.parse(a[3]))
                         .demand(Integer.parseInt(a[4]))
-                        .taskCode(a.length > 5 && !a[5].isBlank() ? a[5] : null)
+                        .registerNo(a.length > 5 && !a[5].isBlank() ? Integer.parseInt(a[5]) : null)
                         .groupId(a.length > 6 && !a[6].isBlank() ? a[6] : null)
                         .build();
-                registerDemandIntervalMapper.upsert(dto);
+                if (dto.getRegisterNo() == null) {
+                    var registers = registerMapper.selectByStoreCode(dto.getStoreCode()).stream()
+                            .sorted(java.util.Comparator.comparing(Register::getOpenPriority,
+                                    java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                                    .thenComparing(Register::getRegisterNo))
+                            .toList();
+                    String key = dto.getStoreCode() + "|" + dto.getTargetDate();
+                    var existing = existingByStoreDate.computeIfAbsent(key,
+                            k -> new java.util.ArrayList<>(
+                                    registerDemandIntervalMapper.selectByStoreAndDate(dto.getStoreCode(), dto.getTargetDate())));
+                    java.util.Set<Integer> used = new java.util.HashSet<>();
+                    for (var e : existing) {
+                        if (e.getRegisterNo() == null) continue;
+                        if (isOverlap(dto.getFrom(), dto.getTo(), e.getFrom(), e.getTo())) {
+                            used.add(e.getRegisterNo());
+                        }
+                    }
+                    int required = dto.getDemand() == null ? 0 : Math.max(0, dto.getDemand());
+                    int assigned = 0;
+                    for (var reg : registers) {
+                        if (assigned >= required) break;
+                        if (used.contains(reg.getRegisterNo())) continue;
+                        DemandIntervalDto row = DemandIntervalDto.builder()
+                                .storeCode(dto.getStoreCode())
+                                .targetDate(dto.getTargetDate())
+                                .from(dto.getFrom())
+                                .to(dto.getTo())
+                                .demand(1)
+                                .registerNo(reg.getRegisterNo())
+                                .build();
+                        registerDemandIntervalMapper.upsert(row);
+                        existing.add(row);
+                        used.add(reg.getRegisterNo());
+                        assigned++;
+                    }
+                } else {
+                    registerDemandIntervalMapper.upsert(dto);
+                    String key = dto.getStoreCode() + "|" + dto.getTargetDate();
+                    var existing = existingByStoreDate.computeIfAbsent(key,
+                            k -> new java.util.ArrayList<>(
+                                    registerDemandIntervalMapper.selectByStoreAndDate(dto.getStoreCode(), dto.getTargetDate())));
+                    existing.add(dto);
+                }
                 cnt++;
             }
             log.info("Imported register_demand_interval: {}", cnt);
         }
+    }
+
+    private boolean isOverlap(LocalTime aFrom, LocalTime aTo, LocalTime bFrom, LocalTime bTo) {
+        if (aFrom == null || aTo == null || bFrom == null || bTo == null) return false;
+        return aFrom.isBefore(bTo) && bFrom.isBefore(aTo);
     }
 
     // ===== UI: per-file upsert imports =====

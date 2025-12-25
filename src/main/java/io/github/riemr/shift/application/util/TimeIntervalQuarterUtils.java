@@ -85,6 +85,7 @@ public final class TimeIntervalQuarterUtils {
                     .start(cur)
                     .demand(interval.getDemand())
                     .taskCode(interval.getTaskCode())
+                    .registerNo(interval.getRegisterNo())
                     .build());
             cur = cur.plusMinutes(minutesPerSlot);
         }
@@ -98,7 +99,7 @@ public final class TimeIntervalQuarterUtils {
         Map<Key, Integer> agg = new HashMap<>();
         for (DemandIntervalDto dto : intervals) {
             for (QuarterSlot qs : split(dto, minutesPerSlot)) {
-                Key k = new Key(qs.getStoreCode(), qs.getDepartmentCode(), qs.getDate(), qs.getStart(), qs.getTaskCode());
+                Key k = new Key(qs.getStoreCode(), qs.getDepartmentCode(), qs.getDate(), qs.getStart(), qs.getTaskCode(), qs.getRegisterNo());
                 agg.merge(k, Optional.ofNullable(qs.getDemand()).orElse(0), Integer::sum);
             }
         }
@@ -109,6 +110,7 @@ public final class TimeIntervalQuarterUtils {
                         .date(e.getKey().date)
                         .start(e.getKey().start)
                         .taskCode(e.getKey().taskCode)
+                        .registerNo(e.getKey().registerNo)
                         .demand(e.getValue())
                         .build())
                 .sorted(Comparator.comparing(QuarterSlot::getStoreCode, Comparator.nullsFirst(String::compareTo))
@@ -126,7 +128,7 @@ public final class TimeIntervalQuarterUtils {
         // Group by non-time keys and demand value
         Map<MergeKey, List<QuarterSlot>> grouped = quarters.stream()
                 .collect(Collectors.groupingBy(q -> new MergeKey(
-                        q.getStoreCode(), q.getDepartmentCode(), q.getDate(), q.getTaskCode(),
+                        q.getStoreCode(), q.getDepartmentCode(), q.getDate(), q.getTaskCode(), q.getRegisterNo(),
                         Optional.ofNullable(q.getDemand()).orElse(0)
                 )));
 
@@ -157,7 +159,9 @@ public final class TimeIntervalQuarterUtils {
                 .toList();
     }
 
-    private record Key(String storeCode, String departmentCode, LocalDate date, LocalTime start, String taskCode) {}
+    private record Key(String storeCode, String departmentCode, LocalDate date, LocalTime start, String taskCode,
+                       Integer registerNo) {}
 
-    private record MergeKey(String storeCode, String departmentCode, LocalDate date, String taskCode, int demand) {}
+    private record MergeKey(String storeCode, String departmentCode, LocalDate date, String taskCode,
+                            Integer registerNo, int demand) {}
 }

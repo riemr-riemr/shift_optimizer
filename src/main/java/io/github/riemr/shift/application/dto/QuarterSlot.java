@@ -19,5 +19,5 @@ public class QuarterSlot {
     private LocalTime start; // aligned to 15-min
     private Integer demand;
     private String taskCode; // optional
+    private Integer registerNo; // optional
 }
-

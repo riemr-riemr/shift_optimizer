@@ -44,7 +44,7 @@ public class AttendanceService {
         sol.setEmployeeWeeklyPreferenceList(base.getEmployeeWeeklyPreferenceList());
         sol.setEmployeeRequestList(base.getEmployeeRequestList());
         sol.setEmployeeMonthlySettingList(base.getEmployeeMonthlySettingList());
-        sol.setDemandList(base.getDemandList());
+        sol.setDemandList(aggregateRegisterDemand(base.getDemandList()));
         var patterns = buildPatternAssignmentsFromDemand(sol);
         sol.setPatternAssignments(patterns);
 
@@ -64,6 +64,30 @@ public class AttendanceService {
                 totalDemandUnits, patterns.size(), String.format(Locale.ROOT, "%.1f", coverage));
 
         return sol;
+    }
+
+    private List<RegisterDemandSlot> aggregateRegisterDemand(List<RegisterDemandSlot> demandList) {
+        if (demandList == null || demandList.isEmpty()) return List.of();
+        Map<String, RegisterDemandSlot> agg = new HashMap<>();
+        for (var d : demandList) {
+            if (d.getDemandDate() == null || d.getSlotTime() == null) continue;
+            String key = d.getStoreCode() + "|" + d.getDemandDate() + "|" + d.getSlotTime();
+            int units = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            agg.compute(key, (k, existing) -> {
+                if (existing == null) {
+                    RegisterDemandSlot slot = new RegisterDemandSlot();
+                    slot.setStoreCode(d.getStoreCode());
+                    slot.setDemandDate(d.getDemandDate());
+                    slot.setSlotTime(d.getSlotTime());
+                    slot.setRequiredUnits(units);
+                    return slot;
+                }
+                int cur = existing.getRequiredUnits() == null ? 0 : existing.getRequiredUnits();
+                existing.setRequiredUnits(cur + units);
+                return existing;
+            });
+        }
+        return new ArrayList<>(agg.values());
     }
 
     @Transactional
@@ -120,7 +144,7 @@ public class AttendanceService {
         }
         ZoneId zone = ZoneId.systemDefault();
 
-        Map<LocalDate, List<RegisterDemandSlot>> demandByDate = new HashMap<>();
+        Map<LocalDate, Map<LocalTime, Integer>> demandByDate = new HashMap<>();
         long nullDemandDate = 0;
         for (var d : demand) {
             LocalDate dt = d.getDemandDate();
@@ -128,7 +152,11 @@ public class AttendanceService {
                 nullDemandDate++;
                 continue;
             }
-            demandByDate.computeIfAbsent(dt, k -> new java.util.ArrayList<>()).add(d);
+            var byTime = demandByDate.computeIfAbsent(dt, k -> new java.util.HashMap<>());
+            var time = d.getSlotTime();
+            if (time == null) continue;
+            int units = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            byTime.merge(time, units, Integer::sum);
         }
         if (nullDemandDate > 0) {
             log.warn("Demand slots with null demandDate detected: {} (store={}, dept={}, month={})",
@@ -182,15 +210,15 @@ public class AttendanceService {
         }
 
         for (var date = cycleStart; date.isBefore(cycleEnd); date = date.plusDays(1)) {
-            var quarters = demandByDate.getOrDefault(date, List.of());
+            var quarters = demandByDate.getOrDefault(date, Map.of());
             for (var win : windows) {
                 var ps = win[0];
                 var pe = win[1];
                 int maxUnits = 0;
-                for (var q : quarters) {
-                    var qt = q.getSlotTime();
+                for (var entry : quarters.entrySet()) {
+                    var qt = entry.getKey();
                     if ((qt.equals(ps) || qt.isAfter(ps)) && qt.isBefore(pe)) {
-                        maxUnits = Math.max(maxUnits, Optional.ofNullable(q.getRequiredUnits()).orElse(0));
+                        maxUnits = Math.max(maxUnits, entry.getValue());
                     }
                 }
                 for (int i = 0; i < maxUnits; i++) {

@@ -97,6 +97,7 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
             slot.setDemandDate(qs.getDate());
             slot.setSlotTime(qs.getStart());
             slot.setRequiredUnits(qs.getDemand());
+            slot.setRegisterNo(qs.getRegisterNo());
             demands.add(slot);
         }
 
@@ -224,6 +225,10 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
                 throw new IllegalArgumentException("register_demand_interval has null from/to for store=" + storeCode
                         + " range=" + cycleStart + ".." + cycleEnd);
             }
+            if (dto.getRegisterNo() == null) {
+                throw new IllegalArgumentException("register_demand_interval has null register_no for store=" + storeCode
+                        + " range=" + cycleStart + ".." + cycleEnd);
+            }
             if (!TimeIntervalQuarterUtils.isAligned(dto.getFrom(), minutesPerSlot)
                     || !TimeIntervalQuarterUtils.isAligned(dto.getTo(), minutesPerSlot)) {
                 throw new IllegalArgumentException("register_demand_interval time not aligned to "
@@ -286,8 +291,11 @@ public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
 
             int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
             for (int i = 0; i < required; i++) {
-                // レジを必要台数分だけ順番に取得（足りない場合は null）
-                Integer registerNo = i < candidates.size() ? candidates.get(i).getRegisterNo() : null;
+                Integer registerNo = d.getRegisterNo();
+                if (registerNo == null) {
+                    // レジを必要台数分だけ順番に取得（足りない場合は null）
+                    registerNo = i < candidates.size() ? candidates.get(i).getRegisterNo() : null;
+                }
 
                 // ---- RegisterAssignment 組み立て ----
                 RegisterAssignment sa = new RegisterAssignment();

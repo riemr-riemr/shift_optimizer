@@ -8,43 +8,43 @@
     <result column="from_time" property="from"/>
     <result column="to_time" property="to"/>
     <result column="demand" property="demand"/>
-    <result column="task_code" property="taskCode"/>
+    <result column="register_no" property="registerNo"/>
   </resultMap>
 
   <select id="selectByStoreAndDate" resultMap="DemandIntervalMap">
-    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    SELECT store_code, target_date, from_time, to_time, demand, register_no
     FROM register_demand_interval
     WHERE store_code = #{storeCode}
       AND target_date = #{targetDate}
-    ORDER BY from_time
+    ORDER BY from_time, register_no
   </select>
 
   <select id="selectByStoreAndMonth" resultMap="DemandIntervalMap">
-    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    SELECT store_code, target_date, from_time, to_time, demand, register_no
     FROM register_demand_interval
     WHERE to_char(target_date, 'YYYY-MM') = #{targetMonth}
     <if test="storeCode != null and storeCode != ''">
       AND store_code = #{storeCode}
     </if>
-    ORDER BY target_date, from_time
+    ORDER BY target_date, from_time, register_no
   </select>
 
   <!-- 半開区間 [fromDate, toDate) での範囲取得 -->
   <select id="selectByDateRange" resultMap="DemandIntervalMap">
-    SELECT store_code, target_date, from_time, to_time, demand, task_code
+    SELECT store_code, target_date, from_time, to_time, demand, register_no
     FROM register_demand_interval
     WHERE target_date &gt;= #{fromDate}
       AND target_date &lt; #{toDate}
     <if test="storeCode != null and storeCode != ''">
       AND store_code = #{storeCode}
     </if>
-    ORDER BY target_date, from_time
+    ORDER BY target_date, from_time, register_no
   </select>
 
   <insert id="upsert" parameterType="io.github.riemr.shift.application.dto.DemandIntervalDto">
-    INSERT INTO register_demand_interval (store_code, target_date, from_time, to_time, demand, task_code)
-    VALUES (#{storeCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{taskCode})
-    ON CONFLICT (store_code, target_date, from_time, to_time, COALESCE(task_code, '')) DO UPDATE SET
+    INSERT INTO register_demand_interval (store_code, target_date, from_time, to_time, demand, register_no)
+    VALUES (#{storeCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{registerNo})
+    ON CONFLICT (store_code, target_date, from_time, to_time, register_no) DO UPDATE SET
       demand = EXCLUDED.demand
   </insert>
 

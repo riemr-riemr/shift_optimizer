@@ -1366,24 +1366,35 @@ async function loadWorkModel(dateString, shiftData) {
       }
       workModelGrid.appendChild(timeHeaderRow);
 
-      // 最大レジ台数を計算
-      const maxDemand = Math.max(...workModelData.map(d => d.requiredUnits || 0), 1);
+      // 表示対象のレジ番号を抽出
+      let registerNos = Array.from(new Set(
+        workModelData
+          .map(d => d.registerNo)
+          .filter(n => n !== null && n !== undefined)
+      )).sort((a, b) => a - b);
+      if (registerNos.length === 0) {
+        const maxDemand = Math.max(...workModelData.map(d => d.requiredUnits || 0), 1);
+        registerNos = Array.from({length: maxDemand}, (_, i) => i + 1);
+      }
       
       // 各時間帯での需要データを事前に処理
-      const demandByTime = new Map();
+      const demandByTimeRegister = new Map();
       for (let h = 0; h < 24; h++) {
         for (let m = 0; m < 60; m += RES_MIN) {
           const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-          const quarterData = workModelData.find(d => {
-            if (!d.slotTime) return false;
-            const timeStr = typeof d.slotTime === 'string' ? d.slotTime : 
-                           (d.slotTime.hour !== undefined ? 
-                            `${String(d.slotTime.hour).padStart(2, '0')}:${String(d.slotTime.minute).padStart(2, '0')}:00` : 
-                            d.slotTime.toString());
-            return timeStr === targetTime;
+          registerNos.forEach(regNo => {
+            const quarterData = workModelData.find(d => {
+              if (!d.slotTime) return false;
+              if (d.registerNo !== regNo) return false;
+              const timeStr = typeof d.slotTime === 'string' ? d.slotTime : 
+                             (d.slotTime.hour !== undefined ? 
+                              `${String(d.slotTime.hour).padStart(2, '0')}:${String(d.slotTime.minute).padStart(2, '0')}:00` : 
+                              d.slotTime.toString());
+              return timeStr === targetTime;
+            });
+            const demandCount = quarterData ? (quarterData.requiredUnits || 0) : 0;
+            demandByTimeRegister.set(`${regNo}_${h}_${m}`, demandCount);
           });
-          const demandCount = quarterData ? (quarterData.requiredUnits || 0) : 0;
-          demandByTime.set(`${h}_${m}`, demandCount);
         }
       }
       
@@ -1408,8 +1419,8 @@ async function loadWorkModel(dateString, shiftData) {
         });
       }
 
-      // レジ番号の行を作成（レジ1からmaxDemandまで）
-      for (let registerNo = 1; registerNo <= maxDemand; registerNo++) {
+      // レジ番号の行を作成（需要で指定されたレジ）
+      for (const registerNo of registerNos) {
         const registerRowHeader = document.createElement('div');
         registerRowHeader.className = 'grid-row-header';
         registerRowHeader.textContent = `レジ ${registerNo}`;
@@ -1417,10 +1428,10 @@ async function loadWorkModel(dateString, shiftData) {
 
         for (let h = 0; h < 24; h++) {
           for (let m = 0; m < 60; m += RES_MIN) {
-            const demandCount = demandByTime.get(`${h}_${m}`) || 0;
+            const demandCount = demandByTimeRegister.get(`${registerNo}_${h}_${m}`) || 0;
             
             // この時間帯にこのレジ番号が必要な場合のみセルを作成
-            if (registerNo <= demandCount) {
+            if (demandCount > 0) {
               const cell = document.createElement('div');
               cell.className = 'grid-cell work-model-cell register-needed';
               

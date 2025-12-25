@@ -64,6 +64,7 @@ class RegisterDemandHourController {
         int res = appSettingService.getTimeResolutionMinutes();
         int slotCount = 1440 / res;
         int[] quarterDemands = effectiveStore == null ? new int[slotCount] : service.getQuarterDemands(effectiveStore, target, res);
+        var registerDemandCells = effectiveStore == null ? List.<String>of() : service.getRegisterDemandCells(effectiveStore, target, res);
         var registers = (effectiveStore == null) ? List.<Register>of()
                 : registerMapper.selectByStoreCode(effectiveStore);
         registers.sort(Comparator.comparing(Register::getRegisterNo));
@@ -74,6 +75,7 @@ class RegisterDemandHourController {
         model.addAttribute("selectedStoreCode", effectiveStore);
         model.addAttribute("registers", registers);
         model.addAttribute("quarterDemands", Arrays.stream(quarterDemands).boxed().toList());
+        model.addAttribute("registerDemandCells", registerDemandCells);
         model.addAttribute("timeResolutionMinutes", res);
         model.addAttribute("slotCount", slotCount);
         return "registerDemand/form";
@@ -96,12 +98,14 @@ class RegisterDemandHourController {
                     RequestContextHolder.currentRequestAttributes())
                     .getRequest().getParameter("demandsCsv");
         } catch (Exception ignore) {}
-        if (demandsCsv != null && !demandsCsv.isBlank()) {
-            List<Integer> slots = Arrays.stream(demandsCsv.split(","))
-                    .filter(s -> !s.isBlank())
-                    .map(Integer::parseInt)
-                    .toList();
-            service.saveQuarterDemands(form.getStoreCode(), form.getTargetDate(), slots);
+        if (demandsCsv != null) {
+            List<String> slots = demandsCsv.isBlank()
+                    ? List.of()
+                    : Arrays.stream(demandsCsv.split(","))
+                        .filter(s -> !s.isBlank())
+                        .toList();
+            int minutes = appSettingService.getTimeResolutionMinutes();
+            service.saveQuarterDemands(form.getStoreCode(), form.getTargetDate(), slots, minutes);
         } else {
             // legacy hourly form
             service.saveHourlyDemands(form.getStoreCode(), form.getTargetDate(), form.getHours());

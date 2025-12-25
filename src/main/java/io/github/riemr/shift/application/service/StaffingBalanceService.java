@@ -71,7 +71,10 @@ public class StaffingBalanceService {
             var quarters = TimeIntervalQuarterUtils.splitAll(intervals, resMin);
             for (var qs : quarters) {
                 var b = balanceMap.get(qs.getStart());
-                if (b != null) b.setRequiredStaff(qs.getDemand());
+                if (b != null) {
+                    int cur = b.getRequiredStaff() == null ? 0 : b.getRequiredStaff();
+                    b.setRequiredStaff(cur + (qs.getDemand() == null ? 0 : qs.getDemand()));
+                }
             }
         }
 

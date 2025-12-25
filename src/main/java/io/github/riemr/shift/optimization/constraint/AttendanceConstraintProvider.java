@@ -34,13 +34,16 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 employeeNotDoubleBooked(f),
                 weeklyMaxWorkHoursHard(f),
                 monthlyMaxWorkHoursHard(f),
+                monthlyMinOffDaysHard(f),
+                monthlyMaxOffDaysHard(f),
+                monthlyMaxOffDaysHardNoWork(f),
                 consecutiveSevenDaysHard(f),
                 requirePatternAlignment(f),
                 headcountBalance(f),
-                headcountShortageWhenNone(f),
+                // headcountShortageWhenNone(f),
                 weeklyWorkHoursRange(f),
                 monthlyWorkHoursRange(f),
-                consecutiveSevenDaysPenalty(f),
+                // consecutiveSevenDaysPenalty(f),
                 overstaffLightPenalty(f)
         };
     }
@@ -132,7 +135,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .groupBy((e, p) -> e,
                         ConstraintCollectors.max((DailyPatternAssignmentEntity e, EmployeeShiftPattern p) -> p.getPriority()))
                 // 優先度が高いほどペナルティを小さくして「割当が安い」状態にする
-                .penalize(HardSoftScore.ofSoft(50), (e, priority) -> {
+                .penalize(HardSoftScore.ofSoft(10), (e, priority) -> {
                     if (priority == null) return 0;
                     int maxPriority = 4;
                     return Math.max(0, maxPriority - priority.intValue());
@@ -154,10 +157,10 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null
                                 && timeWithin(e, d.getSlotTime())))
                 .groupBy((d, e) -> d, ConstraintCollectors.countBi())
-                .penalize(HardSoftScore.ofSoft(1200), (d, assigned) -> {
+                .penalize(HardSoftScore.ofSoft(200), (d, assigned) -> {
                     int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
                     int diff = assigned - required;
-                    if (diff < 0) return (-diff) * 10;
+                    if (diff < 0) return (-diff) * 2;
                     if (diff > 0) return diff;
                     return 0;
                 })
@@ -194,7 +197,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
                         Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
                         Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
-                .penalize(HardSoftScore.ofSoft(500), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()) * 20)
+                .penalize(HardSoftScore.ofSoft(120), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()) * 2)
                 .asConstraint("Quarter headcount shortage (none)");
     }
 
@@ -256,7 +259,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                             && totalMinutes < emp.getMinWorkHoursWeek() * 60;
                     return belowMin;
                 })
-                .penalize(HardSoftScore.ofSoft(600), (emp, weekStart, patterns) -> {
+                .penalize(HardSoftScore.ofSoft(200), (emp, weekStart, patterns) -> {
                     int totalMinutes = patterns.stream()
                             .mapToInt(AttendanceConstraintProvider::calculatePatternMinutes)
                             .sum();
@@ -267,7 +270,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                     if (!crossesMonth && emp.getMinWorkHoursWeek() != null 
                             && totalMinutes < emp.getMinWorkHoursWeek() * 60) {
                         // 最小時間制約（最高優先度）
-                        penalty += (emp.getMinWorkHoursWeek() * 60 - totalMinutes) * 5000;
+                        penalty += (emp.getMinWorkHoursWeek() * 60 - totalMinutes) * 500;
                     }
                     return Math.max(penalty, 1);
                 })
@@ -298,11 +301,11 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                             && totalMinutes < setting.getMinWorkHours() * 60;
                     return belowMin;
                 })
-                .penalize(HardSoftScore.ofSoft(800), (setting, totalMinutes) -> {
+                .penalize(HardSoftScore.ofSoft(200), (setting, totalMinutes) -> {
                     int penalty = 0;
                     if (setting.getMinWorkHours() != null && totalMinutes < setting.getMinWorkHours() * 60) {
                         // 最小時間制約（最高優先度）
-                        penalty += (setting.getMinWorkHours() * 60 - totalMinutes) * 5000;
+                        penalty += (setting.getMinWorkHours() * 60 - totalMinutes) * 500;
                     }
                     return Math.max(penalty, 1);
                 })
@@ -324,9 +327,9 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter((emp, weekStart, totalMinutes) ->
                         emp.getMaxWorkHoursWeek() != null
                                 && totalMinutes > emp.getMaxWorkHoursWeek() * 60)
-                .penalize(HardSoftScore.ONE_HARD, (emp, weekStart, totalMinutes) -> {
+                .penalize(HardSoftScore.ofSoft(200), (emp, weekStart, totalMinutes) -> {
                     int overMinutes = totalMinutes - emp.getMaxWorkHoursWeek() * 60;
-                    return Math.max(1, overMinutes / 30);
+                    return Math.max(0, overMinutes);
                 })
                 .asConstraint("Attendance: weekly max hours hard");
     }
@@ -353,11 +356,87 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter((setting, totalMinutes) ->
                         setting.getMaxWorkHours() != null
                                 && totalMinutes > setting.getMaxWorkHours() * 60)
-                .penalize(HardSoftScore.ONE_HARD, (setting, totalMinutes) -> {
+                .penalize(HardSoftScore.ofSoft(200), (setting, totalMinutes) -> {
                     int overMinutes = totalMinutes - setting.getMaxWorkHours() * 60;
-                    return Math.max(1, overMinutes / 30);
+                    return Math.max(0, overMinutes);
                 })
                 .asConstraint("Attendance: monthly max hours hard");
+    }
+
+    /**
+     * 月次の最小公休日数をハード制約として守る。
+     *
+     * @param f 制約ファクトリ
+     * @return 月次最小公休日数のハード制約
+     */
+    private Constraint monthlyMinOffDaysHard(ConstraintFactory f) {
+        return f.forEach(EmployeeMonthlySetting.class)
+                .join(DailyPatternAssignmentEntity.class,
+                        Joiners.equal(EmployeeMonthlySetting::getEmployeeCode,
+                                p -> p.getAssignedEmployee() != null ? p.getAssignedEmployee().getEmployeeCode() : null),
+                        Joiners.filtering((setting, p) ->
+                                YearMonth.from(p.getDate()).equals(getMonthStart(setting))))
+                .groupBy((setting, p) -> setting,
+                        ConstraintCollectors.toSet((setting, p) -> p.getDate()))
+                .filter((setting, dates) -> setting.getMinOffDays() != null)
+                .penalize(HardSoftScore.ONE_HARD, (setting, dates) -> {
+                    int workedDays = dates.size();
+                    int totalDays = getMonthStart(setting).lengthOfMonth();
+                    int offDays = totalDays - workedDays;
+                    int diff = setting.getMinOffDays() - offDays;
+                    return diff > 0 ? diff : 0;
+                })
+                .asConstraint("Attendance: monthly min off days hard");
+    }
+
+    /**
+     * 月次の最大公休日数をハード制約として守る。
+     *
+     * @param f 制約ファクトリ
+     * @return 月次最大公休日数のハード制約
+     */
+    private Constraint monthlyMaxOffDaysHard(ConstraintFactory f) {
+        return f.forEach(EmployeeMonthlySetting.class)
+                .join(DailyPatternAssignmentEntity.class,
+                        Joiners.equal(EmployeeMonthlySetting::getEmployeeCode,
+                                p -> p.getAssignedEmployee() != null ? p.getAssignedEmployee().getEmployeeCode() : null),
+                        Joiners.filtering((setting, p) ->
+                                YearMonth.from(p.getDate()).equals(getMonthStart(setting))))
+                .groupBy((setting, p) -> setting,
+                        ConstraintCollectors.toSet((setting, p) -> p.getDate()))
+                .filter((setting, dates) -> setting.getMaxOffDays() != null)
+                .penalize(HardSoftScore.ONE_HARD, (setting, dates) -> {
+                    int workedDays = dates.size();
+                    int totalDays = getMonthStart(setting).lengthOfMonth();
+                    int offDays = totalDays - workedDays;
+                    int diff = offDays - setting.getMaxOffDays();
+                    return diff > 0 ? diff : 0;
+                })
+                .asConstraint("Attendance: monthly max off days hard");
+    }
+
+    /**
+     * TODO いる？
+     * 月内に出勤が無い場合でも最大公休日数を超過しないようにする。
+     *
+     * @param f 制約ファクトリ
+     * @return 月次最大公休日数（出勤なし）のハード制約
+     */
+    private Constraint monthlyMaxOffDaysHardNoWork(ConstraintFactory f) {
+        return f.forEach(EmployeeMonthlySetting.class)
+                .ifNotExists(DailyPatternAssignmentEntity.class,
+                        Joiners.equal(EmployeeMonthlySetting::getEmployeeCode,
+                                p -> p.getAssignedEmployee() != null ? p.getAssignedEmployee().getEmployeeCode() : null),
+                        Joiners.filtering((setting, p) ->
+                                YearMonth.from(p.getDate()).equals(getMonthStart(setting))))
+                .filter(setting -> setting.getMaxOffDays() != null)
+                .penalize(HardSoftScore.ONE_HARD, setting -> {
+                    int totalDays = getMonthStart(setting).lengthOfMonth();
+                    int offDays = totalDays;
+                    int diff = offDays - setting.getMaxOffDays();
+                    return diff > 0 ? diff : 0;
+                })
+                .asConstraint("Attendance: monthly max off days hard (no work)");
     }
 
     /**
@@ -407,6 +486,17 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
         if (date == null) return null;
         if (date instanceof java.sql.Date) return ((java.sql.Date) date).toLocalDate();
         return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    /**
+     * 月次設定の対象月を取得する。
+     *
+     * @param setting 月次設定
+     * @return 対象月の YearMonth
+     */
+    private static YearMonth getMonthStart(EmployeeMonthlySetting setting) {
+        LocalDate date = setting.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        return YearMonth.from(date);
     }
 
     // ===== 連勤ペナルティ（ATTENDANCE） =====
