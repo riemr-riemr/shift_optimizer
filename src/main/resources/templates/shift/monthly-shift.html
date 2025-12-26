@@ -297,11 +297,11 @@
                         class="staffing-summary-cell"
                         th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
                         <div th:if="${summary != null}">
-                            <div th:if="${summary.balance < 0}" class="balance-hours shortage" 
-                                 th:text="'不足:' + ${-summary.balance}">不足:2</div>
-                            <div th:if="${summary.balance > 0}" class="balance-hours excess" 
-                                 th:text="'超過:' + ${summary.balance}">超過:2</div>
-                            <div th:if="${summary.balance == 0}" class="balance-hours balanced" 
+                            <div th:if="${summary.totalShortageMinutes > 0}" class="balance-hours shortage" 
+                                 th:text="'不足:' + ${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)} + ' h'">不足:2.00 h</div>
+                            <div th:if="${summary.totalExcessMinutes > 0}" class="balance-hours excess" 
+                                 th:text="'超過:' + ${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)} + ' h'">超過:2.00 h</div>
+                            <div th:if="${summary.totalShortageMinutes == 0 and summary.totalExcessMinutes == 0}" class="balance-hours balanced" 
                                  th:text="'適正'">適正</div>
                         </div>
                         <div th:if="${summary == null}" class="text-muted">-</div>
@@ -313,11 +313,11 @@
                         class="staffing-summary-cell"
                         th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
                         <div th:if="${summary != null}">
-                            <div th:if="${summary.balance < 0}" class="balance-hours shortage" 
-                                 th:text="'不足:' + ${-summary.balance}">不足:2</div>
-                            <div th:if="${summary.balance > 0}" class="balance-hours excess" 
-                                 th:text="'超過:' + ${summary.balance}">超過:2</div>
-                            <div th:if="${summary.balance == 0}" class="balance-hours balanced" 
+                            <div th:if="${summary.totalShortageMinutes > 0}" class="balance-hours shortage" 
+                                 th:text="'不足:' + ${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)} + ' h'">不足:2.00 h</div>
+                            <div th:if="${summary.totalExcessMinutes > 0}" class="balance-hours excess" 
+                                 th:text="'超過:' + ${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)} + ' h'">超過:2.00 h</div>
+                            <div th:if="${summary.totalShortageMinutes == 0 and summary.totalExcessMinutes == 0}" class="balance-hours balanced" 
                                  th:text="'適正'">適正</div>
                         </div>
                         <div th:if="${summary == null}" class="text-muted">-</div>
@@ -382,7 +382,7 @@
                 <div class="card-body">
                     <ul class="small mb-0">
                         <li><strong>時間表示:</strong> hh:mm ~ hh:mm 形式で勤務時間を表示</li>
-                        <li><strong>人時表示:</strong> 不足時は赤背景、超過時は緑背景、適正時は青背景</li>
+                        <li><strong>人時表示:</strong> 不足と超過の合算を時間（h）で別行表示（赤=不足、緑=超過、青=適正）</li>
                         <li><strong>休日:</strong> 土日は薄赤の背景色で表示</li>
                         <li><strong>今日:</strong> オレンジのグラデーション背景で強調</li>
                         <li><strong>休み:</strong> 「-」で表示</li>

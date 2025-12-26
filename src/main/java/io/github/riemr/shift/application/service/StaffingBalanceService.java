@@ -151,6 +151,7 @@ public class StaffingBalanceService {
         
         LocalDate endOfMonth = startOfMonth.withDayOfMonth(startOfMonth.lengthOfMonth());
         LocalDate current = startOfMonth;
+        int resMin = appSettingService.getTimeResolutionMinutes();
         
         while (!current.isAfter(endOfMonth)) {
             List<StaffingBalanceDto> dailyBalance = getStaffingBalance(storeCode, current);
@@ -166,6 +167,11 @@ public class StaffingBalanceService {
             int totalShortage = dailyBalance.stream()
                     .mapToInt(b -> Math.max(0, b.getRequiredStaff() - b.getAssignedStaff()))
                     .sum();
+            int totalExcess = dailyBalance.stream()
+                    .mapToInt(b -> Math.max(0, b.getAssignedStaff() - b.getRequiredStaff()))
+                    .sum();
+            int totalShortageMinutes = totalShortage * resMin;
+            int totalExcessMinutes = totalExcess * resMin;
             
             DailyStaffingSummary summary = DailyStaffingSummary.builder()
                     .date(current)
@@ -173,7 +179,8 @@ public class StaffingBalanceService {
                     .totalAssigned(totalAssigned)
                     .shortageSlots(shortageSlots)
                     .overstaffSlots(overstaffSlots)
-                    .totalShortage(totalShortage)
+                    .totalShortageMinutes(totalShortageMinutes)
+                    .totalExcessMinutes(totalExcessMinutes)
                     .build();
             
             summaryMap.put(current, summary);
@@ -188,6 +195,7 @@ public class StaffingBalanceService {
 
         LocalDate endOfMonth = startOfMonth.withDayOfMonth(startOfMonth.lengthOfMonth());
         LocalDate current = startOfMonth;
+        int resMin = appSettingService.getTimeResolutionMinutes();
 
         while (!current.isAfter(endOfMonth)) {
             List<StaffingBalanceDto> dailyBalance = getHourlyStaffingBalance(storeCode, current, departmentCode);
@@ -203,6 +211,11 @@ public class StaffingBalanceService {
             int totalShortage = dailyBalance.stream()
                     .mapToInt(b -> Math.max(0, b.getRequiredStaff() - b.getAssignedStaff()))
                     .sum();
+            int totalExcess = dailyBalance.stream()
+                    .mapToInt(b -> Math.max(0, b.getAssignedStaff() - b.getRequiredStaff()))
+                    .sum();
+            int totalShortageMinutes = totalShortage * resMin;
+            int totalExcessMinutes = totalExcess * resMin;
 
             DailyStaffingSummary summary = DailyStaffingSummary.builder()
                     .date(current)
@@ -210,7 +223,8 @@ public class StaffingBalanceService {
                     .totalAssigned(totalAssigned)
                     .shortageSlots(shortageSlots)
                     .overstaffSlots(overstaffSlots)
-                    .totalShortage(totalShortage)
+                    .totalShortageMinutes(totalShortageMinutes)
+                    .totalExcessMinutes(totalExcessMinutes)
                     .build();
 
             summaryMap.put(current, summary);
@@ -226,16 +240,18 @@ public class StaffingBalanceService {
         private final int totalAssigned;
         private final int shortageSlots;
         private final int overstaffSlots;
-        private final int totalShortage;
+        private final int totalShortageMinutes;
+        private final int totalExcessMinutes;
 
         public DailyStaffingSummary(LocalDate date, int totalRequired, int totalAssigned, 
-                                  int shortageSlots, int overstaffSlots, int totalShortage) {
+                                  int shortageSlots, int overstaffSlots, int totalShortageMinutes, int totalExcessMinutes) {
             this.date = date;
             this.totalRequired = totalRequired;
             this.totalAssigned = totalAssigned;
             this.shortageSlots = shortageSlots;
             this.overstaffSlots = overstaffSlots;
-            this.totalShortage = totalShortage;
+            this.totalShortageMinutes = totalShortageMinutes;
+            this.totalExcessMinutes = totalExcessMinutes;
         }
 
         public static DailyStaffingSummaryBuilder builder() {
@@ -247,7 +263,8 @@ public class StaffingBalanceService {
         public int getTotalAssigned() { return totalAssigned; }
         public int getShortageSlots() { return shortageSlots; }
         public int getOverstaffSlots() { return overstaffSlots; }
-        public int getTotalShortage() { return totalShortage; }
+        public int getTotalShortageMinutes() { return totalShortageMinutes; }
+        public int getTotalExcessMinutes() { return totalExcessMinutes; }
         public int getBalance() { return totalAssigned - totalRequired; }
 
         public static class DailyStaffingSummaryBuilder {
@@ -255,8 +272,9 @@ public class StaffingBalanceService {
             private int totalRequired;
             private int totalAssigned;
             private int shortageSlots;
-            private int overstaffSlots;
-            private int totalShortage;
+        private int overstaffSlots;
+        private int totalShortageMinutes;
+        private int totalExcessMinutes;
 
             public DailyStaffingSummaryBuilder date(LocalDate date) {
                 this.date = date;
@@ -283,15 +301,20 @@ public class StaffingBalanceService {
                 return this;
             }
 
-            public DailyStaffingSummaryBuilder totalShortage(int totalShortage) {
-                this.totalShortage = totalShortage;
-                return this;
-            }
+        public DailyStaffingSummaryBuilder totalShortageMinutes(int totalShortageMinutes) {
+            this.totalShortageMinutes = totalShortageMinutes;
+            return this;
+        }
 
-            public DailyStaffingSummary build() {
-                return new DailyStaffingSummary(date, totalRequired, totalAssigned, 
-                                              shortageSlots, overstaffSlots, totalShortage);
-            }
+        public DailyStaffingSummaryBuilder totalExcessMinutes(int totalExcessMinutes) {
+            this.totalExcessMinutes = totalExcessMinutes;
+            return this;
+        }
+
+        public DailyStaffingSummary build() {
+            return new DailyStaffingSummary(date, totalRequired, totalAssigned, 
+                                          shortageSlots, overstaffSlots, totalShortageMinutes, totalExcessMinutes);
+        }
         }
     }
 }

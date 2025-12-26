@@ -598,10 +598,11 @@ public class ShiftCalcController {
                     dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(
                         summary.getTotalRequired(),
                         summary.getTotalAssigned(),
-                        summary.getBalance()
+                        summary.getTotalShortageMinutes(),
+                        summary.getTotalExcessMinutes()
                     ));
                 } else {
-                    dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(0, 0, 0));
+                    dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(0, 0, 0, 0));
                 }
             }
 
@@ -676,19 +677,23 @@ public class ShiftCalcController {
     public static class DailyStaffingSummaryInfo {
         private final int totalRequired;
         private final int totalAssigned;
-        private final int balance;
+        private final int totalShortageMinutes;
+        private final int totalExcessMinutes;
         
-        public DailyStaffingSummaryInfo(int totalRequired, int totalAssigned, int balance) {
+        public DailyStaffingSummaryInfo(int totalRequired, int totalAssigned, int totalShortageMinutes, int totalExcessMinutes) {
             this.totalRequired = totalRequired;
             this.totalAssigned = totalAssigned;
-            this.balance = balance;
+            this.totalShortageMinutes = totalShortageMinutes;
+            this.totalExcessMinutes = totalExcessMinutes;
         }
         
         public int getTotalRequired() { return totalRequired; }
         public int getTotalAssigned() { return totalAssigned; }
-        public int getBalance() { return balance; }
+        public int getTotalShortageMinutes() { return totalShortageMinutes; }
+        public int getTotalExcessMinutes() { return totalExcessMinutes; }
         public int totalRequired() { return totalRequired; }
         public int totalAssigned() { return totalAssigned; }
-        public int balance() { return balance; }
+        public int totalShortageMinutes() { return totalShortageMinutes; }
+        public int totalExcessMinutes() { return totalExcessMinutes; }
     }
 }
