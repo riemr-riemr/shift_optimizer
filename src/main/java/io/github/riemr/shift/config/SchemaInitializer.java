@@ -126,6 +126,23 @@ public class SchemaInitializer {
             jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_work_demand_interval ON work_demand_interval (store_code, department_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_work_demand_interval_date ON work_demand_interval (store_code, department_code, target_date)");
 
+            jdbc.execute("CREATE TABLE IF NOT EXISTS attendance_group_constraint (" +
+                    "constraint_id BIGSERIAL PRIMARY KEY, " +
+                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
+                    "department_code VARCHAR(32) NULL REFERENCES department_master(department_code), " +
+                    "rule_type VARCHAR(32) NOT NULL, " +
+                    "min_on_duty INTEGER, " +
+                    "created_at TIMESTAMPTZ DEFAULT now(), " +
+                    "updated_at TIMESTAMPTZ DEFAULT now()" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attendance_group_constraint_scope ON attendance_group_constraint (store_code, department_code)");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS attendance_group_member (" +
+                    "constraint_id BIGINT NOT NULL REFERENCES attendance_group_constraint(constraint_id) ON DELETE CASCADE, " +
+                    "employee_code VARCHAR(10) NOT NULL REFERENCES employee(employee_code), " +
+                    "PRIMARY KEY (constraint_id, employee_code)" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attendance_group_member_employee ON attendance_group_member (employee_code)");
+
             // days_master (for legacy/special features; harmless if unused)
             jdbc.execute("CREATE TABLE IF NOT EXISTS days_master (" +
                     "days_id BIGSERIAL PRIMARY KEY, " +

@@ -6,7 +6,9 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPatt
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
+import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -42,6 +44,12 @@ public class AttendanceSolution {
     private List<EmployeeRequest> employeeRequestList;
     @ProblemFactCollectionProperty
     private List<RegisterDemandSlot> demandList;
+    @ProblemFactCollectionProperty
+    private List<WorkDemandSlot> workDemandList;
+    @ProblemFactCollectionProperty
+    private List<AttendanceGroupInfo> attendanceGroupInfos;
+    @ProblemFactCollectionProperty
+    private List<LocalDate> activeDates;
     @ProblemFactCollectionProperty
     private List<EmployeeMonthlySetting> employeeMonthlySettingList;
 

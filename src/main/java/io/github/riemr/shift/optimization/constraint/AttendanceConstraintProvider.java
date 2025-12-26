@@ -4,8 +4,11 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
+import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
+import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import org.optaplanner.core.api.score.stream.tri.TriConstraintStream;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
 import org.optaplanner.core.api.score.stream.ConstraintFactory;
@@ -44,7 +47,11 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 weeklyWorkHoursRange(f),
                 monthlyWorkHoursRange(f),
                 // consecutiveSevenDaysPenalty(f),
-                overstaffLightPenalty(f)
+                overstaffLightPenalty(f),
+                attendanceGroupMinOnDutyShortage(f),
+                attendanceGroupMinOnDutyShortageWhenNone(f),
+                attendanceGroupNoSameDayWork(f),
+                attendanceGroupAllOrNothing(f)
         };
     }
 
@@ -211,6 +218,62 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     private static boolean timeWithin(DailyPatternAssignmentEntity e, LocalTime slot) {
         return (slot.equals(e.getPatternStart()) || slot.isAfter(e.getPatternStart()))
                 && slot.isBefore(e.getPatternEnd());
+    }
+
+    private TriConstraintStream<AttendanceGroupInfo, LocalDate, java.util.Set<String>> onDutyMembersByConstraintAndDate(ConstraintFactory f) {
+        return f.forEach(DailyPatternAssignmentEntity.class)
+                .filter(e -> e.getAssignedEmployee() != null)
+                .join(AttendanceGroupInfo.class,
+                        Joiners.filtering((e, info) -> info.hasMember(e.getAssignedEmployee().getEmployeeCode())))
+                .join(LocalDate.class,
+                        Joiners.equal((e, info) -> e.getDate(), d -> d))
+                .groupBy((e, info, date) -> info,
+                        (e, info, date) -> date,
+                        ConstraintCollectors.toSet((e, info, date) -> e.getAssignedEmployee().getEmployeeCode()));
+    }
+
+    private Constraint attendanceGroupMinOnDutyShortage(ConstraintFactory f) {
+        return onDutyMembersByConstraintAndDate(f)
+                .filter((info, date, members) -> info.getRuleType() == AttendanceGroupRuleType.MIN_ON_DUTY
+                        && info.getMinOnDuty() != null
+                        && members.size() < info.getMinOnDuty())
+                .penalize(HardSoftScore.ONE_SOFT,
+                        (info, date, members) -> info.getMinOnDuty() - members.size())
+                .asConstraint("Attendance group min on duty shortage");
+    }
+
+    private Constraint attendanceGroupMinOnDutyShortageWhenNone(ConstraintFactory f) {
+        return f.forEach(LocalDate.class)
+                .join(AttendanceGroupInfo.class,
+                        Joiners.filtering((date, info) -> info.getRuleType() == AttendanceGroupRuleType.MIN_ON_DUTY
+                                && info.getMinOnDuty() != null
+                                && info.getMinOnDuty() > 0))
+                .ifNotExists(DailyPatternAssignmentEntity.class,
+                        Joiners.equal((date, info) -> date, DailyPatternAssignmentEntity::getDate),
+                        Joiners.filtering((date, info, e) -> e.getAssignedEmployee() != null
+                                && info.hasMember(e.getAssignedEmployee().getEmployeeCode())))
+                .penalize(HardSoftScore.ONE_SOFT,
+                        (date, info) -> info.getMinOnDuty())
+                .asConstraint("Attendance group min on duty shortage (none)");
+    }
+
+    private Constraint attendanceGroupNoSameDayWork(ConstraintFactory f) {
+        return onDutyMembersByConstraintAndDate(f)
+                .filter((info, date, members) -> info.getRuleType() == AttendanceGroupRuleType.NO_SAME_DAY_WORK
+                        && info.getMemberCount() > 0
+                        && members.size() == info.getMemberCount())
+                .penalize(HardSoftScore.ONE_SOFT)
+                .asConstraint("Attendance group no same day work");
+    }
+
+    private Constraint attendanceGroupAllOrNothing(ConstraintFactory f) {
+        return onDutyMembersByConstraintAndDate(f)
+                .filter((info, date, members) -> info.getRuleType() == AttendanceGroupRuleType.ALL_OR_NOTHING
+                        && members.size() > 0
+                        && members.size() < info.getMemberCount())
+                .penalize(HardSoftScore.ONE_SOFT,
+                        (info, date, members) -> Math.min(members.size(), info.getMemberCount() - members.size()))
+                .asConstraint("Attendance group all or nothing");
     }
 
     // ===== 労働時間制約（ATTENDANCE） =====

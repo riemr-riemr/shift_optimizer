@@ -2,13 +2,20 @@ package io.github.riemr.shift.optimization.service;
 
 import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.AttendanceGroupConstraintMapper;
+import io.github.riemr.shift.infrastructure.mapper.AttendanceGroupMemberMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.AttendanceGroupConstraint;
+import io.github.riemr.shift.infrastructure.persistence.entity.AttendanceGroupMember;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
+import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
+import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +36,8 @@ public class AttendanceService {
 
     private final ShiftScheduleRepository repository;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
+    private final AttendanceGroupConstraintMapper attendanceGroupConstraintMapper;
+    private final AttendanceGroupMemberMapper attendanceGroupMemberMapper;
 
     public AttendanceSolution loadAttendanceProblem(ProblemKey key) {
         log.info("Starting attendance problem load: key={}", key);
@@ -45,6 +54,9 @@ public class AttendanceService {
         sol.setEmployeeRequestList(base.getEmployeeRequestList());
         sol.setEmployeeMonthlySettingList(base.getEmployeeMonthlySettingList());
         sol.setDemandList(aggregateRegisterDemand(base.getDemandList()));
+        sol.setWorkDemandList(base.getWorkDemandList());
+        sol.setAttendanceGroupInfos(loadAttendanceGroupInfos(key.getStoreCode(), key.getDepartmentCode()));
+        sol.setActiveDates(buildActiveDates(sol.getDemandList(), sol.getWorkDemandList()));
         var patterns = buildPatternAssignmentsFromDemand(sol);
         sol.setPatternAssignments(patterns);
 
@@ -64,6 +76,77 @@ public class AttendanceService {
                 totalDemandUnits, patterns.size(), String.format(Locale.ROOT, "%.1f", coverage));
 
         return sol;
+    }
+
+    private List<LocalDate> buildActiveDates(List<RegisterDemandSlot> registerDemands,
+                                             List<WorkDemandSlot> workDemands) {
+        Set<LocalDate> active = new TreeSet<>();
+        if (registerDemands != null) {
+            for (var d : registerDemands) {
+                if (d.getDemandDate() != null) active.add(d.getDemandDate());
+            }
+        }
+        if (workDemands != null) {
+            for (var d : workDemands) {
+                if (d.getDemandDate() != null) active.add(d.getDemandDate());
+            }
+        }
+        return new ArrayList<>(active);
+    }
+
+    private List<AttendanceGroupInfo> loadAttendanceGroupInfos(String storeCode, String departmentCode) {
+        if (storeCode == null || storeCode.isBlank()) {
+            return List.of();
+        }
+        List<AttendanceGroupConstraint> constraints =
+                attendanceGroupConstraintMapper.selectByStoreAndDepartment(storeCode, departmentCode);
+        if (constraints.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = constraints.stream()
+                .map(AttendanceGroupConstraint::getConstraintId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<AttendanceGroupMember> members = attendanceGroupMemberMapper.selectByConstraintIds(ids);
+        Map<Long, Set<String>> membersByConstraint = new HashMap<>();
+        for (var m : members) {
+            if (m.getConstraintId() == null || m.getEmployeeCode() == null) continue;
+            membersByConstraint
+                    .computeIfAbsent(m.getConstraintId(), k -> new HashSet<>())
+                    .add(m.getEmployeeCode());
+        }
+
+        List<AttendanceGroupInfo> infos = new ArrayList<>();
+        for (var c : constraints) {
+            Long id = c.getConstraintId();
+            if (id == null) continue;
+            AttendanceGroupRuleType ruleType = AttendanceGroupRuleType.fromCode(c.getRuleType());
+            if (ruleType == null) {
+                log.warn("Skipping attendance group constraint with unknown rule_type: id={}, ruleType={}",
+                        id, c.getRuleType());
+                continue;
+            }
+            Set<String> memberCodes = membersByConstraint.getOrDefault(id, Collections.emptySet());
+            if (memberCodes.isEmpty()) {
+                log.warn("Skipping attendance group constraint with no members: id={}", id);
+                continue;
+            }
+            Integer minOnDuty = null;
+            if (ruleType == AttendanceGroupRuleType.MIN_ON_DUTY) {
+                minOnDuty = c.getMinOnDuty();
+                if (minOnDuty == null) {
+                    log.warn("Skipping MIN_ON_DUTY constraint with null min_on_duty: id={}", id);
+                    continue;
+                }
+                int normalized = Math.max(1, Math.min(minOnDuty, memberCodes.size()));
+                minOnDuty = normalized;
+            }
+            infos.add(new AttendanceGroupInfo(id, storeCode, departmentCode, ruleType, minOnDuty, memberCodes));
+        }
+        return infos;
     }
 
     private List<RegisterDemandSlot> aggregateRegisterDemand(List<RegisterDemandSlot> demandList) {
