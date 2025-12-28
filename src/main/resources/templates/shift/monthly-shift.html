@@ -12,8 +12,8 @@
         }
         
         .shift-table th {
-            background: var(--color-register);
-            color: white;
+            background: #6b7280;
+            color: #ffffff;
             padding: 8px 6px;
             text-align: center;
             font-weight: 600;
@@ -53,7 +53,7 @@
         }
         
         .shift-table td.employee-cell {
-            background: #f8f9fa;
+            background: var(--color-light);
             font-weight: 600;
             text-align: left;
             position: sticky;
@@ -68,11 +68,11 @@
         }
         
         .weekend-header {
-            background: var(--color-weekend) !important;
+            background: #8a90d6 !important;
         }
         
         .weekend-cell {
-            background: var(--color-weekend-light);
+            background: #f1f2fb;
         }
         
         .today-cell {
@@ -82,11 +82,21 @@
         }
         
         .staffing-summary-row th {
-            background: var(--color-stock);
-            color: white;
+            background: rgba(78, 205, 196, 0.18);
+            color: var(--color-dark);
             padding: 8px 6px;
             font-size: 0.75rem;
             line-height: 1.2;
+            border-color: var(--border-normal);
+        }
+        
+        .staffing-summary-row th.employee-header {
+            background: rgba(78, 205, 196, 0.28);
+            color: var(--color-dark);
+        }
+        
+        .staffing-summary-row th.weekend-header {
+            background: rgba(78, 205, 196, 0.18) !important;
         }
         
         .staffing-summary-cell {
