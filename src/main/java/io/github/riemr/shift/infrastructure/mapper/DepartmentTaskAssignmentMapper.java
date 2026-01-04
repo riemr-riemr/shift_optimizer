@@ -16,6 +16,14 @@ public interface DepartmentTaskAssignmentMapper {
                                         @Param("storeCode") String storeCode,
                                         @Param("departmentCode") String departmentCode);
 
+    int deleteBreakByEmployeeAndDateRange(@Param("storeCode") String storeCode,
+                                          @Param("departmentCode") String departmentCode,
+                                          @Param("employeeCode") String employeeCode,
+                                          @Param("from") java.util.Date from,
+                                          @Param("to") java.util.Date to,
+                                          @Param("taskCode") String taskCode,
+                                          @Param("createdBy") String createdBy);
+
     List<DepartmentTaskAssignment> selectByMonth(@Param("from") LocalDate from,
                                                  @Param("to") LocalDate to,
                                                  @Param("storeCode") String storeCode,

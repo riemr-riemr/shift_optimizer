@@ -30,6 +30,19 @@
     ]]>
   </delete>
 
+  <delete id="deleteBreakByEmployeeAndDateRange">
+    <![CDATA[
+    DELETE FROM department_task_assignment
+    WHERE store_code = #{storeCode}
+      AND department_code = #{departmentCode}
+      AND employee_code = #{employeeCode}
+      AND start_at >= #{from}
+      AND start_at <  #{to}
+      AND task_code = #{taskCode}
+      AND created_by = #{createdBy}
+    ]]>
+  </delete>
+
   <select id="selectByMonth" resultMap="BaseResultMap">
     <![CDATA[
     SELECT assignment_id, store_code, department_code, task_code, employee_code, start_at, end_at, created_by

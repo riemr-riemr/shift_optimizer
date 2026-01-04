@@ -12,6 +12,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
+import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
 import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
@@ -32,6 +33,8 @@ import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
+import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -41,6 +44,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.ZoneId;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -67,6 +71,7 @@ public class ShiftCalcController {
     private final ShiftOptimizationPreparationService preparationService;
     private final StoreMapper storeMapper;
     private final RegisterDemandHourService registerDemandHourService;
+    private final TaskMasterService taskMasterService;
     private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final RegisterAssignmentMapper registerAssignmentMapper;
@@ -235,6 +240,22 @@ public class ShiftCalcController {
                         name
                 ));
             }
+
+            var tasks = departmentTaskAssignmentMapper.selectByDate(storeCode, "520", from, to);
+            for (var t : tasks) {
+                String code = t.getEmployeeCode();
+                String name = (code == null) ? null : empName.getOrDefault(code, code);
+                results.add(new ShiftAssignmentView(
+                        t.getStartAt().toInstant().atZone(zone).toLocalDateTime().toString(),
+                        t.getEndAt().toInstant().atZone(zone).toLocalDateTime().toString(),
+                        null,
+                        "520",
+                        "DEPARTMENT_TASK",
+                        t.getTaskCode(),
+                        code,
+                        name
+                ));
+            }
         }
 
         if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
@@ -324,6 +345,18 @@ public class ShiftCalcController {
         return result;
     }
 
+    @GetMapping("/api/calc/task-masters")
+    @ResponseBody
+    public List<TaskMaster> getTaskMasters(@RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        var list = taskMasterService.list();
+        if (departmentCode == null || departmentCode.isBlank()) {
+            return list;
+        }
+        return list.stream()
+                .filter(t -> departmentCode.equals(t.getDepartmentCode()))
+                .toList();
+    }
+
     @GetMapping("/api/calc/work-demand-slot/{date}")
     @ResponseBody
     public List<WorkDemandSlot> getWorkDemandSlotsByDate(@PathVariable("date") String dateString,
@@ -348,6 +381,54 @@ public class ShiftCalcController {
             }
         }
         // sort by time and task for stable output
+        result.sort(Comparator.comparing(WorkDemandSlot::getSlotTime)
+                .thenComparing(w -> Objects.toString(w.getTaskCode(), "")));
+        return result;
+    }
+
+    @GetMapping("/api/calc/department-task-slot/{date}")
+    @ResponseBody
+    public List<WorkDemandSlot> getDepartmentTaskSlotsByDate(@PathVariable("date") String dateString,
+                                                             @RequestParam("storeCode") String storeCode,
+                                                             @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        List<String> departments;
+        if (departmentCode == null || departmentCode.isBlank()) {
+            departments = storeDepartmentMapper.findDepartmentsByStore(storeCode).stream()
+                    .map(DepartmentMaster::getDepartmentCode)
+                    .toList();
+        } else {
+            departments = List.of(departmentCode);
+        }
+        int resMin = appSettingService.getTimeResolutionMinutes();
+        Map<String, WorkDemandSlot> byTaskTime = new HashMap<>();
+        for (String dept : departments) {
+            List<DepartmentTaskAssignment> tasks = departmentTaskAssignmentMapper.selectByDate(storeCode, dept, date, date.plusDays(1));
+            for (DepartmentTaskAssignment task : tasks) {
+                if ("BREAK".equals(task.getTaskCode())) continue;
+                LocalDateTime start = task.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime end = task.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime t = start;
+                while (t.isBefore(end)) {
+                    String taskCode = task.getTaskCode() == null ? "TASK" : task.getTaskCode();
+                    String key = dept + "_" + taskCode + "_" + t.toLocalTime();
+                    WorkDemandSlot slot = byTaskTime.get(key);
+                    if (slot == null) {
+                        slot = new WorkDemandSlot();
+                        slot.setStoreCode(storeCode);
+                        slot.setDepartmentCode(dept);
+                        slot.setDemandDate(date);
+                        slot.setSlotTime(t.toLocalTime());
+                        slot.setTaskCode(task.getTaskCode());
+                        slot.setRequiredUnits(0);
+                        byTaskTime.put(key, slot);
+                    }
+                    slot.setRequiredUnits(slot.getRequiredUnits() + 1);
+                    t = t.plusMinutes(resMin);
+                }
+            }
+        }
+        List<WorkDemandSlot> result = new ArrayList<>(byTaskTime.values());
         result.sort(Comparator.comparing(WorkDemandSlot::getSlotTime)
                 .thenComparing(w -> Objects.toString(w.getTaskCode(), "")));
         return result;

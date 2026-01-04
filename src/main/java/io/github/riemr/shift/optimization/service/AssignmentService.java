@@ -97,8 +97,9 @@ public class AssignmentService {
                 if (sa.getStartAt() == null || sa.getEndAt() == null) continue;
                 var s = sa.getStartAt().toInstant();
                 var e = sa.getEndAt().toInstant();
-                boolean overlap = s.isBefore(end) && e.isAfter(start);
-                if (overlap) onDuty.add(sa.getEmployeeCode());
+                // タスク時間が出勤時間に完全に包含される場合のみ候補とする
+                boolean fullyContained = !start.isBefore(s) && !end.isAfter(e);
+                if (fullyContained) onDuty.add(sa.getEmployeeCode());
             }
 
             if (!onDuty.isEmpty()) {
@@ -130,40 +131,14 @@ public class AssignmentService {
                         .filter(e -> !wouldExceedConsecutiveCap(attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of()), date, maxConsecutiveDays))
                         .toList();
             } else {
-                // フォールバック: 週次設定・パターン・スキルで候補化（ATTENDANCE未実行でも割当可能にする）
-                cands = employees.stream()
-                        .filter(e -> {
-                            var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                            if (offSet.contains(date)) return false;
-                            var offDow = weeklyOffByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                            if (offDow.contains(date.getDayOfWeek().getValue())) return false;
-                            if (!withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
-                                    a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
-                                    a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
-                            if (!matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
-                                    a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
-                                    a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
-                            String code = e.getEmployeeCode();
-                            if (a.getWorkKind() == WorkKind.REGISTER_OP) {
-                                Integer rn = a.getRegisterNo();
-                                if (rn != null) {
-                                    Short lv = regSkillByEmpRegister.getOrDefault(code, Map.of()).get(rn);
-                                    if (lv != null && (lv == 0 || lv == 1)) return false;
-                                }
-                            } else if (a.getWorkKind() == WorkKind.DEPARTMENT_TASK) {
-                                String dept = a.getDepartmentCode();
-                                if (dept != null) {
-                                    Short lv = deptSkillByEmpDept.getOrDefault(code, Map.of()).get(dept);
-                                    if (lv != null && (lv == 0 || lv == 1)) return false;
-                                }
-                            }
-                            var attDays = attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                            if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) return false;
-                            return true;
-                        })
-                        .toList();
+                // フォールバック処理では出勤時間が設定されていない場合のみ実行
+                // 出勤時間外への割り当てを防止するため、出勤データがない場合は候補を空にする
+                cands = new ArrayList<>();
                 if (log.isInfoEnabled()) {
-                    log.info("ASSIGNMENT fallback: No on-duty roster for {}. Weekly-base candidates={}", date, cands.size());
+                    log.info("ASSIGNMENT: No on-duty roster for date={} time={}~{}. No candidates to prevent assignment outside shift time.",
+                            date, 
+                            a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                            a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime());
                 }
             }
 

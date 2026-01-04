@@ -127,6 +127,24 @@
   </div>
 </div>
 
+<!-- Department Workload Section -->
+<div class="row g-4 mt-2">
+  <div class="col-12">
+    <div class="card" id="departmentWorkCard" style="display: none;">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="bi bi-clipboard-data me-2"></i>部門別作業量（作業計画）
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" id="departmentWorkContainer" style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
+          <div id="departmentWorkGrid" class="grid-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Results Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">
@@ -234,6 +252,34 @@
   .work-hours-cell.working {
     background: rgba(13, 110, 253, 0.15); /* bootstrap primary tint */
   }
+
+  /* Department workload grid */
+  .department-work-cell {
+    background: rgba(69, 183, 209, 0.12);
+    color: #0f3d47;
+    font-weight: 600;
+    text-align: center;
+  }
+  .department-work-cell.has-demand {
+    border-left: 2px solid rgba(69, 183, 209, 0.6);
+  }
+  .department-work-cell-empty {
+    background: #f8f9fa;
+  }
+  .dept-plan-block {
+    border-radius: 3px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 2px 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    z-index: 4;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
 </style>
 
 <script th:inline="javascript">
@@ -256,6 +302,41 @@ function getEmployeeColorClass(employeeName) {
     hash = employeeName.charCodeAt(i) + ((hash << 5) - hash);
   }
   return `color-${Math.abs(hash) % 5}`; // Use 5 distinct colors
+}
+
+function getTaskDisplayColor(taskCode) {
+  if (!taskCode) return '#95a5a6';
+  if (taskCode.includes('REG') || taskCode.includes('レジ')) return '#ff6b6b';
+  if (taskCode.includes('STOCK') || taskCode.includes('品出し')) return '#4ecdc4';
+  if (taskCode.includes('CLEAN') || taskCode.includes('清掃')) return '#45b7d1';
+  return '#95a5a6';
+}
+
+const taskNameByCode = new Map();
+
+function getTaskName(taskCode, departmentCode) {
+  if (!taskCode) return '作業';
+  const deptKey = `${departmentCode || ''}::${taskCode}`;
+  return taskNameByCode.get(deptKey) || taskNameByCode.get(`::${taskCode}`) || taskCode;
+}
+
+async function loadTaskMasterMap(storeCode, departmentCode) {
+  if (!storeCode) return;
+  try {
+    const res = await fetch(`/shift/api/calc/task-masters?storeCode=${encodeURIComponent(storeCode)}${departmentCode ? `&departmentCode=${encodeURIComponent(departmentCode)}` : ''}`);
+    const list = await res.json();
+    taskNameByCode.clear();
+    (list || []).forEach(t => {
+      const key = `${t.departmentCode || ''}::${t.taskCode}`;
+      taskNameByCode.set(key, t.name || t.taskCode || '');
+      if (!t.departmentCode) {
+        taskNameByCode.set(`::${t.taskCode}`, t.name || t.taskCode || '');
+      }
+    });
+  } catch (e) {
+    console.error('作業マスタ取得エラー:', e);
+    taskNameByCode.clear();
+  }
 }
 
 // ドラッグアンドドロップと右クリックメニュー処理
@@ -916,9 +997,10 @@ let isScrolling = false;
 function setupScrollSync() {
   const staffingBalanceContainer = $('staffingBalanceContainer');
   const workModelContainer = $('workModelContainer');
+  const departmentWorkContainer = $('departmentWorkContainer');
   const shiftContainer = $('tableContainer');
   
-  const containers = [staffingBalanceContainer, workModelContainer, shiftContainer].filter(c => c);
+  const containers = [staffingBalanceContainer, workModelContainer, departmentWorkContainer, shiftContainer].filter(c => c);
   
   if (containers.length === 0) return;
   
@@ -993,9 +1075,10 @@ async function loadResult(dateString){
     
     const storeCode = $('storeCode').value;
     const departmentCode = $('departmentCode').value || '';
-    
+
     // 並行してデータを取得
-    const [shiftData, employeeData, workTimeMonthlyResp] = await Promise.all([
+    const [, shiftData, employeeData, workTimeMonthlyResp] = await Promise.all([
+      loadTaskMasterMap(storeCode, departmentCode),
       fetch(`/shift/api/calc/assignments/daily/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
       fetch(`/shift/api/calc/employees/${storeCode}?date=${encodeURIComponent(dateString)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r=>r.json()),
       // 月次の勤務時間（シフト）を取得し、当日分にフィルタして利用
@@ -1015,12 +1098,14 @@ async function loadResult(dateString){
       
       // 作業モデルと人時過不足データも同時に取得・表示
       loadWorkModel(dateString, data);
+      loadDepartmentWorkModel(dateString);
       loadStaffingBalance(dateString);
     } else {
       noDataMessage.style.display = 'block';
       tableContainer.style.display = 'none';
       $('dragDropHelp').style.display = 'none';
       $('workModelCard').style.display = 'none';
+      $('departmentWorkCard').style.display = 'none';
       $('staffingBalanceCard').style.display = 'none';
       return;
     }
@@ -1030,6 +1115,7 @@ async function loadResult(dateString){
     $('tableContainer').style.display = 'none';
     $('dragDropHelp').style.display = 'none';
     $('workModelCard').style.display = 'none';
+    $('departmentWorkCard').style.display = 'none';
     $('staffingBalanceCard').style.display = 'none';
     return;
   }
@@ -1167,7 +1253,8 @@ async function loadResult(dateString){
           if (workKind === 'DEPARTMENT_TASK') {
             // 部門タスク割当（レジ番号無し）
             cell.classList.add('task-assigned');
-            cell.textContent = assignment.taskCode ? assignment.taskCode : 'TASK';
+            const taskLabel = getTaskName(assignment.taskCode, assignment.departmentCode);
+            cell.textContent = taskLabel.substring(0, 2);
             cell.dataset.originalRegister = '';
             cell.dataset.currentRegister = '';
             cell.draggable = false; // タスクはドラッグ移動不可（必要なら拡張）
@@ -1328,12 +1415,12 @@ async function loadWorkModel(dateString, shiftData) {
   try {
     const storeCode = $('storeCode').value;
     const departmentCode = $('departmentCode').value || '';
-    let workModelData = [];
     if (departmentCode && departmentCode !== '520') {
-      workModelData = await fetch(`/shift/api/calc/work-demand-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`).then(r=>r.json());
-    } else {
-      workModelData = await fetch(`/shift/api/calc/work-model-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
+      $('workModelCard').style.display = 'none';
+      return;
     }
+    let workModelData = [];
+    workModelData = await fetch(`/shift/api/calc/work-model-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}`).then(r => r.json());
     const workModelGrid = $('workModelGrid');
     const workModelCard = $('workModelCard');
     
@@ -1467,6 +1554,135 @@ async function loadWorkModel(dateString, shiftData) {
   } catch (error) {
     console.error('作業モデルデータ取得エラー:', error);
     $('workModelCard').style.display = 'none';
+  }
+}
+
+async function loadDepartmentWorkModel(dateString) {
+  try {
+    const storeCode = $('storeCode').value;
+    const departmentCode = $('departmentCode').value || '';
+    const departmentWorkCard = $('departmentWorkCard');
+    const departmentWorkGrid = $('departmentWorkGrid');
+    const data = await fetch(`/shift/api/calc/department-task-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode ? `&departmentCode=${encodeURIComponent(departmentCode)}` : ''}`).then(r=>r.json());
+    departmentWorkGrid.innerHTML = '';
+    if (!data || data.length === 0) {
+      departmentWorkCard.style.display = 'none';
+      return;
+    }
+    departmentWorkCard.style.display = 'block';
+
+    const timeHeaderRow = document.createElement('div');
+    timeHeaderRow.className = 'grid-row';
+    timeHeaderRow.style.gridColumn = '1 / -1';
+    timeHeaderRow.style.display = 'contents';
+
+    const emptyHeader = document.createElement('div');
+    emptyHeader.className = 'grid-header';
+    emptyHeader.textContent = '作業';
+    timeHeaderRow.appendChild(emptyHeader);
+
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += RES_MIN) {
+        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const timeHeader = document.createElement('div');
+        timeHeader.className = 'grid-header time-slot';
+        timeHeader.textContent = time;
+        timeHeaderRow.appendChild(timeHeader);
+      }
+    }
+    departmentWorkGrid.appendChild(timeHeaderRow);
+
+    const rows = Array.from(new Set(data.map(d => `${d.departmentCode || 'DEPT'}::${d.taskCode || 'TASK'}`))).sort();
+    const demandByTaskTime = new Map();
+
+    const toTimeKey = (slotTime) => {
+      if (!slotTime) return null;
+      if (typeof slotTime === 'string') return slotTime.substring(0, 5);
+      if (slotTime.hour !== undefined) {
+        const hh = String(slotTime.hour).padStart(2, '0');
+        const mm = String(slotTime.minute || 0).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+      return slotTime.toString().substring(0, 5);
+    };
+
+    data.forEach(d => {
+      const t = toTimeKey(d.slotTime);
+      if (!t) return;
+      const key = `${d.departmentCode || 'DEPT'}::${d.taskCode || 'TASK'}_${t}`;
+      demandByTaskTime.set(key, d.requiredUnits || 0);
+    });
+
+    const timeSlots = [];
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += RES_MIN) {
+        timeSlots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+
+    rows.forEach((rowKey, rowIndex) => {
+      const [deptCode, taskCode] = rowKey.split('::');
+      const taskRowHeader = document.createElement('div');
+      taskRowHeader.className = 'grid-row-header';
+      const taskLabel = taskCode === 'TASK' ? '作業' : getTaskName(taskCode, deptCode);
+      const headerLabel = departmentCode ? taskLabel : `${deptCode} / ${taskLabel}`;
+      taskRowHeader.textContent = headerLabel;
+      departmentWorkGrid.appendChild(taskRowHeader);
+
+      timeSlots.forEach(() => {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'grid-cell department-work-cell-empty';
+        departmentWorkGrid.appendChild(emptyCell);
+      });
+
+      let startIdx = null;
+      let currentDemand = 0;
+      timeSlots.forEach((timeKey, idx) => {
+        const demand = demandByTaskTime.get(`${rowKey}_${timeKey}`) || 0;
+        if (demand > 0) {
+          if (startIdx === null || demand !== currentDemand) {
+            if (startIdx !== null) {
+              const block = document.createElement('div');
+              block.className = 'dept-plan-block';
+              block.style.background = getTaskDisplayColor(taskCode);
+              block.style.gridRow = `${rowIndex + 2}`;
+              block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
+              block.textContent = `${taskLabel} x${currentDemand}`;
+              departmentWorkGrid.appendChild(block);
+            }
+            startIdx = idx;
+            currentDemand = demand;
+          }
+        } else if (startIdx !== null) {
+          const block = document.createElement('div');
+          block.className = 'dept-plan-block';
+          block.style.background = getTaskDisplayColor(taskCode);
+          block.style.gridRow = `${rowIndex + 2}`;
+          block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
+          block.textContent = `${taskLabel} x${currentDemand}`;
+          departmentWorkGrid.appendChild(block);
+          startIdx = null;
+          currentDemand = 0;
+        }
+      });
+
+      if (startIdx !== null) {
+        const block = document.createElement('div');
+        block.className = 'dept-plan-block';
+        block.style.background = getTaskDisplayColor(taskCode);
+        block.style.gridRow = `${rowIndex + 2}`;
+        block.style.gridColumn = `${startIdx + 2} / ${timeSlots.length + 2}`;
+        block.textContent = `${taskLabel} x${currentDemand}`;
+        departmentWorkGrid.appendChild(block);
+      }
+    });
+
+    departmentWorkGrid.style.gridTemplateColumns = `120px repeat(${SLOT_COUNT}, 50px)`;
+    departmentWorkGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
+    departmentWorkGrid.classList.add('shift-grid-container');
+  } catch (error) {
+    console.error('部門別作業量データ取得エラー:', error);
+    $('departmentWorkCard').style.display = 'none';
   }
 }
 

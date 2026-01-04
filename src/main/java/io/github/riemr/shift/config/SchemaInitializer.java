@@ -222,6 +222,18 @@ public class SchemaInitializer {
             try { jdbc.execute("ALTER TABLE department_task_assignment ALTER COLUMN employee_code DROP NOT NULL"); } catch (Exception ignore) {}
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_dept_task_assign_sdd ON department_task_assignment (store_code, department_code, start_at)");
 
+            // task_assignment is a view (register + department task assignments)
+            try { jdbc.execute("DROP VIEW IF EXISTS task_assignment"); } catch (Exception ignore) {}
+            try { jdbc.execute("DROP TABLE IF EXISTS task_assignment"); } catch (Exception ignore) {}
+            jdbc.execute("CREATE VIEW task_assignment AS " +
+                    "SELECT assignment_id, NULL::BIGINT AS task_id, employee_code, start_at, end_at, " +
+                    "'REGISTER'::VARCHAR AS source, NULL::VARCHAR AS status, created_by, NULL::TIMESTAMPTZ AS created_at " +
+                    "FROM register_assignment " +
+                    "UNION ALL " +
+                    "SELECT assignment_id, NULL::BIGINT AS task_id, employee_code, start_at, end_at, " +
+                    "'DEPARTMENT_TASK'::VARCHAR AS source, NULL::VARCHAR AS status, created_by, NULL::TIMESTAMPTZ AS created_at " +
+                    "FROM department_task_assignment");
+
             log.info("Schema checked/initialized: is_register column and employee_task_skill table ensured.");
         } catch (Exception e) {
             log.warn("Schema initialization failed: {}", e.getMessage());

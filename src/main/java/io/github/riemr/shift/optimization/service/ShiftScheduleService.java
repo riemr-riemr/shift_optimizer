@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
@@ -795,7 +796,7 @@ public class ShiftScheduleService {
                 .stream().collect(Collectors.toMap(e -> e.getEmployeeCode(), e -> e.getEmployeeName(), (a,b)->a));
 
         if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
-            // Department task assignments
+            // Department task assignments only
             var from = date;
             var to = date.plusDays(1);
             var taskMapper = this.departmentTaskAssignmentMapper; // injected
@@ -810,29 +811,46 @@ public class ShiftScheduleService {
                     Optional.ofNullable(t.getEmployeeCode()).orElse(""),
                     Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
             )).toList();
-        } else {
-            // Register assignments
-            List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date, date.plusDays(1))
-                    .stream()
-                    .filter(a -> (storeCode == null || storeCode.equals(a.getStoreCode())))
-                    .toList();
-            return assignments.stream()
-                    .map(a -> new ShiftAssignmentView(
-                            Optional.ofNullable(a.getStartAt())
-                                    .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
-                                    .orElse(""),
-                            Optional.ofNullable(a.getEndAt())
-                                    .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
-                                    .orElse(""),
-                            a.getRegisterNo(),
-                            departmentCode,
-                            "REGISTER_OP",
-                            null,
-                            Optional.ofNullable(a.getEmployeeCode()).orElse(""),
-                            Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
-                    ))
-                    .toList();
         }
+
+        // Register assignments (and department tasks for register department)
+        List<RegisterAssignment> assignments = registerAssignmentMapper.selectByDate(date, date.plusDays(1))
+                .stream()
+                .filter(a -> (storeCode == null || storeCode.equals(a.getStoreCode())))
+                .toList();
+        List<ShiftAssignmentView> results = new ArrayList<>();
+        assignments.forEach(a -> results.add(new ShiftAssignmentView(
+                Optional.ofNullable(a.getStartAt())
+                        .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                        .orElse(""),
+                Optional.ofNullable(a.getEndAt())
+                        .map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString())
+                        .orElse(""),
+                a.getRegisterNo(),
+                departmentCode,
+                "REGISTER_OP",
+                null,
+                Optional.ofNullable(a.getEmployeeCode()).orElse(""),
+                Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+        )));
+
+        if (departmentCode == null || departmentCode.isBlank() || "520".equalsIgnoreCase(departmentCode)) {
+            String dept = (departmentCode == null || departmentCode.isBlank()) ? "520" : departmentCode;
+            var tasks = departmentTaskAssignmentMapper.selectByMonth(date, date.plusDays(1), storeCode, dept);
+            tasks.forEach(t -> results.add(new ShiftAssignmentView(
+                    Optional.ofNullable(t.getStartAt()).map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()).orElse(""),
+                    Optional.ofNullable(t.getEndAt()).map(d -> d.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()).orElse(""),
+                    null,
+                    dept,
+                    "DEPARTMENT_TASK",
+                    t.getTaskCode(),
+                    Optional.ofNullable(t.getEmployeeCode()).orElse(""),
+                    Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+            )));
+        }
+
+        results.sort(Comparator.comparing(ShiftAssignmentView::startAt));
+        return results;
     }
 
     /**
@@ -1715,16 +1733,11 @@ public class ShiftScheduleService {
             log.debug("Skip persist: construction heuristic in progress (initScore < 0). Score={}", best.getScore());
             return;
         }
-        // ハード制約違反チェック（保存ブロック）
+        // ハード制約違反があっても保存を継続（運用優先）
         if (best.getScore() != null && best.getScore().hardScore() < 0) {
-            log.error("🚨 HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
-            log.error("🚫 Database save BLOCKED due to constraint violations");
-            log.error("📋 Please review and fix the following:");
-            
-            // 制約違反の詳細分析と改善提案を出力
+            log.warn("⚠️ HARD CONSTRAINT VIOLATION DETECTED! Score: {}", best.getScore());
+            log.warn("⚠️ Saving results despite hard constraint violations");
             analyzeConstraintViolations(best);
-            // ハード制約違反がある場合は既存データの削除や保存を行わない
-            return;
         }
         
         // 問題データの状況をログ出力
@@ -1797,8 +1810,10 @@ public class ShiftScheduleService {
         log.info("[PersistDbg] slots(total={}, assigned={}, registerSlots={}) stage={} score={} store={}",
                 totalSlots, assignedSlots, registerSlots, key.getStage(), best.getScore(), best.getStoreCode());
 
+        List<ShiftAssignmentPlanningEntity> assignmentsForPersist = resolveOverlapsBySlot(best.getAssignmentList());
+
         // Group by employee, date, and register for register assignments
-        Map<String, List<ShiftAssignmentPlanningEntity>> registerAssignmentsByEmployeeDateRegister = best.getAssignmentList().stream()
+        Map<String, List<ShiftAssignmentPlanningEntity>> registerAssignmentsByEmployeeDateRegister = assignmentsForPersist.stream()
                 .filter(a -> a.getAssignedEmployee() != null
                         && a.getWorkKind() == WorkKind.REGISTER_OP
                         && a.getRegisterNo() != null)
@@ -1834,10 +1849,10 @@ public class ShiftScheduleService {
             }
         }
 
-        // Department task assignments (DEPARTMENT_TASK) – merge by employee/date/department/task
+        // Department task assignments (DEPARTMENT_TASK) – merge only consecutive slots
         List<DepartmentTaskAssignment> deptTaskAssignments = new ArrayList<>();
         if (best.getDepartmentCode() != null) {
-            Map<String, List<ShiftAssignmentPlanningEntity>> deptTaskGroups = best.getAssignmentList().stream()
+            Map<String, List<ShiftAssignmentPlanningEntity>> deptTaskGroups = assignmentsForPersist.stream()
                     .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.DEPARTMENT_TASK)
                     .collect(Collectors.groupingBy(a -> String.join("@",
                             a.getAssignedEmployee().getEmployeeCode(),
@@ -1846,22 +1861,51 @@ public class ShiftScheduleService {
                             a.getTaskCode() == null ? "" : a.getTaskCode())));
 
             for (List<ShiftAssignmentPlanningEntity> group : deptTaskGroups.values()) {
+                if (group.isEmpty()) continue;
                 group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
-                Date startAt = group.get(0).getOrigin().getStartAt();
-                Date endAt = group.get(group.size() - 1).getOrigin().getEndAt();
                 String employeeCode = group.get(0).getAssignedEmployee().getEmployeeCode();
                 String storeCode = group.get(0).getOrigin().getStoreCode();
                 String taskCode = group.get(0).getTaskCode();
 
-                var ta = new DepartmentTaskAssignment();
-                ta.setStoreCode(storeCode);
-                ta.setDepartmentCode(best.getDepartmentCode());
-                ta.setTaskCode(taskCode);
-                ta.setEmployeeCode(employeeCode);
-                ta.setStartAt(startAt);
-                ta.setEndAt(endAt);
-                ta.setCreatedBy("auto");
-                deptTaskAssignments.add(ta);
+                Date blockStart = null;
+                Date blockEnd = null;
+                for (ShiftAssignmentPlanningEntity entity : group) {
+                    Date slotStart = entity.getOrigin().getStartAt();
+                    Date slotEnd = entity.getOrigin().getEndAt();
+                    if (blockStart == null) {
+                        blockStart = slotStart;
+                        blockEnd = slotEnd;
+                        continue;
+                    }
+                    if (blockEnd != null && slotStart != null
+                            && blockEnd.toInstant().equals(slotStart.toInstant())) {
+                        // consecutive slot: extend
+                        blockEnd = slotEnd;
+                    } else {
+                        var ta = new DepartmentTaskAssignment();
+                        ta.setStoreCode(storeCode);
+                        ta.setDepartmentCode(best.getDepartmentCode());
+                        ta.setTaskCode(taskCode);
+                        ta.setEmployeeCode(employeeCode);
+                        ta.setStartAt(blockStart);
+                        ta.setEndAt(blockEnd);
+                        ta.setCreatedBy("auto");
+                        deptTaskAssignments.add(ta);
+                        blockStart = slotStart;
+                        blockEnd = slotEnd;
+                    }
+                }
+                if (blockStart != null) {
+                    var ta = new DepartmentTaskAssignment();
+                    ta.setStoreCode(storeCode);
+                    ta.setDepartmentCode(best.getDepartmentCode());
+                    ta.setTaskCode(taskCode);
+                    ta.setEmployeeCode(employeeCode);
+                    ta.setStartAt(blockStart);
+                    ta.setEndAt(blockEnd);
+                    ta.setCreatedBy("auto");
+                    deptTaskAssignments.add(ta);
+                }
             }
         }
 
@@ -1875,6 +1919,7 @@ public class ShiftScheduleService {
             departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(from, to, store, best.getDepartmentCode());
             deptTaskAssignments.forEach(departmentTaskAssignmentMapper::insert);
         }
+        persistBreakAssignments(best, shiftAssignments);
 
         log.info("Persisted best solution – stage={}, shifts={}, registers={}, deptTasks={} (score={})",
                 key.getStage(), shiftAssignments.size(), mergedRegisterAssignments.size(), deptTaskAssignments.size(), best.getScore());
@@ -2125,6 +2170,7 @@ public class ShiftScheduleService {
         List<ShiftAssignmentPlanningEntity> dayList = best.getAssignmentList().stream()
                 .filter(a -> date.equals(a.getShiftDate()))
                 .toList();
+        List<ShiftAssignmentPlanningEntity> dayListForPersist = resolveOverlapsBySlot(dayList);
         if (log.isInfoEnabled()) {
             long regSlots = dayList.stream().filter(a -> a.getWorkKind() == WorkKind.REGISTER_OP).count();
             long deptSlots = dayList.stream().filter(a -> a.getWorkKind() == WorkKind.DEPARTMENT_TASK).count();
@@ -2134,7 +2180,7 @@ public class ShiftScheduleService {
         boolean hasRegisterSlots = dayList.stream().anyMatch(a -> a.getWorkKind() == WorkKind.REGISTER_OP);
         List<RegisterAssignment> mergedRegisters = new ArrayList<>();
         if (hasRegisterSlots) {
-            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpReg = dayList.stream()
+            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpReg = dayListForPersist.stream()
                     .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.REGISTER_OP && a.getRegisterNo() != null)
                     .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + a.getRegisterNo()));
             for (var group : byEmpReg.values()) {
@@ -2158,21 +2204,50 @@ public class ShiftScheduleService {
 
         List<DepartmentTaskAssignment> deptTasks = new ArrayList<>();
         if (best.getDepartmentCode() != null) {
-            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpTask = dayList.stream()
+            Map<String, List<ShiftAssignmentPlanningEntity>> byEmpTask = dayListForPersist.stream()
                     .filter(a -> a.getAssignedEmployee() != null && a.getWorkKind() == WorkKind.DEPARTMENT_TASK)
                     .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + (a.getTaskCode()==null?"":a.getTaskCode())));
             for (var group : byEmpTask.values()) {
                 group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
-                var first = group.get(0); var last = group.get(group.size()-1);
-                var ta = new DepartmentTaskAssignment();
-                ta.setStoreCode(first.getOrigin().getStoreCode());
-                ta.setDepartmentCode(best.getDepartmentCode());
-                ta.setTaskCode(first.getTaskCode());
-                ta.setEmployeeCode(first.getAssignedEmployee().getEmployeeCode());
-                ta.setStartAt(first.getOrigin().getStartAt());
-                ta.setEndAt(last.getOrigin().getEndAt());
-                ta.setCreatedBy("auto");
-                deptTasks.add(ta);
+                ShiftAssignmentPlanningEntity first = group.get(0);
+                Date blockStart = null;
+                Date blockEnd = null;
+                for (ShiftAssignmentPlanningEntity entity : group) {
+                    Date slotStart = entity.getOrigin().getStartAt();
+                    Date slotEnd = entity.getOrigin().getEndAt();
+                    if (blockStart == null) {
+                        blockStart = slotStart;
+                        blockEnd = slotEnd;
+                        continue;
+                    }
+                    if (blockEnd != null && slotStart != null
+                            && blockEnd.toInstant().equals(slotStart.toInstant())) {
+                        blockEnd = slotEnd;
+                    } else {
+                        var ta = new DepartmentTaskAssignment();
+                        ta.setStoreCode(first.getOrigin().getStoreCode());
+                        ta.setDepartmentCode(best.getDepartmentCode());
+                        ta.setTaskCode(first.getTaskCode());
+                        ta.setEmployeeCode(first.getAssignedEmployee().getEmployeeCode());
+                        ta.setStartAt(blockStart);
+                        ta.setEndAt(blockEnd);
+                        ta.setCreatedBy("auto");
+                        deptTasks.add(ta);
+                        blockStart = slotStart;
+                        blockEnd = slotEnd;
+                    }
+                }
+                if (blockStart != null) {
+                    var ta = new DepartmentTaskAssignment();
+                    ta.setStoreCode(first.getOrigin().getStoreCode());
+                    ta.setDepartmentCode(best.getDepartmentCode());
+                    ta.setTaskCode(first.getTaskCode());
+                    ta.setEmployeeCode(first.getAssignedEmployee().getEmployeeCode());
+                    ta.setStartAt(blockStart);
+                    ta.setEndAt(blockEnd);
+                    ta.setCreatedBy("auto");
+                    deptTasks.add(ta);
+                }
             }
         }
 
@@ -2215,6 +2290,163 @@ public class ShiftScheduleService {
             departmentTaskAssignmentMapper.deleteByMonthStoreAndDepartment(date, date.plusDays(1), store, best.getDepartmentCode());
             deptTasks.forEach(departmentTaskAssignmentMapper::insert);
         }
+        var dayShifts = buildDailyShiftAssignments(dayList);
+        persistBreakAssignments(best, dayShifts);
+    }
+
+    private List<ShiftAssignment> buildDailyShiftAssignments(List<ShiftAssignmentPlanningEntity> dayList) {
+        if (dayList == null || dayList.isEmpty()) return List.of();
+        Map<String, List<ShiftAssignmentPlanningEntity>> byEmp = dayList.stream()
+                .filter(a -> a.getAssignedEmployee() != null)
+                .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode()));
+        List<ShiftAssignment> shifts = new ArrayList<>();
+        for (var group : byEmp.values()) {
+            if (group.isEmpty()) continue;
+            group.sort(Comparator.comparing(a -> a.getOrigin().getStartAt()));
+            Date startAt = group.get(0).getOrigin().getStartAt();
+            Date endAt = group.get(group.size() - 1).getOrigin().getEndAt();
+            String employeeCode = group.get(0).getAssignedEmployee().getEmployeeCode();
+            String storeCode = group.get(0).getOrigin().getStoreCode();
+
+            ShiftAssignment shiftAssignment = new ShiftAssignment();
+            shiftAssignment.setStoreCode(storeCode);
+            shiftAssignment.setEmployeeCode(employeeCode);
+            shiftAssignment.setStartAt(startAt);
+            shiftAssignment.setEndAt(endAt);
+            shiftAssignment.setCreatedBy("auto");
+            shifts.add(shiftAssignment);
+        }
+        return shifts;
+    }
+
+    private void persistBreakAssignments(ShiftSchedule best, List<ShiftAssignment> shiftAssignments) {
+        if (best == null || shiftAssignments == null || shiftAssignments.isEmpty()) return;
+        if (best.getAssignmentList() == null || best.getAssignmentList().isEmpty()) return;
+        String storeCode = best.getStoreCode();
+        if (storeCode == null || storeCode.isBlank()) {
+            storeCode = best.getAssignmentList().get(0).getStoreCode();
+        }
+        if (storeCode == null || storeCode.isBlank()) return;
+
+        String breakDepartmentCode = (best.getDepartmentCode() == null || best.getDepartmentCode().isBlank())
+                ? "520"
+                : best.getDepartmentCode();
+        Map<String, List<ShiftAssignmentPlanningEntity>> byEmpDate = best.getAssignmentList().stream()
+                .filter(a -> a.getAssignedEmployee() != null)
+                .collect(Collectors.groupingBy(a -> a.getAssignedEmployee().getEmployeeCode() + "@" + a.getShiftDate().toString()));
+
+        ZoneId zone = ZoneId.systemDefault();
+        for (ShiftAssignment shift : shiftAssignments) {
+            if (shift.getEmployeeCode() == null || shift.getStartAt() == null || shift.getEndAt() == null) continue;
+            LocalDate date = shift.getStartAt().toInstant().atZone(zone).toLocalDate();
+            long shiftMinutes = Duration.between(shift.getStartAt().toInstant(), shift.getEndAt().toInstant()).toMinutes();
+
+            Date dayStart = Date.from(date.atStartOfDay(zone).toInstant());
+            Date dayEnd = Date.from(date.plusDays(1).atStartOfDay(zone).toInstant());
+            departmentTaskAssignmentMapper.deleteBreakByEmployeeAndDateRange(
+                    storeCode, breakDepartmentCode, shift.getEmployeeCode(), dayStart, dayEnd, "BREAK", "break_auto");
+
+            if (shiftMinutes < 360) continue;
+            List<ShiftAssignmentPlanningEntity> slots = byEmpDate.get(shift.getEmployeeCode() + "@" + date);
+            Optional<BreakWindow> window = findBreakWindow(slots);
+            if (window.isEmpty()) {
+                log.warn("Break window not found for employee={} date={}", shift.getEmployeeCode(), date);
+                continue;
+            }
+
+            DepartmentTaskAssignment assignment = new DepartmentTaskAssignment();
+            assignment.setStoreCode(storeCode);
+            assignment.setDepartmentCode(breakDepartmentCode);
+            assignment.setTaskCode("BREAK");
+            assignment.setEmployeeCode(shift.getEmployeeCode());
+            assignment.setStartAt(window.get().startAt);
+            assignment.setEndAt(window.get().endAt);
+            assignment.setCreatedBy("break_auto");
+            departmentTaskAssignmentMapper.insert(assignment);
+        }
+    }
+
+    private Optional<BreakWindow> findBreakWindow(List<ShiftAssignmentPlanningEntity> slots) {
+        if (slots == null || slots.size() < 2) return Optional.empty();
+        List<ShiftAssignmentPlanningEntity> sorted = slots.stream()
+                .filter(a -> a.getStartAt() != null && a.getEndAt() != null)
+                .sorted(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt))
+                .toList();
+        for (int i = 1; i < sorted.size(); i++) {
+            Date prevEnd = sorted.get(i - 1).getEndAt();
+            Date curStart = sorted.get(i).getStartAt();
+            if (prevEnd == null || curStart == null) continue;
+            long gapMin = (curStart.getTime() - prevEnd.getTime()) / (1000 * 60);
+            if (gapMin >= 60) {
+                Date startAt = prevEnd;
+                Date endAt = new Date(prevEnd.getTime() + 60L * 60L * 1000L);
+                return Optional.of(new BreakWindow(startAt, endAt));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static class BreakWindow {
+        private final Date startAt;
+        private final Date endAt;
+
+        private BreakWindow(Date startAt, Date endAt) {
+            this.startAt = startAt;
+            this.endAt = endAt;
+        }
+    }
+
+    private List<ShiftAssignmentPlanningEntity> resolveOverlapsBySlot(List<ShiftAssignmentPlanningEntity> assignments) {
+        if (assignments == null || assignments.isEmpty()) return List.of();
+        Map<String, ShiftAssignmentPlanningEntity> chosenBySlot = new LinkedHashMap<>();
+        for (ShiftAssignmentPlanningEntity a : assignments) {
+            if (a == null || a.getAssignedEmployee() == null || a.getStartAt() == null || a.getShiftDate() == null) {
+                continue;
+            }
+            String key = a.getAssignedEmployee().getEmployeeCode() + "@"
+                    + a.getShiftDate() + "@"
+                    + a.getStartAt().getTime();
+            ShiftAssignmentPlanningEntity existing = chosenBySlot.get(key);
+            if (existing == null) {
+                chosenBySlot.put(key, a);
+            } else {
+                chosenBySlot.put(key, choosePreferredAssignment(existing, a));
+            }
+        }
+        return new ArrayList<>(chosenBySlot.values());
+    }
+
+    private ShiftAssignmentPlanningEntity choosePreferredAssignment(ShiftAssignmentPlanningEntity a, ShiftAssignmentPlanningEntity b) {
+        int pa = workKindPriority(a.getWorkKind());
+        int pb = workKindPriority(b.getWorkKind());
+        if (pa != pb) return pa > pb ? a : b;
+        if (a.getWorkKind() == WorkKind.REGISTER_OP) {
+            Integer ra = a.getRegisterNo();
+            Integer rb = b.getRegisterNo();
+            if (ra == null && rb != null) return b;
+            if (ra != null && rb == null) return a;
+            if (ra != null && rb != null && !ra.equals(rb)) {
+                return ra < rb ? a : b;
+            }
+            return a;
+        }
+        if (a.getWorkKind() == WorkKind.DEPARTMENT_TASK) {
+            String ta = a.getTaskCode();
+            String tb = b.getTaskCode();
+            if (ta == null && tb != null) return b;
+            if (ta != null && tb == null) return a;
+            if (ta != null && tb != null && !ta.equals(tb)) {
+                return ta.compareTo(tb) <= 0 ? a : b;
+            }
+            return a;
+        }
+        return a;
+    }
+
+    private int workKindPriority(WorkKind kind) {
+        if (kind == WorkKind.REGISTER_OP) return 2;
+        if (kind == WorkKind.DEPARTMENT_TASK) return 1;
+        return 0;
     }
 
     private static long toProblemId(LocalDate month) {

@@ -396,6 +396,33 @@ CREATE TABLE IF NOT EXISTS department_task_assignment (
 );
 CREATE INDEX IF NOT EXISTS idx_dept_task_assign_sdd ON department_task_assignment (store_code, department_code, start_at);
 
+-- ------------------------------------------------
+-- 12b. task_assignment view (register + department task assignments)
+-- ------------------------------------------------
+DROP VIEW IF EXISTS task_assignment;
+CREATE VIEW task_assignment AS
+  SELECT assignment_id,
+         NULL::BIGINT AS task_id,
+         employee_code,
+         start_at,
+         end_at,
+         'REGISTER'::VARCHAR AS source,
+         NULL::VARCHAR AS status,
+         created_by,
+         NULL::TIMESTAMPTZ AS created_at
+  FROM register_assignment
+  UNION ALL
+  SELECT assignment_id,
+         NULL::BIGINT AS task_id,
+         employee_code,
+         start_at,
+         end_at,
+         'DEPARTMENT_TASK'::VARCHAR AS source,
+         NULL::VARCHAR AS status,
+         created_by,
+         NULL::TIMESTAMPTZ AS created_at
+  FROM department_task_assignment;
+
 -- Optional: register_assignment department tagging
 -- ALTER TABLE register_assignment ADD COLUMN department_code VARCHAR(32);
 -- UPDATE register_assignment SET department_code = 'REGISTER' WHERE department_code IS NULL;
