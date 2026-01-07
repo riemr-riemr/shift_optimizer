@@ -18,6 +18,7 @@ import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
 import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.util.OffRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -331,14 +332,12 @@ public class AttendanceService {
         Map<String, List<EmployeeWeeklyPreference>> weeklyByEmp = weeklyPrefs.stream().collect(Collectors.groupingBy(EmployeeWeeklyPreference::getEmployeeCode));
         Map<String, Set<LocalDate>> offByEmp = new HashMap<>();
         for (var r : requests) {
-            if (r.getRequestKind() == null) continue;
-            String kind = r.getRequestKind().toLowerCase();
-            if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                LocalDate d = (r.getRequestDate() instanceof java.sql.Date)
-                        ? ((java.sql.Date) r.getRequestDate()).toLocalDate()
-                        : r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
-            }
+            String normalized = OffRequestKinds.normalize(r.getRequestKind());
+            if (normalized == null) continue;
+            LocalDate d = (r.getRequestDate() instanceof java.sql.Date)
+                    ? ((java.sql.Date) r.getRequestDate()).toLocalDate()
+                    : r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            offByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
         }
         int dow = date.getDayOfWeek().getValue();
         List<Employee> list = new ArrayList<>();
@@ -378,12 +377,10 @@ public class AttendanceService {
 
         Map<String, Set<LocalDate>> offDatesByEmp = new HashMap<>();
         for (var r : requests) {
-            if (r.getRequestKind() == null) continue;
-            String kind = r.getRequestKind().toLowerCase();
-            if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
-            }
+            String normalized = OffRequestKinds.normalize(r.getRequestKind());
+            if (normalized == null) continue;
+            LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
         }
         Map<String, Set<Integer>> weeklyOffByEmp = new HashMap<>();
         Map<String, Map<Integer, EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();

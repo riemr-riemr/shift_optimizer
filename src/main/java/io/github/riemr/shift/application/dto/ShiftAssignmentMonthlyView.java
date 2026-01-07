@@ -17,7 +17,8 @@ public record ShiftAssignmentMonthlyView(
         LocalDateTime endAt,
         Integer registerNo,
         String employeeCode, // Add employeeCode
-        String employeeName) {
+        String employeeName,
+        boolean manualEdit) {
 
     /** 開始日時から日付を取得（カレンダー集計用） */
     public LocalDate date() {

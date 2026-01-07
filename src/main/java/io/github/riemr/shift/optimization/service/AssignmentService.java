@@ -8,6 +8,7 @@ import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.optimization.entity.WorkKind;
+import io.github.riemr.shift.util.OffRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,12 +34,10 @@ public class AssignmentService {
 
         Map<String, Set<LocalDate>> offDatesByEmp = new HashMap<>();
         for (var r : requests) {
-            if (r.getRequestKind() == null) continue;
-            String kind = r.getRequestKind().toLowerCase();
-            if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
-            }
+            String normalized = OffRequestKinds.normalize(r.getRequestKind());
+            if (normalized == null) continue;
+            LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new java.util.HashSet<>()).add(d);
         }
         Map<String, Set<Integer>> weeklyOffByEmp = new HashMap<>();
         Map<String, Map<Integer, EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();

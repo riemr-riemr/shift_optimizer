@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
 <head>
-    <title>希望休入力</title>
+    <title>休み区分入力</title>
     <style>
         .search-card {
             background: white;
@@ -108,6 +108,18 @@
             color: white;
             font-weight: bold;
             animation: pulse 1s infinite;
+        }
+
+        .day-off-requested {
+            background: rgb(255, 127, 80);
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .day-off-paid {
+            background: rgb(255, 128, 192);
+            color: #ffffff;
+            font-weight: bold;
         }
         
         @keyframes pulse {
@@ -322,7 +334,7 @@
     <!-- 操作説明 -->
     <div class="alert alert-info">
         <i class="bi bi-info-circle"></i> 
-        店舗を選択してから、表の日付セルをクリックして希望休を設定・解除できます。
+        店舗を選択してから、表の日付セルをクリックして希望休と有給を切り替えできます。
     </div>
     
     <!-- 店舗選択必須の警告 -->
@@ -342,7 +354,7 @@
         <div class="card-header table-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-calendar3"></i> 
-                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 希望休一覧
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 休み申請一覧
             </h5>
             <div class="d-flex align-items-center gap-3">
                 <div class="text-muted small" th:if="${selectedStoreCode}">
@@ -396,10 +408,11 @@
                         th:classappend="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''}"
                         th:data-employee-code="${emp.employeeCode}"
                         th:data-date="|${year}-${#numbers.formatInteger(month, 2)}-${#numbers.formatInteger(day, 2)}|">
-                        <div th:class="'day-cell' + (${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? ' day-off-requested' : 
-                                       (T(java.time.LocalDate).of(year, month, day).equals(T(java.time.LocalDate).now()) ? ' today-cell' : '')})"
-                             th:text="${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? '休' : ''}"
-                             th:data-original-state="${employeeDayOffMap[emp.employeeCode] != null and employeeDayOffMap[emp.employeeCode].contains(day) ? 'on' : 'off'}">
+                        <div th:with="kind=${employeeDayOffKindMap[emp.employeeCode] != null ? employeeDayOffKindMap[emp.employeeCode][day] : null}"
+                             th:class="'day-cell' + (${kind == 'REQUEST' ? ' day-off-requested' : (kind == 'PAID' ? ' day-off-paid' : '')}) +
+                                        (${kind == null and T(java.time.LocalDate).of(year, month, day).equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''})"
+                             th:text="${kind == 'REQUEST' ? '希' : (kind == 'PAID' ? '有' : '')}"
+                             th:data-original-kind="${kind != null ? kind : ''}">
                         </div>
                     </td>
                 </tr>
@@ -411,8 +424,12 @@
     <!-- 凡例 -->
     <div class="legend">
         <div class="legend-item">
-            <div class="legend-color" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);"></div>
+            <div class="legend-color" style="background: rgb(255, 127, 80);"></div>
             <span>希望休</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgb(255, 128, 192);"></div>
+            <span>有給</span>
         </div>
         <div class="legend-item">
             <div class="legend-color" style="background: #fff5f5; border: 1px solid #ffc1cc;"></div>
@@ -425,36 +442,44 @@
     </div>
 
     <script>
-        let pendingChanges = new Map(); // employeeCode_date -> 'on'/'off'
+        const KIND_NONE = '';
+        const KIND_REQUEST = 'REQUEST';
+        const KIND_PAID = 'PAID';
+        const KIND_CYCLE = [KIND_NONE, KIND_REQUEST, KIND_PAID];
+        let pendingChanges = new Map(); // employeeCode_date -> kind
         
         function toggleDayOffLocal(employeeCode, date, dayCell) {
             const key = `${employeeCode}_${date}`;
-            const originalState = dayCell.getAttribute('data-original-state');
-            const currentState = pendingChanges.get(key) || originalState;
-            const newState = currentState === 'on' ? 'off' : 'on';
+            const originalKind = dayCell.getAttribute('data-original-kind') || '';
+            const currentKind = pendingChanges.get(key) ?? originalKind;
+            const idx = KIND_CYCLE.indexOf(currentKind);
+            const nextKind = KIND_CYCLE[(idx + 1 + KIND_CYCLE.length) % KIND_CYCLE.length];
             
             // 元に戻った場合は変更リストから削除
-            if (newState === originalState) {
+            if (nextKind === originalKind) {
                 pendingChanges.delete(key);
             } else {
-                pendingChanges.set(key, newState);
+                pendingChanges.set(key, nextKind);
             }
-            updateCellDisplay(dayCell, newState, originalState);
+            updateCellDisplay(dayCell, nextKind, originalKind);
             updateSaveButton();
         }
         
-        function updateCellDisplay(dayCell, state, originalState) {
-            dayCell.classList.remove('day-off-requested', 'pending-change');
+        function updateCellDisplay(dayCell, kind, originalKind) {
+            dayCell.classList.remove('day-off-requested', 'day-off-paid', 'pending-change');
             
-            if (state === 'on') {
+            if (kind === KIND_REQUEST) {
                 dayCell.classList.add('day-off-requested');
-                dayCell.textContent = '休';
+                dayCell.textContent = '希';
+            } else if (kind === KIND_PAID) {
+                dayCell.classList.add('day-off-paid');
+                dayCell.textContent = '有';
             } else {
                 dayCell.textContent = '';
             }
             
             // 元の状態と異なる場合は変更待ちとして表示
-            if (state !== originalState) {
+            if (kind !== originalKind) {
                 dayCell.classList.add('pending-change');
             }
         }
@@ -478,9 +503,9 @@
             saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 保存中...';
             
             // 変更をサーバーに送信
-            const changes = Array.from(pendingChanges.entries()).map(([key, state]) => {
+            const changes = Array.from(pendingChanges.entries()).map(([key, kind]) => {
                 const [employeeCode, date] = key.split('_');
-                return { employeeCode, date, state };
+                return { employeeCode, date, kind };
             });
             
             fetch('/employee-requests/batch-save', {
@@ -517,8 +542,8 @@
             
             // 全てのセルを元の状態に戻す
             document.querySelectorAll('.day-cell').forEach(cell => {
-                const originalState = cell.getAttribute('data-original-state');
-                updateCellDisplay(cell, originalState, originalState);
+                const originalKind = cell.getAttribute('data-original-kind') || '';
+                updateCellDisplay(cell, originalKind, originalKind);
             });
             
             updateSaveButton();

@@ -106,4 +106,8 @@ public interface EmployeeRequestMapper {
     List<EmployeeRequest> selectByEmployeeAndDateRange(@Param("employeeCode") String employeeCode, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
     
     int deleteById(@Param("id") Long id);
+
+    int deleteByEmployeeAndDate(@Param("storeCode") String storeCode,
+                                @Param("employeeCode") String employeeCode,
+                                @Param("requestDate") LocalDate requestDate);
 }

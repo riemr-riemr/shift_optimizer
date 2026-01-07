@@ -373,4 +373,11 @@
   <delete id="deleteById">
     delete from public.employee_request where request_id = #{id}
   </delete>
+
+  <delete id="deleteByEmployeeAndDate">
+    delete from public.employee_request
+    where store_code = #{storeCode}
+      and employee_code = #{employeeCode}
+      and request_date = #{requestDate}
+  </delete>
 </mapper>

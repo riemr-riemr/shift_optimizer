@@ -266,7 +266,7 @@ CREATE TABLE employee_request (
     from_time      TIME,
     to_time        TIME,
     request_kind   VARCHAR(12) NOT NULL
-                   CHECK (request_kind IN ('off','unavailable','prefer_on')),
+                   CHECK (request_kind IN ('OFF','REQUEST','PAID','PREFER_ON')),
     priority       INT NOT NULL DEFAULT 2,
     note           TEXT,
 

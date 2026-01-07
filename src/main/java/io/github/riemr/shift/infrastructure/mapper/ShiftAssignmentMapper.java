@@ -129,6 +129,11 @@ public interface ShiftAssignmentMapper {
                               @Param("to") LocalDate to,
                               @Param("storeCode") String storeCode);
 
+    int deleteByEmployeeAndDateRange(@Param("storeCode") String storeCode,
+                                     @Param("employeeCode") String employeeCode,
+                                     @Param("from") Date from,
+                                     @Param("to") Date to);
+
     /**
      * Count overlaps for an employee in [startAt, endAt) against register assignments.
      */

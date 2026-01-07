@@ -66,6 +66,44 @@
             background: #e3f2fd;
             transition: background-color 0.2s ease;
         }
+
+        .shift-cell.shift-editable {
+            cursor: pointer;
+        }
+
+        .shift-cell.shift-editable:hover {
+            background: #dbeafe;
+        }
+
+        .shift-off-request {
+            background: rgb(255, 127, 80) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-off-public-auto {
+            background: rgb(144, 238, 144) !important;
+            color: #14532d;
+            font-weight: 700;
+        }
+
+        .shift-off-public-manual {
+            background: rgb(60, 179, 113) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-off-paid {
+            background: rgb(255, 128, 192) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-manual-attendance {
+            background: #ffecb5 !important;
+            color: #7a4e00;
+            font-weight: 700;
+        }
         
         .weekend-header {
             background: #8a90d6 !important;
@@ -349,32 +387,69 @@
                     <!-- 設定に基づくサイクル（dateList） -->
                     <td th:if="${dateList != null}" th:each="d : ${dateList}"
                         th:with="key=${emp.employeeCode + '_' + #temporals.format(d, 'yyyy-MM-dd')},
-                                 shifts=${employeeShifts != null ? employeeShifts.get(key) : null}"
-                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? ' weekend-cell' : ''} + ${d.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''}">
+                                 shifts=${employeeShifts != null ? employeeShifts.get(key) : null},
+                                 shift0=${(shifts != null and !#lists.isEmpty(shifts)) ? shifts.get(0) : null},
+                                 dateStr=${#temporals.format(d, 'yyyy-MM-dd')},
+                                 editable=${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)},
+                                 offKind=${employeeOffKinds != null ? employeeOffKinds.get(key) : null},
+                                 isOff=${shifts == null or shifts.isEmpty()},
+                                 manualEdit=${shift0 != null and shift0.manualEdit},
+                                 offClass=${isOff ? (offKind == 'REQUEST' ? ' shift-off-request' : (offKind == 'PAID' ? ' shift-off-paid' : (offKind == 'OFF' ? ' shift-off-public-manual' : ' shift-off-public-auto'))) : ''},
+                                 offLabel=${offKind == 'REQUEST' ? '希望休' : (offKind == 'PAID' ? '有給' : '公休')},
+                                 manualClass=${manualEdit ? ' shift-manual-attendance' : ''}"
+                        class="shift-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? ' weekend-cell' : ''} + ${d.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''} + ${editable ? ' shift-editable' : ''} + ${offClass} + ${manualClass}"
+                        th:attr="data-employee-code=${emp.employeeCode},
+                                 data-employee-name=${emp.employeeName},
+                                 data-date=${dateStr},
+                                 data-start=${shift0 != null ? shift0.startTime : ''},
+                                 data-end=${shift0 != null ? shift0.endTime : ''},
+                                 data-off-kind=${offKind != null ? offKind : ''},
+                                 data-manual-edit=${manualEdit},
+                                 data-editable=${editable}">
                         <div th:if="${shifts != null and !shifts.isEmpty()}">
                             <span class="shift-time" 
                                   th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
                                 09:00 ~ 17:00
                             </span>
                         </div>
-                        <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
-                            -
+                        <div th:if="${shifts == null or shifts.isEmpty()}">
+                            <span th:text="${offLabel}">公休</span>
                         </div>
                     </td>
                     <!-- 従来（月初〜月末） -->
                     <td th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
                         th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
-                                 shifts=${employeeShifts != null ? employeeShifts.get(emp.employeeCode + '_' + day) : null}"
+                                 shifts=${employeeShifts != null ? employeeShifts.get(emp.employeeCode + '_' + day) : null},
+                                 shift0=${(shifts != null and !#lists.isEmpty(shifts)) ? shifts.get(0) : null},
+                                 dateStr=${#temporals.format(date, 'yyyy-MM-dd')},
+                                 editable=${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)},
+                                 key=${emp.employeeCode + '_' + dateStr},
+                                 offKind=${employeeOffKinds != null ? employeeOffKinds.get(key) : null},
+                                 isOff=${shifts == null or shifts.isEmpty()},
+                                 manualEdit=${shift0 != null and shift0.manualEdit},
+                                 offClass=${isOff ? (offKind == 'REQUEST' ? ' shift-off-request' : (offKind == 'PAID' ? ' shift-off-paid' : (offKind == 'OFF' ? ' shift-off-public-manual' : ' shift-off-public-auto'))) : ''},
+                                 offLabel=${offKind == 'REQUEST' ? '希望休' : (offKind == 'PAID' ? '有給' : '公休')},
+                                 manualClass=${manualEdit ? ' shift-manual-attendance' : ''}"
+                        class="shift-cell"
                         th:classappend="${date.getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''} + 
-                                       ${date.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''}">
+                                       ${date.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''} + ${editable ? ' shift-editable' : ''} + ${offClass} + ${manualClass}"
+                        th:attr="data-employee-code=${emp.employeeCode},
+                                 data-employee-name=${emp.employeeName},
+                                 data-date=${dateStr},
+                                 data-start=${shift0 != null ? shift0.startTime : ''},
+                                 data-end=${shift0 != null ? shift0.endTime : ''},
+                                 data-off-kind=${offKind != null ? offKind : ''},
+                                 data-manual-edit=${manualEdit},
+                                 data-editable=${editable}">
                         <div th:if="${shifts != null and !shifts.isEmpty()}">
                             <span class="shift-time" 
                                   th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
                                 09:00 ~ 17:00
                             </span>
                         </div>
-                        <div th:if="${shifts == null or shifts.isEmpty()}" class="text-muted">
-                            -
+                        <div th:if="${shifts == null or shifts.isEmpty()}">
+                            <span th:text="${offLabel}">公休</span>
                         </div>
                     </td>
                 </tr>
@@ -395,7 +470,7 @@
                         <li><strong>人時表示:</strong> 不足と超過の合算を時間（h）で別行表示（赤=不足、緑=超過、青=適正）</li>
                         <li><strong>休日:</strong> 土日は薄赤の背景色で表示</li>
                         <li><strong>今日:</strong> オレンジのグラデーション背景で強調</li>
-                        <li><strong>休み:</strong> 「-」で表示</li>
+                        <li><strong>休み:</strong> 公休/希望休/有給の区分で色分け</li>
                     </ul>
                 </div>
             </div>
@@ -485,11 +560,67 @@
         </div>
     </div>
 
+    <div class="modal fade" id="shiftEditModal" tabindex="-1" aria-labelledby="shiftEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="shiftEditModalLabel">シフト修正</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2 small text-muted">
+                        <div id="shiftEditEmployee">従業員</div>
+                        <div id="shiftEditDate">2024-01-01</div>
+                    </div>
+                    <input type="hidden" id="shiftEditEmployeeCode" />
+                    <input type="hidden" id="shiftEditDateValue" />
+                    <div class="mb-2">
+                        <div class="form-label small mb-1">種別</div>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="shiftEditKind" id="shiftEditKindWork" value="work" checked>
+                                <label class="form-check-label small" for="shiftEditKindWork">出勤</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="shiftEditKind" id="shiftEditKindOff" value="off">
+                                <label class="form-check-label small" for="shiftEditKindOff">休み</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditStart" class="form-label small mb-1">開始</label>
+                        <input type="time" id="shiftEditStart" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditEnd" class="form-label small mb-1">終了</label>
+                        <input type="time" id="shiftEditEnd" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditOffKind" class="form-label small mb-1">休み区分</label>
+                        <select id="shiftEditOffKind" class="form-select form-select-sm">
+                            <option value="">(未選択)</option>
+                            <option value="OFF">公休（手入力）</option>
+                            <option value="REQUEST">希望休</option>
+                            <option value="PAID">有給</option>
+                        </select>
+                    </div>
+                    <div class="small text-muted">出勤は時間必須、休みは区分必須です。</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="shiftEditClearRequestBtn">手入力取り消し</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="shiftEditSaveBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Chart.js for plotting -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let optimizationTicket = null;
         let statusCheckInterval = null;
+        let activeShiftCell = null;
         
         // 店舗選択が変更されたときの処理（自動送信は無効化）
         document.addEventListener('DOMContentLoaded', function() {
@@ -529,6 +660,7 @@
             const clearAssignmentBtn = document.getElementById('clearAssignmentBtn');
             if (clearAttendanceBtn) clearAttendanceBtn.addEventListener('click', clearAttendance);
             if (clearAssignmentBtn) clearAssignmentBtn.addEventListener('click', clearAssignment);
+            setupShiftEditor();
         });
         
         function startOptimization(stage) {
@@ -760,6 +892,192 @@
             document.getElementById('optimizationError').style.display = 'block';
             document.getElementById('errorMessage').textContent = message;
             document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+
+        function setupShiftEditor() {
+            const modalEl = document.getElementById('shiftEditModal');
+            if (!modalEl) return;
+            const modal = new bootstrap.Modal(modalEl);
+            const saveBtn = document.getElementById('shiftEditSaveBtn');
+            const clearRequestBtn = document.getElementById('shiftEditClearRequestBtn');
+            const startInput = document.getElementById('shiftEditStart');
+            const endInput = document.getElementById('shiftEditEnd');
+            const offKindSelect = document.getElementById('shiftEditOffKind');
+            const kindWork = document.getElementById('shiftEditKindWork');
+            const kindOff = document.getElementById('shiftEditKindOff');
+            const empLabel = document.getElementById('shiftEditEmployee');
+            const dateLabel = document.getElementById('shiftEditDate');
+            const empCodeInput = document.getElementById('shiftEditEmployeeCode');
+            const dateInput = document.getElementById('shiftEditDateValue');
+
+            function syncKindInputs() {
+                const isWork = kindWork.checked;
+                startInput.disabled = !isWork;
+                endInput.disabled = !isWork;
+                offKindSelect.disabled = isWork;
+                if (isWork) {
+                    offKindSelect.value = '';
+                } else {
+                    startInput.value = '';
+                    endInput.value = '';
+                }
+            }
+
+            kindWork.addEventListener('change', syncKindInputs);
+            kindOff.addEventListener('change', syncKindInputs);
+
+            document.querySelectorAll('td.shift-cell[data-editable="true"]').forEach(cell => {
+                cell.addEventListener('click', () => {
+                    activeShiftCell = cell;
+                    const employeeCode = cell.dataset.employeeCode || '';
+                    const employeeName = cell.dataset.employeeName || '';
+                    const date = cell.dataset.date || '';
+                    empLabel.textContent = `${employeeName} (${employeeCode})`;
+                    dateLabel.textContent = date;
+                    empCodeInput.value = employeeCode;
+                    dateInput.value = date;
+                    startInput.value = cell.dataset.start || '';
+                    endInput.value = cell.dataset.end || '';
+                    offKindSelect.value = cell.dataset.offKind || '';
+                    if (startInput.value && endInput.value) {
+                        kindWork.checked = true;
+                        kindOff.checked = false;
+                    } else {
+                        kindWork.checked = false;
+                        kindOff.checked = true;
+                    }
+                    syncKindInputs();
+                    modal.show();
+                });
+            });
+
+            clearRequestBtn.addEventListener('click', () => clearEmployeeRequest(modal));
+            saveBtn.addEventListener('click', () => saveShiftEdit(modal));
+        }
+
+        function saveShiftEdit(modal) {
+            const storeCode = document.getElementById('storeCode').value;
+            const employeeCode = document.getElementById('shiftEditEmployeeCode').value;
+            const date = document.getElementById('shiftEditDateValue').value;
+            const startTime = document.getElementById('shiftEditStart').value;
+            const endTime = document.getElementById('shiftEditEnd').value;
+            const offKind = document.getElementById('shiftEditOffKind').value;
+            const kind = document.querySelector('input[name="shiftEditKind"]:checked')?.value || 'work';
+
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+            if (kind === 'work') {
+                if (!startTime || !endTime) {
+                    alert('開始・終了を入力してください。');
+                    return;
+                }
+                if (endTime <= startTime) {
+                    alert('終了時刻は開始時刻より後にしてください。');
+                    return;
+                }
+                if (offKind) {
+                    alert('出勤の場合は休み区分を空にしてください。');
+                    return;
+                }
+            } else {
+                if (!offKind) {
+                    alert('休み区分を選択してください。');
+                    return;
+                }
+                if (startTime || endTime) {
+                    alert('休みの場合は開始・終了を空にしてください。');
+                    return;
+                }
+            }
+
+            const payload = { storeCode, employeeCode, date, startTime, endTime, offKind };
+            fetch('/shift/api/calc/shifts/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(json => {
+                if (!json.success) {
+                    throw new Error(json.message || '保存に失敗しました');
+                }
+                if (activeShiftCell) {
+                    activeShiftCell.dataset.manualEdit = kind === 'work' ? 'true' : 'false';
+                    activeShiftCell.dataset.offKind = offKind || '';
+                    renderShiftCell(activeShiftCell, startTime, endTime);
+                }
+                modal.hide();
+            })
+            .catch(err => {
+                alert('保存に失敗しました: ' + err.message);
+            });
+        }
+
+        function renderShiftCell(cell, startTime, endTime) {
+            cell.dataset.start = startTime || '';
+            cell.dataset.end = endTime || '';
+            cell.classList.remove('shift-off-request', 'shift-off-paid', 'shift-off-public-auto', 'shift-off-public-manual', 'shift-manual-attendance');
+            const isManual = cell.dataset.manualEdit === 'true';
+            if (startTime && endTime) {
+                if (isManual) {
+                    cell.classList.add('shift-manual-attendance');
+                }
+                cell.innerHTML = `<div><span class="shift-time">${startTime} ~ ${endTime}</span></div>`;
+                return;
+            }
+            const offKind = cell.dataset.offKind || '';
+            let label = '公休';
+            let offClass = 'shift-off-public-auto';
+            if (offKind === 'REQUEST') {
+                label = '希望休';
+                offClass = 'shift-off-request';
+            } else if (offKind === 'PAID') {
+                label = '有給';
+                offClass = 'shift-off-paid';
+            } else if (offKind === 'OFF') {
+                label = '公休';
+                offClass = 'shift-off-public-manual';
+            }
+            cell.classList.add(offClass);
+            cell.innerHTML = `<div><span>${label}</span></div>`;
+        }
+
+        function clearEmployeeRequest(modal) {
+            const storeCode = document.getElementById('storeCode').value;
+            const employeeCode = document.getElementById('shiftEditEmployeeCode').value;
+            const date = document.getElementById('shiftEditDateValue').value;
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+
+            fetch('/shift/api/employee-request/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ storeCode, employeeCode, date })
+            })
+            .then(res => res.json())
+            .then(json => {
+                if (!json.success) {
+                    throw new Error(json.message || '削除に失敗しました');
+                }
+                if (activeShiftCell) {
+                    activeShiftCell.dataset.offKind = '';
+                    activeShiftCell.dataset.manualEdit = 'false';
+                    activeShiftCell.dataset.start = '';
+                    activeShiftCell.dataset.end = '';
+                    renderShiftCell(activeShiftCell, '', '');
+                }
+                document.getElementById('shiftEditStart').value = '';
+                document.getElementById('shiftEditEnd').value = '';
+                document.getElementById('shiftEditOffKind').value = '';
+                modal.hide();
+            })
+            .catch(err => {
+                alert('削除に失敗しました: ' + err.message);
+            });
         }
         
         function showConstraintViolationError(violationMessages) {

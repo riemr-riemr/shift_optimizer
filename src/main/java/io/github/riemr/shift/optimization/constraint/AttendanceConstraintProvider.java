@@ -8,6 +8,7 @@ import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
 import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.util.OffRequestKinds;
 import org.optaplanner.core.api.score.stream.tri.TriConstraintStream;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
@@ -96,10 +97,10 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter(e -> e.getAssignedEmployee() != null)
                 .join(EmployeeRequest.class,
                         Joiners.equal(e -> e.getAssignedEmployee().getEmployeeCode(), EmployeeRequest::getEmployeeCode),
-                        Joiners.filtering((e, r) -> "off".equalsIgnoreCase(r.getRequestKind())
+                        Joiners.filtering((e, r) -> OffRequestKinds.isDayOff(r.getRequestKind())
                                 && toLocalDateSafe(r.getRequestDate()).equals(e.getDate())))
                 .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Requested day off");
+                .asConstraint("Requested time off");
     }
 
     /**

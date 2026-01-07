@@ -19,6 +19,7 @@ import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeRequestMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
 import io.github.riemr.shift.application.dto.DemandIntervalDto;
@@ -29,12 +30,15 @@ import io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster;
 import io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
+import io.github.riemr.shift.application.dto.ShiftAttendanceSaveRequest;
+import io.github.riemr.shift.application.dto.EmployeeRequestDeleteRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster;
+import io.github.riemr.shift.util.OffRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -77,6 +81,7 @@ public class ShiftCalcController {
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
+    private final EmployeeRequestMapper employeeRequestMapper;
     private final EmployeeMapper employeeMapper;
     private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final StoreDepartmentMapper storeDepartmentMapper;
@@ -309,7 +314,8 @@ public class ShiftCalcController {
                     s.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime(),
                     null,
                     code,
-                    name
+                    name,
+                    "manual_edit".equalsIgnoreCase(s.getCreatedBy())
             ));
         }
         return out;
@@ -521,6 +527,30 @@ public class ShiftCalcController {
         }
     }
 
+    @PostMapping("/api/calc/shifts/save")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> saveShiftAttendance(@RequestBody ShiftAttendanceSaveRequest request) {
+        try {
+            service.saveShiftAttendanceChange(request);
+            return Map.of("success", true, "message", "変更が保存されました");
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "保存中にエラーが発生しました: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/api/employee-request/delete")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> deleteEmployeeRequest(@RequestBody EmployeeRequestDeleteRequest request) {
+        try {
+            int deleted = service.deleteEmployeeRequestForDate(request.storeCode(), request.employeeCode(), request.date());
+            return Map.of("success", true, "deleted", deleted);
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "削除中にエラーが発生しました: " + e.getMessage());
+        }
+    }
+
     @PostMapping("/api/clear/attendance")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
@@ -589,6 +619,7 @@ public class ShiftCalcController {
             List<EmployeeInfo> employees = new ArrayList<>();
             Map<String, List<ShiftInfo>> employeeShifts = Map.of();
             Map<String, Double> employeeMonthlyHours = new HashMap<>();
+            Map<String, String> employeeOffKinds = new HashMap<>();
             
             if (monthlyAssignments != null && !monthlyAssignments.isEmpty()) {
                 final String finalStoreCode = storeCode; // Make effectively final for lambda
@@ -637,7 +668,8 @@ public class ShiftCalcController {
                         assignment -> assignment.employeeCode() + "_" + assignment.date().toString(),
                         Collectors.mapping(assignment -> new ShiftInfo(
                             assignment.startAt().format(DateTimeFormatter.ofPattern("HH:mm")),
-                            assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm"))
+                            assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm")),
+                            assignment.manualEdit()
                         ), Collectors.toList())
                     ));
 
@@ -652,6 +684,24 @@ public class ShiftCalcController {
                         })
                     ));
                 minutesByEmp.forEach((code, minutes) -> employeeMonthlyHours.put(code, minutes / 60.0));
+
+                if (finalStoreCode != null && !finalStoreCode.isEmpty() && !employees.isEmpty()) {
+                    LocalDate cycleEndForOff = cycleStart.plusMonths(1);
+                    Set<String> employeeCodesForOff = employees.stream()
+                        .map(EmployeeInfo::employeeCode)
+                        .collect(Collectors.toSet());
+                    employeeRequestMapper.selectByDateRange(cycleStart, cycleEndForOff).stream()
+                        .filter(req -> req != null && req.getRequestDate() != null)
+                        .filter(req -> finalStoreCode.equals(req.getStoreCode()))
+                        .filter(req -> employeeCodesForOff.contains(req.getEmployeeCode()))
+                        .forEach(req -> {
+                            String normalized = OffRequestKinds.normalize(req.getRequestKind());
+                            if (normalized == null) return;
+                            LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                            String key = req.getEmployeeCode() + "_" + d.toString();
+                            employeeOffKinds.put(key, normalized);
+                        });
+                }
             }
 
             // 日別人員配置サマリーを取得
@@ -697,6 +747,7 @@ public class ShiftCalcController {
             model.addAttribute("employees", employees);
             model.addAttribute("employeeShifts", employeeShifts);
             model.addAttribute("employeeMonthlyHours", employeeMonthlyHours);
+            model.addAttribute("employeeOffKinds", employeeOffKinds);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
             
             return "shift/monthly-shift";
@@ -742,16 +793,20 @@ public class ShiftCalcController {
     public static class ShiftInfo {
         private final String startTime;
         private final String endTime;
+        private final boolean manualEdit;
         
-        public ShiftInfo(String startTime, String endTime) {
+        public ShiftInfo(String startTime, String endTime, boolean manualEdit) {
             this.startTime = startTime;
             this.endTime = endTime;
+            this.manualEdit = manualEdit;
         }
         
         public String getStartTime() { return startTime; }
         public String getEndTime() { return endTime; }
+        public boolean getManualEdit() { return manualEdit; }
         public String startTime() { return startTime; }
         public String endTime() { return endTime; }
+        public boolean manualEdit() { return manualEdit; }
     }
     
     // 内部クラスで日別人員配置サマリーを定義

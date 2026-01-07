@@ -263,6 +263,14 @@
       and store_code = #{storeCode}
   </delete>
 
+  <delete id="deleteByEmployeeAndDateRange">
+    delete from public.shift_assignment
+    where store_code = #{storeCode}
+      and employee_code = #{employeeCode}
+      and start_at &gt;= #{from}
+      and start_at &lt; #{to}
+  </delete>
+
   <!-- Count overlaps for an employee in [startAt, endAt) (register assignments) -->
   <select id="countOverlaps" resultType="long">
     select count(*)

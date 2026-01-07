@@ -10,6 +10,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.sql.Time;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +46,7 @@ import io.github.riemr.shift.application.dto.ShiftAssignmentView;
 import io.github.riemr.shift.application.dto.SolveStatusDto;
 import io.github.riemr.shift.application.dto.SolveTicket;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
+import io.github.riemr.shift.application.dto.ShiftAttendanceSaveRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.RegisterAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import io.github.riemr.shift.infrastructure.mapper.RegisterAssignmentMapper;
@@ -64,6 +66,10 @@ import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPatt
 import io.github.riemr.shift.optimization.entity.WorkKind;
 import io.github.riemr.shift.optimization.entity.BreakAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
+import io.github.riemr.shift.util.OffRequestKinds;
+import io.github.riemr.shift.util.EmployeeRequestKinds;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeRequestMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -89,6 +95,7 @@ public class ShiftScheduleService {
     private final RegisterAssignmentMapper registerAssignmentMapper;
     private final ShiftAssignmentMapper shiftAssignmentMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
+    private final EmployeeRequestMapper employeeRequestMapper;
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
     private final AppSettingService appSettingService;
@@ -673,7 +680,8 @@ public class ShiftScheduleService {
                             toLocalDateTime(t.getEndAt()),
                             null,
                             t.getEmployeeCode(),
-                            Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                            Optional.ofNullable(t.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse(""),
+                            false
                     ))
                     .toList();
         } else {
@@ -688,7 +696,8 @@ public class ShiftScheduleService {
                             toLocalDateTime(a.getEndAt()),
                             a.getRegisterNo(),
                             a.getEmployeeCode(),
-                            Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                            Optional.ofNullable(a.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse(""),
+                            false
                     ))
                     .toList();
         }
@@ -736,7 +745,8 @@ public class ShiftScheduleService {
                         toLocalDateTime(s.getEndAt()),
                         null, // No register for shift assignments
                         s.getEmployeeCode(),
-                        Optional.ofNullable(s.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse("")
+                        Optional.ofNullable(s.getEmployeeCode()).map(code -> nameMap.getOrDefault(code, "")).orElse(""),
+                        "manual_edit".equalsIgnoreCase(s.getCreatedBy())
                 ))
                 .toList();
     }
@@ -923,6 +933,112 @@ public class ShiftScheduleService {
         log.info("Saved {} shift assignment changes for date {}", request.changes().size(), date);
     }
 
+    /**
+     * 月次シフト（出勤）を1日単位で保存する。
+     *
+     * @param request シフト変更リクエスト
+     */
+    @Transactional
+    public void saveShiftAttendanceChange(ShiftAttendanceSaveRequest request) {
+        String storeCode = request.storeCode();
+        String employeeCode = request.employeeCode();
+        LocalDate date = request.date();
+        if (storeCode == null || storeCode.isBlank()) {
+            throw new IllegalArgumentException("storeCode is required");
+        }
+        if (employeeCode == null || employeeCode.isBlank()) {
+            throw new IllegalArgumentException("employeeCode is required");
+        }
+        if (date == null) {
+            throw new IllegalArgumentException("date is required");
+        }
+
+        ZoneId zone = ZoneId.systemDefault();
+        Date dayStart = Date.from(date.atStartOfDay(zone).toInstant());
+        Date dayEnd = Date.from(date.plusDays(1).atStartOfDay(zone).toInstant());
+        shiftAssignmentMapper.deleteByEmployeeAndDateRange(storeCode, employeeCode, dayStart, dayEnd);
+
+        String normalizedOffKind = OffRequestKinds.normalize(request.offKind());
+        employeeRequestMapper.deleteByEmployeeAndDate(storeCode, employeeCode, date);
+
+        String startTime = request.startTime();
+        String endTime = request.endTime();
+        if ((startTime == null || startTime.isBlank()) && (endTime == null || endTime.isBlank())) {
+            if (normalizedOffKind != null) {
+                EmployeeRequest newRequest = new EmployeeRequest();
+                newRequest.setStoreCode(storeCode);
+                newRequest.setEmployeeCode(employeeCode);
+                newRequest.setRequestDate(Date.from(date.atStartOfDay(zone).toInstant()));
+                newRequest.setRequestKind(normalizedOffKind);
+                newRequest.setNote(resolveOffNote(normalizedOffKind));
+                newRequest.setPriority(2);
+                employeeRequestMapper.insert(newRequest);
+            }
+            return;
+        }
+        if (startTime == null || startTime.isBlank() || endTime == null || endTime.isBlank()) {
+            throw new IllegalArgumentException("startTime and endTime are required");
+        }
+        if (normalizedOffKind != null) {
+            throw new IllegalArgumentException("offKind requires empty start/end time");
+        }
+
+        LocalTime start = LocalTime.parse(startTime);
+        LocalTime end = LocalTime.parse(endTime);
+        if (!end.isAfter(start)) {
+            throw new IllegalArgumentException("endTime must be after startTime");
+        }
+        int slotMinutes = appSettingService.getTimeResolutionMinutes();
+        if (start.getMinute() % slotMinutes != 0 || end.getMinute() % slotMinutes != 0) {
+            throw new IllegalArgumentException("time must be aligned to " + slotMinutes + " minutes");
+        }
+
+        LocalDateTime startDateTime = date.atTime(start);
+        LocalDateTime endDateTime = date.atTime(end);
+        ShiftAssignment assignment = new ShiftAssignment();
+        assignment.setStoreCode(storeCode);
+        assignment.setEmployeeCode(employeeCode);
+        assignment.setStartAt(Date.from(startDateTime.atZone(zone).toInstant()));
+        assignment.setEndAt(Date.from(endDateTime.atZone(zone).toInstant()));
+        assignment.setCreatedBy("manual_edit");
+        shiftAssignmentMapper.insert(assignment);
+
+        EmployeeRequest preferOnRequest = new EmployeeRequest();
+        preferOnRequest.setStoreCode(storeCode);
+        preferOnRequest.setEmployeeCode(employeeCode);
+        preferOnRequest.setRequestDate(Date.from(date.atStartOfDay(zone).toInstant()));
+        preferOnRequest.setFromTime(Time.valueOf(start));
+        preferOnRequest.setToTime(Time.valueOf(end));
+        preferOnRequest.setRequestKind(EmployeeRequestKinds.PREFER_ON);
+        preferOnRequest.setNote("出勤希望");
+        preferOnRequest.setPriority(2);
+        employeeRequestMapper.insert(preferOnRequest);
+    }
+
+    @Transactional
+    public int deleteEmployeeRequestForDate(String storeCode, String employeeCode, LocalDate date) {
+        if (storeCode == null || storeCode.isBlank()) {
+            throw new IllegalArgumentException("storeCode is required");
+        }
+        if (employeeCode == null || employeeCode.isBlank()) {
+            throw new IllegalArgumentException("employeeCode is required");
+        }
+        if (date == null) {
+            throw new IllegalArgumentException("date is required");
+        }
+        ZoneId zone = ZoneId.systemDefault();
+        Date dayStart = Date.from(date.atStartOfDay(zone).toInstant());
+        Date dayEnd = Date.from(date.plusDays(1).atStartOfDay(zone).toInstant());
+        shiftAssignmentMapper.deleteByEmployeeAndDateRange(storeCode, employeeCode, dayStart, dayEnd);
+        return employeeRequestMapper.deleteByEmployeeAndDate(storeCode, employeeCode, date);
+    }
+
+    private String resolveOffNote(String kind) {
+        if (OffRequestKinds.PAID.equals(kind)) return "有給";
+        if (OffRequestKinds.OFF.equals(kind)) return "公休";
+        return "希望休";
+    }
+
     /* ===================================================================== */
     /* Callback for solveAndListen                                            */
     /* ===================================================================== */
@@ -1100,12 +1216,10 @@ public class ShiftScheduleService {
         // インデックス化
         Map<String, Set<LocalDate>> offDatesByEmp = new HashMap<>();
         for (var r : requests) {
-            if (r.getRequestKind() == null) continue;
-            String kind = r.getRequestKind().toLowerCase();
-            if ("off".equals(kind) || "paid_leave".equals(kind)) {
-                LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
-            }
+            String normalized = OffRequestKinds.normalize(r.getRequestKind());
+            if (normalized == null) continue;
+            LocalDate d = r.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            offDatesByEmp.computeIfAbsent(r.getEmployeeCode(), k -> new HashSet<>()).add(d);
         }
         Map<String, Set<Integer>> weeklyOffByEmp = new HashMap<>();
         Map<String, Map<Integer, EmployeeWeeklyPreference>> weeklyPrefByEmpDow = new HashMap<>();
@@ -1405,7 +1519,7 @@ public class ShiftScheduleService {
 
         Map<String, Set<LocalDate>> dayOffByEmp = new HashMap<>();
         for (var req : Optional.ofNullable(s.getEmployeeRequestList()).orElse(List.of())) {
-            if ("off".equalsIgnoreCase(req.getRequestKind())) {
+            if (OffRequestKinds.isDayOff(req.getRequestKind())) {
                 String emp = req.getEmployeeCode();
                 LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
                 dayOffByEmp.computeIfAbsent(emp, k -> new HashSet<>()).add(d);
@@ -1485,9 +1599,9 @@ public class ShiftScheduleService {
             return;
         }
         
-        // 日付ごとの希望休者数をカウント
+        // 日付ごとの休み申請者数をカウント
         Map<LocalDate, Long> dayOffCounts = schedule.getEmployeeRequestList().stream()
-            .filter(req -> "off".equalsIgnoreCase(req.getRequestKind()))
+            .filter(req -> OffRequestKinds.isDayOff(req.getRequestKind()))
             .collect(Collectors.groupingBy(
                 req -> req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
                 Collectors.counting()
@@ -1497,10 +1611,10 @@ public class ShiftScheduleService {
         
         dayOffCounts.forEach((date, count) -> {
             if (count >= totalEmployees) {
-                log.warn("⚠️ FEASIBILITY WARNING: All {} employees have requested day off on {}. " +
+                log.warn("⚠️ FEASIBILITY WARNING: All {} employees have requested time off on {}. " +
                         "Hard constraints will be violated!", count, date);
             } else if (count > totalEmployees * 0.8) {
-                log.warn("⚠️ FEASIBILITY WARNING: {}% of employees ({}/{}) have requested day off on {}. " +
+                log.warn("⚠️ FEASIBILITY WARNING: {}% of employees ({}/{}) have requested time off on {}. " +
                         "Optimal solution may be difficult to find.", 
                         Math.round(count * 100.0 / totalEmployees), count, totalEmployees, date);
             }
@@ -1515,7 +1629,7 @@ public class ShiftScheduleService {
             return;
         }
         
-        // 希望休違反の分析
+        // 休み違反の分析
         Map<LocalDate, List<String>> dayOffViolations = new HashMap<>();
         
         // 割り当てられた従業員の希望休チェック
@@ -1525,11 +1639,11 @@ public class ShiftScheduleService {
                 String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
                 LocalDate shiftDate = assignment.getShiftDate();
                 
-                // この従業員がこの日に希望休を出していないかチェック
+                // この従業員がこの日に休みを出していないかチェック
                 boolean hasRequestedOff = schedule.getEmployeeRequestList().stream()
                     .anyMatch(req -> 
                         employeeCode.equals(req.getEmployeeCode()) &&
-                        "off".equalsIgnoreCase(req.getRequestKind()) &&
+                        OffRequestKinds.isDayOff(req.getRequestKind()) &&
                         shiftDate.equals(req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate())
                     );
                 
@@ -1538,18 +1652,18 @@ public class ShiftScheduleService {
                 }
             });
         
-        // 希望休違反の詳細報告
+        // 休み違反の詳細報告
         if (!dayOffViolations.isEmpty()) {
-            log.error("🔴 REQUESTED DAY OFF VIOLATIONS:");
+            log.error("🔴 TIME OFF VIOLATIONS:");
             dayOffViolations.forEach((date, employees) -> {
-                log.error("  📅 {}: {} employees assigned despite requesting day off: {}", 
+                log.error("  📅 {}: {} employees assigned despite requesting time off: {}", 
                          date, employees.size(), String.join(", ", employees));
             });
             
             // 改善提案
             log.error("💡 IMPROVEMENT SUGGESTIONS:");
-            log.error("  1. Remove day-off requests for the dates above");
-            log.error("  2. Or ensure minimum staffing by removing some day-off requests");
+            log.error("  1. Remove time-off requests for the dates above");
+            log.error("  2. Or ensure minimum staffing by removing some time-off requests");
             log.error("  3. Consider closing the store on days when all employees request time off");
         }
         
@@ -1575,7 +1689,7 @@ public class ShiftScheduleService {
             return messages;
         }
         
-        // 希望休違反の分析
+        // 休み違反の分析
         Map<LocalDate, List<String>> dayOffViolations = new HashMap<>();
         
         // 割り当てられた従業員の希望休チェック
@@ -1585,11 +1699,11 @@ public class ShiftScheduleService {
                 String employeeCode = assignment.getAssignedEmployee().getEmployeeCode();
                 LocalDate shiftDate = assignment.getShiftDate();
                 
-                // この従業員がこの日に希望休を出していないかチェック
+                // この従業員がこの日に休みを出していないかチェック
                 boolean hasRequestedOff = schedule.getEmployeeRequestList().stream()
                     .anyMatch(req -> 
                         employeeCode.equals(req.getEmployeeCode()) &&
-                        "off".equalsIgnoreCase(req.getRequestKind()) &&
+                        OffRequestKinds.isDayOff(req.getRequestKind()) &&
                         shiftDate.equals(req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate())
                     );
                 
@@ -1598,16 +1712,16 @@ public class ShiftScheduleService {
                 }
             });
         
-        // 希望休違反のメッセージ生成
+        // 休み違反のメッセージ生成
         if (!dayOffViolations.isEmpty()) {
-            messages.add("⚠️ 希望休違反が検出されました");
+            messages.add("⚠️ 休み違反が検出されました");
             dayOffViolations.forEach((date, employees) -> {
-                messages.add(String.format("📅 %s: %d名が希望休にも関わらず割り当てられています", 
+                messages.add(String.format("📅 %s: %d名が休み申請にも関わらず割り当てられています", 
                            date, employees.size()));
             });
             
             messages.add("💡 改善方法:");
-            messages.add("• 最低限の人員確保のため一部の希望休を調整する");
+            messages.add("• 最低限の人員確保のため一部の休み申請を調整する");
         }
         
         // スキルレベル違反の分析

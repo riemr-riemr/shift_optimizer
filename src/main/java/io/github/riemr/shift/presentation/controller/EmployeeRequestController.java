@@ -6,6 +6,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRequestMapper;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
+import io.github.riemr.shift.util.OffRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -39,14 +40,14 @@ class BatchSaveRequest {
 class ChangeRequest {
     private String employeeCode;
     private String date;
-    private String state;
+    private String kind;
     
     public String getEmployeeCode() { return employeeCode; }
     public void setEmployeeCode(String employeeCode) { this.employeeCode = employeeCode; }
     public String getDate() { return date; }
     public void setDate(String date) { this.date = date; }
-    public String getState() { return state; }
-    public void setState(String state) { this.state = state; }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
 }
 
 @Slf4j
@@ -118,18 +119,21 @@ public class EmployeeRequestController {
                 .filter(r -> r != null)
                 .filter(r -> r.getRequestDate() != null)
                 .filter(r -> employeeCodeSet.contains(r.getEmployeeCode()))
-                .filter(r -> "off".equalsIgnoreCase(r.getRequestKind()))
+                .filter(r -> OffRequestKinds.isDayOff(r.getRequestKind()))
                 .collect(Collectors.groupingBy(EmployeeRequest::getEmployeeCode));
             log.info("Organized requests for {} employees", employeeRequestsMap.size());
             
-            // カレンダー表示用のデータを作成（Set形式で高速化）
-            Map<String, List<Integer>> employeeDayOffMap = new HashMap<>();
+            // カレンダー表示用のデータを作成
+            Map<String, Map<Integer, String>> employeeDayOffKindMap = new HashMap<>();
             for (Map.Entry<String, List<EmployeeRequest>> entry : employeeRequestsMap.entrySet()) {
-                List<Integer> dayOffList = entry.getValue().stream()
-                    .map(request -> toLocalDate(request.getRequestDate()).getDayOfMonth())
-                    .sorted()
-                    .collect(Collectors.toList());
-                employeeDayOffMap.put(entry.getKey(), dayOffList);
+                Map<Integer, String> dayKindMap = new HashMap<>();
+                for (EmployeeRequest req : entry.getValue()) {
+                    String normalized = OffRequestKinds.normalize(req.getRequestKind());
+                    if (normalized == null) continue;
+                    int day = toLocalDate(req.getRequestDate()).getDayOfMonth();
+                    dayKindMap.put(day, normalized);
+                }
+                employeeDayOffKindMap.put(entry.getKey(), dayKindMap);
             }
 
             // 基本属性をモデルに追加
@@ -138,7 +142,7 @@ public class EmployeeRequestController {
             model.addAttribute("daysInMonth", yearMonth.lengthOfMonth());
             model.addAttribute("stores", stores);
             model.addAttribute("employees", employees);
-            model.addAttribute("employeeDayOffMap", employeeDayOffMap);
+            model.addAttribute("employeeDayOffKindMap", employeeDayOffKindMap);
             model.addAttribute("selectedEmployeeCode", employeeCode);
             model.addAttribute("selectedStoreCode", storeCode);
             
@@ -158,7 +162,8 @@ public class EmployeeRequestController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
     @ResponseBody
     public String toggleDayOff(@RequestParam String employeeCode,
-                              @RequestParam String date) {
+                              @RequestParam String date,
+                              @RequestParam(required = false) String kind) {
         try {
             log.info("toggleDayOff called with employeeCode: {}, date: {}", employeeCode, date);
             
@@ -170,41 +175,30 @@ public class EmployeeRequestController {
                 employeeCode, requestDate);
             log.info("Existing request: {}", existingRequest != null ? "found" : "not found");
             
-            if (existingRequest != null) {
-                // 既存の希望休を削除
-                log.info("Deleting existing request with ID: {}", existingRequest.getRequestId());
-                employeeRequestMapper.deleteById(existingRequest.getRequestId());
-                return "removed";
-            } else {
-                // 新しい希望休を追加
-                log.info("Creating new request for employee: {}", employeeCode);
-                
-                // storeCode を従業員マスタから補完（NOT NULL 制約対策）
-                Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
-                log.info("Employee lookup result: {}", emp != null ? "found" : "not found");
-                
-                if (emp != null && emp.getStoreCode() != null) {
-                    log.info("Employee storeCode: {}", emp.getStoreCode());
-                    
-                    EmployeeRequest newRequest = new EmployeeRequest();
-                    newRequest.setEmployeeCode(employeeCode);
-                    newRequest.setRequestDate(toDate(requestDate));
-                    newRequest.setRequestKind("off");
-                    newRequest.setNote("希望休");
-                    newRequest.setStoreCode(emp.getStoreCode());
-                    newRequest.setPriority(2); // デフォルト優先度を設定（NOT NULL制約対策）
-                    
-                    log.info("Inserting new request: employeeCode={}, storeCode={}, date={}, kind={}", 
-                            newRequest.getEmployeeCode(), newRequest.getStoreCode(), 
-                            newRequest.getRequestDate(), newRequest.getRequestKind());
-                    
-                    employeeRequestMapper.insert(newRequest);
-                    log.info("Successfully inserted new request");
-                    return "added";
-                } else {
-                    log.error("Employee not found or storeCode is null for employeeCode: {}", employeeCode);
-                    return "error: 従業員情報が見つからないか、店舗情報が不正です";
+            String normalized = OffRequestKinds.normalize(kind);
+            if (normalized == null) {
+                if (existingRequest != null) {
+                    log.info("Deleting existing request with ID: {}", existingRequest.getRequestId());
+                    employeeRequestMapper.deleteById(existingRequest.getRequestId());
+                    return "removed";
                 }
+                normalized = OffRequestKinds.REQUEST;
+            }
+
+            if (existingRequest != null) {
+                employeeRequestMapper.deleteById(existingRequest.getRequestId());
+            }
+
+            Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
+            log.info("Employee lookup result: {}", emp != null ? "found" : "not found");
+            if (emp != null && emp.getStoreCode() != null) {
+                EmployeeRequest newRequest = buildRequest(employeeCode, requestDate, normalized, emp.getStoreCode());
+                employeeRequestMapper.insert(newRequest);
+                log.info("Successfully inserted new request");
+                return "added";
+            } else {
+                log.error("Employee not found or storeCode is null for employeeCode: {}", employeeCode);
+                return "error: 従業員情報が見つからないか、店舗情報が不正です";
             }
         } catch (Exception e) {
             log.error("Error in toggleDayOff: ", e);
@@ -222,9 +216,9 @@ public class EmployeeRequestController {
             for (ChangeRequest change : request.getChanges()) {
                 String employeeCode = change.getEmployeeCode();
                 String date = change.getDate();
-                String state = change.getState();
+                String kind = change.getKind();
                 
-                log.info("Processing change: employee={}, date={}, state={}", employeeCode, date, state);
+                log.info("Processing change: employee={}, date={}, kind={}", employeeCode, date, kind);
                 
                 LocalDate requestDate = LocalDate.parse(date);
                 
@@ -232,28 +226,22 @@ public class EmployeeRequestController {
                 EmployeeRequest existingRequest = employeeRequestMapper.selectByEmployeeAndDate(
                     employeeCode, requestDate);
                 
-                // state: 'on' = 希望休あり, 'off' = 希望休なし
-                if ("on".equals(state)) {
-                    // 希望休を追加
-                    if (existingRequest == null) {
-                        Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
-                        if (emp != null && emp.getStoreCode() != null) {
-                            EmployeeRequest newRequest = new EmployeeRequest();
-                            newRequest.setEmployeeCode(employeeCode);
-                            newRequest.setRequestDate(toDate(requestDate));
-                            newRequest.setRequestKind("off");
-                            newRequest.setNote("希望休");
-                            newRequest.setStoreCode(emp.getStoreCode());
-                            newRequest.setPriority(2);
-                            
-                            employeeRequestMapper.insert(newRequest);
-                        }
-                    }
-                } else if ("off".equals(state)) {
-                    // 希望休を削除
+                String normalized = OffRequestKinds.normalize(kind);
+                if (normalized == null) {
                     if (existingRequest != null) {
                         employeeRequestMapper.deleteById(existingRequest.getRequestId());
                     }
+                    continue;
+                }
+
+                if (existingRequest != null) {
+                    employeeRequestMapper.deleteById(existingRequest.getRequestId());
+                }
+
+                Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
+                if (emp != null && emp.getStoreCode() != null) {
+                    EmployeeRequest newRequest = buildRequest(employeeCode, requestDate, normalized, emp.getStoreCode());
+                    employeeRequestMapper.insert(newRequest);
                 }
             }
             
@@ -282,7 +270,7 @@ public class EmployeeRequestController {
                 .selectByEmployeeAndDateRange(employeeCode, fromDate, toDate);
             
             for (EmployeeRequest request : existingRequests) {
-                if ("off".equalsIgnoreCase(request.getRequestKind())) {
+                if (OffRequestKinds.isDayOff(request.getRequestKind())) {
                     employeeRequestMapper.deleteById(request.getRequestId());
                 }
             }
@@ -292,25 +280,17 @@ public class EmployeeRequestController {
                 for (String dateStr : selectedDates) {
                     LocalDate requestDate = LocalDate.parse(dateStr);
                     
-                    EmployeeRequest newRequest = new EmployeeRequest();
-                    newRequest.setEmployeeCode(employeeCode);
-                    newRequest.setRequestDate(toDate(requestDate));
-                    newRequest.setRequestKind("off");
-                    newRequest.setNote("希望休");
-                    newRequest.setPriority(2); // デフォルト優先度を設定（NOT NULL制約対策）
-                    
                     // storeCode を従業員マスタから補完
                     Employee empForInsert = employeeMapper.selectByPrimaryKey(employeeCode);
                     if (empForInsert != null && empForInsert.getStoreCode() != null) {
-                        newRequest.setStoreCode(empForInsert.getStoreCode());
+                        EmployeeRequest newRequest = buildRequest(employeeCode, requestDate, OffRequestKinds.REQUEST, empForInsert.getStoreCode());
+                        employeeRequestMapper.insert(newRequest);
                     } else {
                         log.error("Employee not found or storeCode is null for employeeCode: {} in bulkSave", employeeCode);
                         redirectAttributes.addFlashAttribute("error", 
                             "従業員情報が見つからないか、店舗情報が不正です: " + employeeCode);
                         return "redirect:/employee-requests?targetMonth=" + targetMonth;
                     }
-                    
-                    employeeRequestMapper.insert(newRequest);
                 }
             }
             
@@ -374,6 +354,23 @@ public class EmployeeRequestController {
     // LocalDate to Date 変換ヘルパー
     private Date toDate(LocalDate localDate) {
         return Date.from(localDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+
+    private EmployeeRequest buildRequest(String employeeCode, LocalDate requestDate, String kind, String storeCode) {
+        EmployeeRequest newRequest = new EmployeeRequest();
+        newRequest.setEmployeeCode(employeeCode);
+        newRequest.setRequestDate(toDate(requestDate));
+        newRequest.setRequestKind(kind);
+        newRequest.setNote(resolveNote(kind));
+        newRequest.setStoreCode(storeCode);
+        newRequest.setPriority(2);
+        return newRequest;
+    }
+
+    private String resolveNote(String kind) {
+        if (OffRequestKinds.PAID.equals(kind)) return "有給";
+        if (OffRequestKinds.OFF.equals(kind)) return "公休";
+        return "希望休";
     }
     
     // Date to LocalDate 変換ヘルパー
