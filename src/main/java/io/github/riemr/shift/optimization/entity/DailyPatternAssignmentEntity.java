@@ -8,6 +8,7 @@ import org.optaplanner.core.api.domain.entity.PlanningEntity;
 import org.optaplanner.core.api.domain.lookup.PlanningId;
 import org.optaplanner.core.api.domain.variable.PlanningVariable;
 import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
+import org.optaplanner.core.api.domain.entity.PlanningPin;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -46,6 +47,9 @@ public class DailyPatternAssignmentEntity {
 
     @PlanningVariable(valueRangeProviderRefs = {"eligibleEmployees"}, nullable = true)
     private Employee assignedEmployee; // null = 非出勤
+
+    @PlanningPin
+    private boolean pinned;
 
     public DailyPatternAssignmentEntity() {}
 

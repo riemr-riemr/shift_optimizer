@@ -4,8 +4,10 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlySetting;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
+import io.github.riemr.shift.util.EmployeeRequestKinds;
 import org.optaplanner.core.api.score.director.ScoreDirector;
 import org.optaplanner.core.impl.phase.custom.CustomPhaseCommand;
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.temporal.WeekFields;
 import java.util.*;
@@ -68,6 +71,9 @@ public class AttendanceInitialSolutionBuilder implements CustomPhaseCommand<Atte
         // 従業員別の労働時間を追跡
         Map<String, Map<YearMonth, Integer>> monthlyMinutesByEmployee = new HashMap<>();
         Map<String, Map<LocalDate, Integer>> weeklyMinutesByEmployee = new HashMap<>();
+
+        // 希望（employee_request）を初期解に反映し、変更不可にする
+        applyEmployeeRequests(scoreDirector, solution, monthlyMinutesByEmployee, weeklyMinutesByEmployee);
         
         // 従業員ごとに初期解を生成
         int processedEmployees = 0;
@@ -143,6 +149,7 @@ public class AttendanceInitialSolutionBuilder implements CustomPhaseCommand<Atte
             List<DailyPatternAssignmentEntity> availablePatterns = new ArrayList<>();
             for (List<DailyPatternAssignmentEntity> patterns : dateEntry.getValue().values()) {
                 for (DailyPatternAssignmentEntity pattern : patterns) {
+                    if (pattern.isPinned()) continue;
                     if (pattern.getEligibleEmployees().stream()
                             .anyMatch(e -> empCode.equals(e.getEmployeeCode()))) {
                         availablePatterns.add(pattern);
@@ -183,7 +190,8 @@ public class AttendanceInitialSolutionBuilder implements CustomPhaseCommand<Atte
             Optional<DailyPatternAssignmentEntity> targetPattern = availablePatterns.stream()
                     .filter(ap -> ap.getPatternStart().equals(selectedPattern.getStartTime().toLocalTime()) &&
                                  ap.getPatternEnd().equals(selectedPattern.getEndTime().toLocalTime()) &&
-                                 ap.getAssignedEmployee() == null)
+                                 ap.getAssignedEmployee() == null &&
+                                 !ap.isPinned())
                     .findFirst();
             
             if (targetPattern.isPresent()) {
@@ -278,6 +286,87 @@ public class AttendanceInitialSolutionBuilder implements CustomPhaseCommand<Atte
     
     private int calculatePatternMinutes(DailyPatternAssignmentEntity pattern) {
         return (int) java.time.Duration.between(pattern.getPatternStart(), pattern.getPatternEnd()).toMinutes();
+    }
+
+    private void applyEmployeeRequests(ScoreDirector<AttendanceSolution> scoreDirector,
+                                       AttendanceSolution solution,
+                                       Map<String, Map<YearMonth, Integer>> monthlyMinutesByEmployee,
+                                       Map<String, Map<LocalDate, Integer>> weeklyMinutesByEmployee) {
+        List<EmployeeRequest> requests = Optional.ofNullable(solution.getEmployeeRequestList()).orElse(List.of());
+        if (requests.isEmpty()) return;
+
+        Map<LocalDate, Map<String, List<DailyPatternAssignmentEntity>>> patternsByDateAndTime =
+                solution.getPatternAssignments().stream()
+                        .collect(Collectors.groupingBy(
+                                DailyPatternAssignmentEntity::getDate,
+                                Collectors.groupingBy(p -> p.getPatternStart() + "_" + p.getPatternEnd())
+                        ));
+
+        for (EmployeeRequest request : requests) {
+            if (!isPreferOnRequest(request)) continue;
+            String empCode = request.getEmployeeCode();
+            LocalDate date = toLocalDateSafe(request.getRequestDate());
+            LocalTime from = toLocalTimeSafe(request.getFromTime());
+            LocalTime to = toLocalTimeSafe(request.getToTime());
+            if (empCode == null || date == null || from == null || to == null) continue;
+
+            String key = from + "_" + to;
+            List<DailyPatternAssignmentEntity> candidates = patternsByDateAndTime
+                    .getOrDefault(date, Map.of())
+                    .getOrDefault(key, List.of());
+            if (candidates.isEmpty()) {
+                log.warn("Prefer-on request has no matching pattern: emp={}, date={}, time={}-{}",
+                        empCode, date, from, to);
+                continue;
+            }
+            DailyPatternAssignmentEntity target = candidates.stream()
+                    .filter(p -> p.getEligibleEmployees().stream().anyMatch(e -> empCode.equals(e.getEmployeeCode())))
+                    .filter(p -> p.getAssignedEmployee() == null
+                            || empCode.equals(p.getAssignedEmployee().getEmployeeCode()))
+                    .findFirst()
+                    .orElse(null);
+            if (target == null) {
+                log.warn("Prefer-on request has no eligible slot: emp={}, date={}, time={}-{}",
+                        empCode, date, from, to);
+                continue;
+            }
+
+            var employee = solution.getEmployeeList().stream()
+                    .filter(e -> empCode.equals(e.getEmployeeCode()))
+                    .findFirst()
+                    .orElse(null);
+            if (employee == null) {
+                log.warn("Prefer-on request employee not found in solution: emp={}, date={}, time={}-{}",
+                        empCode, date, from, to);
+                continue;
+            }
+            if (target.getAssignedEmployee() == null || !empCode.equals(target.getAssignedEmployee().getEmployeeCode())) {
+                scoreDirector.beforeVariableChanged(target, "assignedEmployee");
+                target.setAssignedEmployee(employee);
+                scoreDirector.afterVariableChanged(target, "assignedEmployee");
+            }
+            target.setPinned(true);
+
+            int minutes = calculatePatternMinutes(target);
+            updateWorkingHours(empCode, date, minutes, monthlyMinutesByEmployee, weeklyMinutesByEmployee);
+        }
+    }
+
+    private boolean isPreferOnRequest(EmployeeRequest request) {
+        if (request == null || request.getRequestKind() == null) return false;
+        return EmployeeRequestKinds.PREFER_ON.equalsIgnoreCase(request.getRequestKind().trim());
+    }
+
+    private LocalDate toLocalDateSafe(java.util.Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Date) return ((java.sql.Date) date).toLocalDate();
+        return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+    }
+
+    private LocalTime toLocalTimeSafe(java.util.Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Time) return ((java.sql.Time) date).toLocalTime();
+        return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime();
     }
     
     private String getEligibleEmployeeCodesString(DailyPatternAssignmentEntity pattern) {

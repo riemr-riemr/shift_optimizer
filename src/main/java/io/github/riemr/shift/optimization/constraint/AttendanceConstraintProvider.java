@@ -9,6 +9,7 @@ import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.entity.DailyPatternAssignmentEntity;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.util.OffRequestKinds;
+import io.github.riemr.shift.util.EmployeeRequestKinds;
 import org.optaplanner.core.api.score.stream.tri.TriConstraintStream;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
@@ -34,6 +35,8 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     public Constraint[] defineConstraints(ConstraintFactory f) {
         return new Constraint[] {
                 forbidRequestedDayOff(f),
+                requirePreferredOnTime(f),
+                forbidDifferentFromPreferredOnTime(f),
                 forbidWeeklyOffOrOutsideBase(f),
                 employeeNotDoubleBooked(f),
                 weeklyMaxWorkHoursHard(f),
@@ -101,6 +104,46 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                                 && toLocalDateSafe(r.getRequestDate()).equals(e.getDate())))
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Requested time off");
+    }
+
+    /**
+     * 希望出勤（PREFER_ON）の時間帯は必ず割り当てる。
+     *
+     * @param f 制約ファクトリ
+     * @return 希望出勤の必須割当制約
+     */
+    private Constraint requirePreferredOnTime(ConstraintFactory f) {
+        return f.forEach(EmployeeRequest.class)
+                .filter(r -> isPreferOnRequest(r))
+                .filter(r -> r.getEmployeeCode() != null && toLocalDateSafe(r.getRequestDate()) != null)
+                .filter(AttendanceConstraintProvider::hasRequestedTimeRange)
+                .ifNotExists(DailyPatternAssignmentEntity.class,
+                        Joiners.equal(EmployeeRequest::getEmployeeCode,
+                                e -> e.getAssignedEmployee() != null ? e.getAssignedEmployee().getEmployeeCode() : null),
+                        Joiners.filtering((r, e) -> toLocalDateSafe(r.getRequestDate()).equals(e.getDate())
+                                && matchesRequestedTime(r, e)))
+                .penalize(HardSoftScore.ofHard(1000))
+                .asConstraint("Requested on-time must be assigned");
+    }
+
+    /**
+     * 希望出勤（PREFER_ON）がある日は、希望時間以外への割当を禁止する。
+     *
+     * @param f 制約ファクトリ
+     * @return 希望時間固定制約
+     */
+    private Constraint forbidDifferentFromPreferredOnTime(ConstraintFactory f) {
+        return f.forEach(DailyPatternAssignmentEntity.class)
+                .filter(e -> e.getAssignedEmployee() != null)
+                .join(EmployeeRequest.class,
+                        Joiners.equal(e -> e.getAssignedEmployee().getEmployeeCode(), EmployeeRequest::getEmployeeCode),
+                        Joiners.filtering((e, r) -> isPreferOnRequest(r)
+                                && toLocalDateSafe(r.getRequestDate()) != null
+                                && toLocalDateSafe(r.getRequestDate()).equals(e.getDate())
+                                && hasRequestedTimeRange(r)
+                                && !matchesRequestedTime(r, e)))
+                .penalize(HardSoftScore.ofHard(1000))
+                .asConstraint("Requested on-time fixed");
     }
 
     /**
@@ -550,6 +593,28 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
         if (date == null) return null;
         if (date instanceof java.sql.Date) return ((java.sql.Date) date).toLocalDate();
         return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    private static LocalTime toLocalTimeSafe(java.util.Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Time) return ((java.sql.Time) date).toLocalTime();
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+    }
+
+    private static boolean hasRequestedTimeRange(EmployeeRequest request) {
+        return toLocalTimeSafe(request.getFromTime()) != null && toLocalTimeSafe(request.getToTime()) != null;
+    }
+
+    private static boolean matchesRequestedTime(EmployeeRequest request, DailyPatternAssignmentEntity entity) {
+        LocalTime from = toLocalTimeSafe(request.getFromTime());
+        LocalTime to = toLocalTimeSafe(request.getToTime());
+        if (from == null || to == null) return false;
+        return from.equals(entity.getPatternStart()) && to.equals(entity.getPatternEnd());
+    }
+
+    private static boolean isPreferOnRequest(EmployeeRequest request) {
+        if (request == null || request.getRequestKind() == null) return false;
+        return EmployeeRequestKinds.PREFER_ON.equalsIgnoreCase(request.getRequestKind().trim());
     }
 
     /**

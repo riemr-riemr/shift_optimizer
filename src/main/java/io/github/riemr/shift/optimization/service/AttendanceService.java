@@ -18,6 +18,7 @@ import io.github.riemr.shift.optimization.entity.AttendanceGroupInfo;
 import io.github.riemr.shift.optimization.entity.AttendanceGroupRuleType;
 import io.github.riemr.shift.optimization.solution.AttendanceSolution;
 import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.util.EmployeeRequestKinds;
 import io.github.riemr.shift.util.OffRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -260,6 +261,7 @@ public class AttendanceService {
                 windows.add(new LocalTime[]{ps, pe});
             }
         }
+        Map<LocalDate, Map<String, Integer>> preferOnByDateWindow = buildPreferOnCounts(requests, windowKeys, windows);
         if (windows.isEmpty()) {
             long activeCount = patterns.stream().filter(p -> !Boolean.FALSE.equals(p.getActive())).count();
             log.warn("No active shift pattern windows with priority>=2; attendance assignments cannot be generated (patterns={}, active={}, store={}, dept={}, month={})",
@@ -305,6 +307,9 @@ public class AttendanceService {
                         maxUnits = Math.max(maxUnits, entry.getValue());
                     }
                 }
+                String windowKey = ps + "_" + pe;
+                int preferUnits = preferOnByDateWindow.getOrDefault(date, Map.of()).getOrDefault(windowKey, 0);
+                maxUnits = Math.max(maxUnits, preferUnits);
                 for (int i = 0; i < maxUnits; i++) {
                     String id = sol.getStoreCode() + "|" + sol.getDepartmentCode() + "|" + date + "|" + ps + "|" + pe + "|" + i;
                     var ent = new DailyPatternAssignmentEntity(id, sol.getStoreCode(), sol.getDepartmentCode(), date, ps, pe, i);
@@ -331,6 +336,7 @@ public class AttendanceService {
         Map<String, List<EmployeeShiftPattern>> pattByEmp = patterns.stream().collect(Collectors.groupingBy(EmployeeShiftPattern::getEmployeeCode));
         Map<String, List<EmployeeWeeklyPreference>> weeklyByEmp = weeklyPrefs.stream().collect(Collectors.groupingBy(EmployeeWeeklyPreference::getEmployeeCode));
         Map<String, Set<LocalDate>> offByEmp = new HashMap<>();
+        Map<String, Map<LocalDate, Set<String>>> preferOnByEmpDate = buildPreferOnByEmpDate(requests);
         for (var r : requests) {
             String normalized = OffRequestKinds.normalize(r.getRequestKind());
             if (normalized == null) continue;
@@ -341,28 +347,38 @@ public class AttendanceService {
         }
         int dow = date.getDayOfWeek().getValue();
         List<Employee> list = new ArrayList<>();
+        String windowKey = ps + "_" + pe;
         for (var e : employees) {
             String code = e.getEmployeeCode();
+            Set<String> preferredWindows = preferOnByEmpDate
+                    .getOrDefault(code, Map.of())
+                    .getOrDefault(date, Set.of());
+            boolean hasPreferred = !preferredWindows.isEmpty();
+            if (hasPreferred && !preferredWindows.contains(windowKey)) continue;
             boolean hasPattern = pattByEmp.getOrDefault(code, List.of()).stream()
                     .anyMatch(p -> !Boolean.FALSE.equals(p.getActive())
                             && p.getPriority() != null && p.getPriority().intValue() >= 2
                             && p.getStartTime().toLocalTime().equals(ps)
                             && p.getEndTime().toLocalTime().equals(pe));
-            if (!hasPattern) continue;
-            if (offByEmp.getOrDefault(code, Set.of()).contains(date)) continue;
+            if (!hasPreferred && !hasPattern) continue;
+            if (!hasPreferred && offByEmp.getOrDefault(code, Set.of()).contains(date)) continue;
             boolean weeklyOk = true;
-            for (var w : weeklyByEmp.getOrDefault(code, List.of())) {
-                if (w.getDayOfWeek() == null || w.getDayOfWeek().intValue() != dow) continue;
-                if ("OFF".equalsIgnoreCase(w.getWorkStyle())) { weeklyOk = false; break; }
-                if (w.getBaseStartTime() != null && w.getBaseEndTime() != null) {
-                    var bs = w.getBaseStartTime().toLocalTime();
-                    var be = w.getBaseEndTime().toLocalTime();
-                    if (ps.isBefore(bs) || pe.isAfter(be)) { weeklyOk = false; break; }
+            if (!hasPreferred) {
+                for (var w : weeklyByEmp.getOrDefault(code, List.of())) {
+                    if (w.getDayOfWeek() == null || w.getDayOfWeek().intValue() != dow) continue;
+                    if ("OFF".equalsIgnoreCase(w.getWorkStyle())) { weeklyOk = false; break; }
+                    if (w.getBaseStartTime() != null && w.getBaseEndTime() != null) {
+                        var bs = w.getBaseStartTime().toLocalTime();
+                        var be = w.getBaseEndTime().toLocalTime();
+                        if (ps.isBefore(bs) || pe.isAfter(be)) { weeklyOk = false; break; }
+                    }
                 }
             }
             if (!weeklyOk) continue;
-            var attDays = attendanceDaysByEmp.getOrDefault(code, Set.of());
-            if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) continue;
+            if (!hasPreferred) {
+                var attDays = attendanceDaysByEmp.getOrDefault(code, Set.of());
+                if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) continue;
+            }
             list.add(e);
         }
         return list;
@@ -374,6 +390,7 @@ public class AttendanceService {
         final var employees = schedule.getEmployeeList();
         final var requests = Optional.ofNullable(schedule.getEmployeeRequestList()).orElse(List.of());
         final var weekly = Optional.ofNullable(schedule.getEmployeeWeeklyPreferenceList()).orElse(List.of());
+        Map<String, Map<LocalDate, Set<String>>> preferOnByEmpDate = buildPreferOnByEmpDate(requests);
 
         Map<String, Set<LocalDate>> offDatesByEmp = new HashMap<>();
         for (var r : requests) {
@@ -410,18 +427,29 @@ public class AttendanceService {
         for (var a : schedule.getAssignmentList()) {
             LocalDate date = a.getShiftDate();
             List<Employee> cands = employees.stream().filter(e -> {
-                var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                if (offSet.contains(date)) return false;
-                var offDow = weeklyOffByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                if (offDow.contains(date.getDayOfWeek().getValue())) return false;
-                if (!withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
+                String windowKey = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime()
+                        + "_" + a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+                Set<String> preferredWindows = preferOnByEmpDate
+                        .getOrDefault(e.getEmployeeCode(), Map.of())
+                        .getOrDefault(date, Set.of());
+                boolean hasPreferred = !preferredWindows.isEmpty();
+                if (hasPreferred && !preferredWindows.contains(windowKey)) return false;
+                if (!hasPreferred) {
+                    var offSet = offDatesByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
+                    if (offSet.contains(date)) return false;
+                    var offDow = weeklyOffByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
+                    if (offDow.contains(date.getDayOfWeek().getValue())) return false;
+                    if (!withinWeeklyBase(weeklyPrefByEmpDow.get(e.getEmployeeCode()), date,
+                            a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
+                            a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
+                }
+                if (!hasPreferred && !matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
                         a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
                         a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
-                if (!matchesAnyPattern(patternByEmp.get(e.getEmployeeCode()), date,
-                        a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime(),
-                        a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime())) return false;
-                var attDays = attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
-                if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) return false;
+                if (!hasPreferred) {
+                    var attDays = attendanceDaysByEmp.getOrDefault(e.getEmployeeCode(), Set.of());
+                    if (wouldExceedConsecutiveCap(attDays, date, maxConsecutiveDays)) return false;
+                }
                 return true;
             }).toList();
             a.setCandidateEmployees(cands);
@@ -463,6 +491,59 @@ public class AttendanceService {
             }
         }
         return true;
+    }
+
+    private Map<LocalDate, Map<String, Integer>> buildPreferOnCounts(List<EmployeeRequest> requests,
+                                                                     Set<String> windowKeys,
+                                                                     List<LocalTime[]> windows) {
+        Map<LocalDate, Map<String, Integer>> byDateWindow = new HashMap<>();
+        for (var r : requests) {
+            if (!isPreferOnRequest(r)) continue;
+            LocalDate date = toLocalDateSafe(r.getRequestDate());
+            LocalTime from = toLocalTimeSafe(r.getFromTime());
+            LocalTime to = toLocalTimeSafe(r.getToTime());
+            if (date == null || from == null || to == null) continue;
+            String key = from + "_" + to;
+            if (windowKeys.add(key)) {
+                windows.add(new LocalTime[]{from, to});
+            }
+            byDateWindow.computeIfAbsent(date, k -> new HashMap<>()).merge(key, 1, Integer::sum);
+        }
+        return byDateWindow;
+    }
+
+    private Map<String, Map<LocalDate, Set<String>>> buildPreferOnByEmpDate(List<EmployeeRequest> requests) {
+        Map<String, Map<LocalDate, Set<String>>> result = new HashMap<>();
+        for (var r : requests) {
+            if (!isPreferOnRequest(r)) continue;
+            String code = r.getEmployeeCode();
+            LocalDate date = toLocalDateSafe(r.getRequestDate());
+            LocalTime from = toLocalTimeSafe(r.getFromTime());
+            LocalTime to = toLocalTimeSafe(r.getToTime());
+            if (code == null || date == null || from == null || to == null) continue;
+            String key = from + "_" + to;
+            result.computeIfAbsent(code, k -> new HashMap<>())
+                    .computeIfAbsent(date, k -> new HashSet<>())
+                    .add(key);
+        }
+        return result;
+    }
+
+    private LocalDate toLocalDateSafe(Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Date) return ((java.sql.Date) date).toLocalDate();
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    private LocalTime toLocalTimeSafe(Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Time) return ((java.sql.Time) date).toLocalTime();
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+    }
+
+    private boolean isPreferOnRequest(EmployeeRequest request) {
+        if (request == null || request.getRequestKind() == null) return false;
+        return EmployeeRequestKinds.PREFER_ON.equalsIgnoreCase(request.getRequestKind().trim());
     }
 
     private static long toProblemId(LocalDate month) {
