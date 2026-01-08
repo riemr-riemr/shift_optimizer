@@ -39,6 +39,7 @@ import io.github.riemr.shift.application.dto.DailySolveRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster;
 import io.github.riemr.shift.util.OffRequestKinds;
+import io.github.riemr.shift.util.EmployeeRequestKinds;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -49,6 +50,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import java.time.ZoneId;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -566,6 +568,21 @@ public class ShiftCalcController {
         }
     }
 
+    @PostMapping("/api/clear/attendance-manual")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
+    @ResponseBody
+    public Map<String, Object> clearManualAttendance(@RequestBody SolveRequest req) {
+        try {
+            LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            int startDay = appSettingService.getShiftCycleStartDay();
+            LocalDate cycleStart = computeCycleStart(base, startDay);
+            Map<String, Integer> deleted = service.clearManualAttendance(cycleStart, req.storeCode(), req.departmentCode());
+            return Map.of("success", true, "deleted", deleted, "message", "手入力を削除しました");
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "削除に失敗しました: " + e.getMessage());
+        }
+    }
+
     @PostMapping("/api/clear/assignment")
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
@@ -620,6 +637,7 @@ public class ShiftCalcController {
             Map<String, List<ShiftInfo>> employeeShifts = Map.of();
             Map<String, Double> employeeMonthlyHours = new HashMap<>();
             Map<String, String> employeeOffKinds = new HashMap<>();
+            Map<String, String> employeePreferOnTimes = new HashMap<>();
             
             if (monthlyAssignments != null && !monthlyAssignments.isEmpty()) {
                 final String finalStoreCode = storeCode; // Make effectively final for lambda
@@ -695,11 +713,22 @@ public class ShiftCalcController {
                         .filter(req -> finalStoreCode.equals(req.getStoreCode()))
                         .filter(req -> employeeCodesForOff.contains(req.getEmployeeCode()))
                         .forEach(req -> {
-                            String normalized = OffRequestKinds.normalize(req.getRequestKind());
-                            if (normalized == null) return;
-                            LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-                            String key = req.getEmployeeCode() + "_" + d.toString();
-                            employeeOffKinds.put(key, normalized);
+                            String kind = req.getRequestKind() == null ? "" : req.getRequestKind().trim();
+                            if (OffRequestKinds.normalize(kind) != null) {
+                                LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                                String key = req.getEmployeeCode() + "_" + d.toString();
+                                employeeOffKinds.put(key, OffRequestKinds.normalize(kind));
+                                return;
+                            }
+                            if (EmployeeRequestKinds.PREFER_ON.equalsIgnoreCase(kind)) {
+                                LocalDate d = req.getRequestDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                                LocalTime from = toLocalTimeSafe(req.getFromTime());
+                                LocalTime to = toLocalTimeSafe(req.getToTime());
+                                if (from == null || to == null) return;
+                                String key = req.getEmployeeCode() + "_" + d.toString();
+                                employeePreferOnTimes.put(key, from.format(DateTimeFormatter.ofPattern("HH:mm"))
+                                        + "|" + to.format(DateTimeFormatter.ofPattern("HH:mm")));
+                            }
                         });
                 }
             }
@@ -748,6 +777,7 @@ public class ShiftCalcController {
             model.addAttribute("employeeShifts", employeeShifts);
             model.addAttribute("employeeMonthlyHours", employeeMonthlyHours);
             model.addAttribute("employeeOffKinds", employeeOffKinds);
+            model.addAttribute("employeePreferOnTimes", employeePreferOnTimes);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
             
             return "shift/monthly-shift";
@@ -831,5 +861,11 @@ public class ShiftCalcController {
         public int totalAssigned() { return totalAssigned; }
         public int totalShortageMinutes() { return totalShortageMinutes; }
         public int totalExcessMinutes() { return totalExcessMinutes; }
+    }
+
+    private LocalTime toLocalTimeSafe(java.util.Date date) {
+        if (date == null) return null;
+        if (date instanceof java.sql.Time) return ((java.sql.Time) date).toLocalTime();
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
     }
 }

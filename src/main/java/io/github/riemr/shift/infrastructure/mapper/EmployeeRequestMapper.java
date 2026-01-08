@@ -110,4 +110,13 @@ public interface EmployeeRequestMapper {
     int deleteByEmployeeAndDate(@Param("storeCode") String storeCode,
                                 @Param("employeeCode") String employeeCode,
                                 @Param("requestDate") LocalDate requestDate);
+
+    int deleteByDateRangeStore(@Param("fromDate") LocalDate fromDate,
+                               @Param("toDate") LocalDate toDate,
+                               @Param("storeCode") String storeCode);
+
+    int deleteByDateRangeStoreAndEmployees(@Param("fromDate") LocalDate fromDate,
+                                           @Param("toDate") LocalDate toDate,
+                                           @Param("storeCode") String storeCode,
+                                           @Param("employeeCodes") List<String> employeeCodes);
 }

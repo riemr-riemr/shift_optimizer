@@ -263,6 +263,14 @@
       and store_code = #{storeCode}
   </delete>
 
+  <delete id="deleteByMonthStoreAndCreatedBy">
+    delete from public.shift_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+      and store_code = #{storeCode}
+      and created_by = #{createdBy}
+  </delete>
+
   <delete id="deleteByEmployeeAndDateRange">
     delete from public.shift_assignment
     where store_code = #{storeCode}

@@ -380,4 +380,22 @@
       and employee_code = #{employeeCode}
       and request_date = #{requestDate}
   </delete>
+
+  <delete id="deleteByDateRangeStore">
+    delete from public.employee_request
+    where request_date &gt;= #{fromDate}
+      and request_date &lt; #{toDate}
+      and store_code = #{storeCode}
+  </delete>
+
+  <delete id="deleteByDateRangeStoreAndEmployees">
+    delete from public.employee_request
+    where request_date &gt;= #{fromDate}
+      and request_date &lt; #{toDate}
+      and store_code = #{storeCode}
+      and employee_code in
+      <foreach collection="employeeCodes" item="code" open="(" separator="," close=")">
+        #{code}
+      </foreach>
+  </delete>
 </mapper>

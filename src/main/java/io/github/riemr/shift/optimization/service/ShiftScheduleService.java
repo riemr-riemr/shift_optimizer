@@ -69,6 +69,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAss
 import io.github.riemr.shift.util.OffRequestKinds;
 import io.github.riemr.shift.util.EmployeeRequestKinds;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRequestMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeDepartmentMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 
 import lombok.RequiredArgsConstructor;
@@ -96,6 +97,7 @@ public class ShiftScheduleService {
     private final ShiftAssignmentMapper shiftAssignmentMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
     private final EmployeeRequestMapper employeeRequestMapper;
+    private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final EmployeeRegisterSkillMapper employeeRegisterSkillMapper;
     private final EmployeeMapper employeeMapper;
     private final AppSettingService appSettingService;
@@ -764,6 +766,33 @@ public class ShiftScheduleService {
         LocalDate to   = from.plusMonths(1);
         if (storeCode == null || storeCode.isBlank()) return 0;
         return shiftAssignmentMapper.deleteByMonthAndStore(from, to, storeCode);
+    }
+
+    /**
+     * 手入力出勤（manual_edit）と、それに対応する希望出勤（PREFER_ON）を月次で削除する。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
+    public Map<String, Integer> clearManualAttendance(LocalDate anyDayInMonth, String storeCode, String departmentCode) {
+        LocalDate from = computeCycleStart(anyDayInMonth);
+        LocalDate to   = from.plusMonths(1);
+        if (storeCode == null || storeCode.isBlank()) return Map.of("attendance", 0, "requests", 0);
+        int attendanceDeleted = shiftAssignmentMapper.deleteByMonthStoreAndCreatedBy(from, to, storeCode, "manual_edit");
+        int requestDeleted;
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            List<String> employeeCodes = employeeDepartmentMapper.selectByDepartment(departmentCode).stream()
+                    .map(ed -> ed.getEmployeeCode())
+                    .filter(code -> code != null && !code.isBlank())
+                    .distinct()
+                    .toList();
+            if (employeeCodes.isEmpty()) {
+                requestDeleted = 0;
+            } else {
+                requestDeleted = employeeRequestMapper.deleteByDateRangeStoreAndEmployees(from, to, storeCode, employeeCodes);
+            }
+        } else {
+            requestDeleted = employeeRequestMapper.deleteByDateRangeStore(from, to, storeCode);
+        }
+        return Map.of("attendance", attendanceDeleted, "requests", requestDeleted);
     }
 
     /**

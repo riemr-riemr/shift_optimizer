@@ -129,6 +129,11 @@ public interface ShiftAssignmentMapper {
                               @Param("to") LocalDate to,
                               @Param("storeCode") String storeCode);
 
+    int deleteByMonthStoreAndCreatedBy(@Param("from") LocalDate from,
+                                       @Param("to") LocalDate to,
+                                       @Param("storeCode") String storeCode,
+                                       @Param("createdBy") String createdBy);
+
     int deleteByEmployeeAndDateRange(@Param("storeCode") String storeCode,
                                      @Param("employeeCode") String employeeCode,
                                      @Param("from") Date from,
