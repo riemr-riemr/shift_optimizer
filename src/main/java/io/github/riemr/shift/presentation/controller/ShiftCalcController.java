@@ -631,86 +631,67 @@ public class ShiftCalcController {
             
             // 月次シフトデータ取得（出勤＝shift_assignmentベース）
             List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchShiftsByMonth(cycleStart, storeCode, departmentCode);
-            
-            // 従業員一覧を作成（店舗でフィルタリング）
+
+            // 従業員一覧を作成（店舗・部門でフィルタリング）
             List<EmployeeInfo> employees = new ArrayList<>();
             Map<String, List<ShiftInfo>> employeeShifts = Map.of();
             Map<String, Double> employeeMonthlyHours = new HashMap<>();
             Map<String, String> employeeOffKinds = new HashMap<>();
             Map<String, String> employeePreferOnTimes = new HashMap<>();
-            
-            if (monthlyAssignments != null && !monthlyAssignments.isEmpty()) {
-                final String finalStoreCode = storeCode; // Make effectively final for lambda
-                
-                Set<String> employeeCodes = monthlyAssignments.stream()
-                    .map(ShiftAssignmentMonthlyView::employeeCode)
-                    .collect(Collectors.toSet());
-                
-                List<EmployeeInfo> filteredEmployees = employeeCodes.stream()
-                    .map(code -> {
-                        String name = monthlyAssignments.stream()
-                            .filter(a -> a.employeeCode().equals(code))
-                            .findFirst()
-                            .map(ShiftAssignmentMonthlyView::employeeName)
-                            .orElse(code);
-                        return new EmployeeInfo(code, name);
-                    })
-                    .filter(emp -> {
-                        // 店舗フィルタリング：storeCodeが指定されている場合のみ
-                        if (finalStoreCode == null || finalStoreCode.isEmpty()) {
-                            return false; // 店舗未選択時は従業員を表示しない
-                        }
-                        // TODO: 実際の従業員-店舗マッピングでフィルタリング
-                        return true;
-                    })
-                    .sorted(Comparator.comparing(EmployeeInfo::employeeCode))
-                    .collect(Collectors.toList());
-                
-                employees = filteredEmployees; // Assign to final variable
-                
-                // Get employee codes for filtering shifts
-                final Set<String> finalEmployeeCodes = employees.stream()
+
+            if (storeCode != null && !storeCode.isEmpty()) {
+                List<Employee> storeEmployees = employeeMapper.selectByStoreCode(storeCode);
+                if (departmentCode != null && !departmentCode.isBlank() && !"520".equalsIgnoreCase(departmentCode)) {
+                    Set<String> allowed = employeeDepartmentMapper.selectByDepartment(departmentCode).stream()
+                            .map(ed -> ed.getEmployeeCode())
+                            .filter(code -> code != null && !code.isBlank())
+                            .collect(Collectors.toSet());
+                    storeEmployees = storeEmployees.stream()
+                            .filter(emp -> allowed.contains(emp.getEmployeeCode()))
+                            .toList();
+                }
+                employees = storeEmployees.stream()
+                        .map(emp -> new EmployeeInfo(emp.getEmployeeCode(), emp.getEmployeeName()))
+                        .sorted(Comparator.comparing(EmployeeInfo::employeeCode))
+                        .toList();
+            }
+
+            final Set<String> finalEmployeeCodes = employees.stream()
                     .map(EmployeeInfo::employeeCode)
                     .collect(Collectors.toSet());
-                
-                // 従業員別・日別のシフトデータを作成
+
+            if (monthlyAssignments != null && !monthlyAssignments.isEmpty() && !finalEmployeeCodes.isEmpty()) {
                 employeeShifts = monthlyAssignments.stream()
-                    .filter(assignment -> {
-                        // 店舗フィルタリング適用
-                        if (finalStoreCode == null || finalStoreCode.isEmpty()) {
-                            return false;
-                        }
-                        return finalEmployeeCodes.contains(assignment.employeeCode());
-                    })
-                    .collect(Collectors.groupingBy(
-                        assignment -> assignment.employeeCode() + "_" + assignment.date().toString(),
-                        Collectors.mapping(assignment -> new ShiftInfo(
-                            assignment.startAt().format(DateTimeFormatter.ofPattern("HH:mm")),
-                            assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm")),
-                            assignment.manualEdit()
-                        ), Collectors.toList())
-                    ));
+                        .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
+                        .collect(Collectors.groupingBy(
+                                assignment -> assignment.employeeCode() + "_" + assignment.date().toString(),
+                                Collectors.mapping(assignment -> new ShiftInfo(
+                                        assignment.startAt().format(DateTimeFormatter.ofPattern("HH:mm")),
+                                        assignment.endAt().format(DateTimeFormatter.ofPattern("HH:mm")),
+                                        assignment.manualEdit()
+                                ), Collectors.toList())
+                        ));
 
-                // 従業員別の月次勤務時間（h）を算出
                 Map<String, Long> minutesByEmp = monthlyAssignments.stream()
-                    .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
-                    .collect(Collectors.groupingBy(
-                        ShiftAssignmentMonthlyView::employeeCode,
-                        Collectors.summingLong(assignment -> {
-                            long minutes = ChronoUnit.MINUTES.between(assignment.startAt(), assignment.endAt());
-                            return Math.max(0, minutes);
-                        })
-                    ));
+                        .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
+                        .collect(Collectors.groupingBy(
+                                ShiftAssignmentMonthlyView::employeeCode,
+                                Collectors.summingLong(assignment -> {
+                                    long minutes = ChronoUnit.MINUTES.between(assignment.startAt(), assignment.endAt());
+                                    return Math.max(0, minutes);
+                                })
+                        ));
                 minutesByEmp.forEach((code, minutes) -> employeeMonthlyHours.put(code, minutes / 60.0));
+            }
 
-                if (finalStoreCode != null && !finalStoreCode.isEmpty() && !employees.isEmpty()) {
-                    LocalDate cycleEndForOff = cycleStart.plusMonths(1);
-                    Set<String> employeeCodesForOff = employees.stream()
+            if (storeCode != null && !storeCode.isEmpty() && !employees.isEmpty()) {
+                LocalDate cycleEndForOff = cycleStart.plusMonths(1);
+                Set<String> employeeCodesForOff = employees.stream()
                         .map(EmployeeInfo::employeeCode)
                         .collect(Collectors.toSet());
-                    employeeRequestMapper.selectByDateRange(cycleStart, cycleEndForOff).stream()
+                employeeRequestMapper.selectByDateRange(cycleStart, cycleEndForOff).stream()
                         .filter(req -> req != null && req.getRequestDate() != null)
-                        .filter(req -> finalStoreCode.equals(req.getStoreCode()))
+                        .filter(req -> storeCode.equals(req.getStoreCode()))
                         .filter(req -> employeeCodesForOff.contains(req.getEmployeeCode()))
                         .forEach(req -> {
                             String kind = req.getRequestKind() == null ? "" : req.getRequestKind().trim();
@@ -730,7 +711,6 @@ public class ShiftCalcController {
                                         + "|" + to.format(DateTimeFormatter.ofPattern("HH:mm")));
                             }
                         });
-                }
             }
 
             // 日別人員配置サマリーを取得
