@@ -48,7 +48,7 @@ attendanceBtn.addEventListener('click', () => startOptimization('ATTENDANCE'));
 }
 ```
 
-#### クラス・メソッド: `ShiftCalcController.prepare()`
+#### クラス・メソッド: `ShiftDailyShiftController.prepare()`
 
 **処理内容:**
 1. 月データのパース (`LocalDate.parse()`)
@@ -71,7 +71,7 @@ attendanceBtn.addEventListener('click', () => startOptimization('ATTENDANCE'));
 
 #### API エンドポイント: `/shift/api/attendance/start` (月次シフト最適化の場合)
 
-#### クラス・メソッド: `ShiftCalcController.startAttendance()`
+#### クラス・メソッド: `ShiftDailyShiftController.startAttendance()`
 
 **処理内容:**
 1. 月データのパース
@@ -148,7 +148,7 @@ attendanceBtn.addEventListener('click', () => startOptimization('ATTENDANCE'));
 
 | クラス名 | 役割 |
 |---------|------|
-| `ShiftCalcController` | RESTエンドポイントの提供、リクエスト処理 |
+| `ShiftDailyShiftController` | RESTエンドポイントの提供、リクエスト処理 |
 | `ShiftScheduleService` | OptaPlannerを使った最適化処理の中核 |
 | `ShiftOptimizationPreparationService` | 事前準備処理の独立実行 |
 | `TaskPlanService` | 作業計画とタスク割当の管理 |

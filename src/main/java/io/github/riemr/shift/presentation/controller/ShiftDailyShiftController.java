@@ -70,7 +70,7 @@ import java.time.temporal.ChronoUnit;
 @RequiredArgsConstructor
 @RequestMapping("/shift")
 @Slf4j
-public class ShiftCalcController {
+public class ShiftDailyShiftController {
 
     private final ShiftScheduleService service;
     private final StaffingBalanceService staffingBalanceService;
@@ -89,14 +89,14 @@ public class ShiftCalcController {
     private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
 
-    @GetMapping("/calc")
+    @GetMapping("/daily-shift")
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
     public String view(Model model) {
         List<Store> stores = storeMapper.selectByExample(null);
         stores.sort(Comparator.comparing(Store::getStoreCode));
         model.addAttribute("stores", stores);
         model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
-        return "shift/calc";
+        return "shift/daily-shift";
     }
 
     @PostMapping("/api/calc/prepare")

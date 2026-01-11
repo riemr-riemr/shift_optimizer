@@ -9,7 +9,7 @@ public final class ScreenCodes {
     private ScreenCodes() {}
 
     public static final String SHIFT_MONTHLY = "SHIFT_MONTHLY";      // 月次シフト表示 (/shift)
-    public static final String SHIFT_DAILY   = "SHIFT_DAILY";        // 日次シフト（最適化）(/shift/calc)
+    public static final String SHIFT_DAILY   = "SHIFT_DAILY";        // 日次シフト（最適化）(/shift/daily-shift)
     public static final String EMPLOYEE_LIST = "EMPLOYEE_LIST";      // 従業員管理
     public static final String EMPLOYEE_SHIFT = "EMPLOYEE_SHIFT";    // 従業員個人シフト
     public static final String EMPLOYEE_REQUEST = "EMPLOYEE_REQUEST"; // 希望休入力
