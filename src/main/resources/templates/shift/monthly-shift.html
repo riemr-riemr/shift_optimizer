@@ -24,13 +24,33 @@
             min-width: 60px;
         }
         
-        .shift-table thead tr:first-child th {
+        .shift-table thead tr.summary-row-1 th {
             top: 0;
             position: sticky;
         }
-        
-        .shift-table thead tr:nth-child(2) th {
-            top: 49px;
+
+        .shift-table thead tr.summary-row-2 th {
+            top: 24px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-3 th {
+            top: 48px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-4 th {
+            top: 72px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-5 th {
+            top: 96px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.date-header-row th {
+            top: 120px;
             position: sticky;
         }
         
@@ -128,10 +148,11 @@
         .staffing-summary-row th {
             background: rgba(78, 205, 196, 0.18);
             color: var(--color-dark);
-            padding: 8px 6px;
+            padding: 4px 6px;
             font-size: 0.75rem;
             line-height: 1.2;
             border-color: var(--border-normal);
+            height: 24px;
         }
         
         .staffing-summary-row th.employee-header {
@@ -149,11 +170,12 @@
         
         /* Balance hours styling */
         .balance-hours {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 600;
-            padding: 1px 3px;
+            padding: 0 3px;
             border-radius: 3px;
-            margin-top: 2px;
+            margin-top: 1px;
+            line-height: 1.1;
         }
         
         .balance-hours.shortage {
@@ -236,7 +258,10 @@
                         <label for="departmentCode" class="form-label">部門</label>
                         <select id="departmentCode" name="departmentCode" class="form-select">
                             <option value="" th:selected="${selectedDepartmentCode == null}">部門を選択</option>
-                            <!-- 部門一覧は後段のJSで店舗選択に応じてロード -->
+                            <option th:each="dept : ${departments}"
+                                    th:value="${dept.departmentCode}"
+                                    th:text="|${dept.departmentCode} - ${dept.departmentName}|"
+                                    th:selected="${dept.departmentCode == selectedDepartmentCode}">部門名</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -326,7 +351,124 @@
         <div th:if="${!#lists.isEmpty(employees)}" class="grid-body">
             <table class="shift-table">
             <thead>
-                <tr>
+                <tr class="staffing-summary-row summary-row-1">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-people"></i> 出勤人数
+                    </th>
+                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${summary.headcount}">0</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <!-- 従来（月初〜月末） -->
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${summary.headcount}">0</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-2">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-bar-chart"></i> 必要人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.requiredMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.requiredMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-3">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-bar-chart"></i> 投入人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.assignedMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.assignedMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-4">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-exclamation-triangle"></i> 不足人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours shortage"
+                             th:text="${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours shortage"
+                             th:text="${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-5">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-check-circle"></i> 超過人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours excess"
+                             th:text="${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours excess"
+                             th:text="${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="date-header-row">
                     <th class="employee-header">
                         <i class="bi bi-person"></i> 従業員
                     </th>
@@ -345,43 +487,6 @@
                              th:text="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getDisplayName(T(java.time.format.TextStyle).SHORT, T(java.util.Locale).JAPANESE)}">月</div>
                     </th>
                 </tr>
-                <tr class="staffing-summary-row">
-                    <th class="employee-header summary-header">
-                        <i class="bi bi-bar-chart"></i> 人時
-                    </th>
-                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
-                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
-                        th:with="dayIndex=${dStat.index + 1},
-                                 summary=${dailyStaffingInfo.get(dayIndex)}"
-                        class="staffing-summary-cell"
-                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
-                        <div th:if="${summary != null}">
-                            <div th:if="${summary.totalShortageMinutes > 0}" class="balance-hours shortage" 
-                                 th:text="'不足:' + ${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)} + ' h'">不足:2.00 h</div>
-                            <div th:if="${summary.totalExcessMinutes > 0}" class="balance-hours excess" 
-                                 th:text="'超過:' + ${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)} + ' h'">超過:2.00 h</div>
-                            <div th:if="${summary.totalShortageMinutes == 0 and summary.totalExcessMinutes == 0}" class="balance-hours balanced" 
-                                 th:text="'適正'">適正</div>
-                        </div>
-                        <div th:if="${summary == null}" class="text-muted">-</div>
-                    </th>
-                    <!-- 従来（月初〜月末） -->
-                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
-                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
-                                 summary=${dailyStaffingInfo.get(day)}"
-                        class="staffing-summary-cell"
-                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
-                        <div th:if="${summary != null}">
-                            <div th:if="${summary.totalShortageMinutes > 0}" class="balance-hours shortage" 
-                                 th:text="'不足:' + ${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)} + ' h'">不足:2.00 h</div>
-                            <div th:if="${summary.totalExcessMinutes > 0}" class="balance-hours excess" 
-                                 th:text="'超過:' + ${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)} + ' h'">超過:2.00 h</div>
-                            <div th:if="${summary.totalShortageMinutes == 0 and summary.totalExcessMinutes == 0}" class="balance-hours balanced" 
-                                 th:text="'適正'">適正</div>
-                        </div>
-                        <div th:if="${summary == null}" class="text-muted">-</div>
-                    </th>
-                </tr>
             </thead>
             <tbody>
                 <tr th:each="emp : ${employees}">
@@ -393,6 +498,8 @@
                                  th:text="${employeeMonthlyHours != null and employeeMonthlyHours.get(emp.employeeCode) != null
                                             ? #numbers.formatDecimal(employeeMonthlyHours.get(emp.employeeCode), 1, 2) + ' h'
                                             : '0.00 h'}">0.00 h</div>
+                            <div class="employee-hours text-muted small"
+                                 th:text="'出勤日数:' + ${employeeWorkDays != null ? (employeeWorkDays.get(emp.employeeCode) != null ? employeeWorkDays.get(emp.employeeCode) : 0) : 0} + ' / 休み:' + ${employeeOffDays != null ? (employeeOffDays.get(emp.employeeCode) != null ? employeeOffDays.get(emp.employeeCode) : 0) : 0}">出勤日数:0 / 休み:0</div>
                         </div>
                     </td>
                     <!-- 設定に基づくサイクル（dateList） -->
@@ -665,7 +772,7 @@
                     }
                 });
                 // 初期ロード
-                if (storeSelect.value && deptSelect) {
+                if (storeSelect.value && deptSelect && deptSelect.options.length <= 1) {
                     storeSelect.dispatchEvent(new Event('change'));
                 }
             }

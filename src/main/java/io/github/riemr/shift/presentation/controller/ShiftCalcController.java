@@ -58,13 +58,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.time.temporal.ChronoUnit;
-import java.sql.Date;
 
 @Controller
 @RequiredArgsConstructor
@@ -628,6 +628,11 @@ public class ShiftCalcController {
             // 店舗リストを取得
             List<Store> stores = storeMapper.selectByExample(null);
             stores.sort(Comparator.comparing(Store::getStoreCode));
+            List<DepartmentMaster> departments = List.of();
+            if (storeCode != null && !storeCode.isBlank()) {
+                departments = storeDepartmentMapper.findDepartmentsByStore(storeCode);
+                departments.sort(Comparator.comparing(DepartmentMaster::getDepartmentCode));
+            }
             
             // 月次シフトデータ取得（出勤＝shift_assignmentベース）
             List<ShiftAssignmentMonthlyView> monthlyAssignments = service.fetchShiftsByMonth(cycleStart, storeCode, departmentCode);
@@ -638,6 +643,10 @@ public class ShiftCalcController {
             Map<String, Double> employeeMonthlyHours = new HashMap<>();
             Map<String, String> employeeOffKinds = new HashMap<>();
             Map<String, String> employeePreferOnTimes = new HashMap<>();
+            Map<String, Integer> employeeWorkDays = new HashMap<>();
+            Map<String, Integer> employeeOffDays = new HashMap<>();
+            Map<LocalDate, Long> assignedMinutesByDate = new HashMap<>();
+            Map<LocalDate, Set<String>> headcountByDate = new HashMap<>();
 
             if (storeCode != null && !storeCode.isEmpty()) {
                 List<Employee> storeEmployees = employeeMapper.selectByStoreCode(storeCode);
@@ -682,6 +691,23 @@ public class ShiftCalcController {
                                 })
                         ));
                 minutesByEmp.forEach((code, minutes) -> employeeMonthlyHours.put(code, minutes / 60.0));
+
+                Map<String, Set<LocalDate>> workDatesByEmp = monthlyAssignments.stream()
+                        .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
+                        .collect(Collectors.groupingBy(
+                                ShiftAssignmentMonthlyView::employeeCode,
+                                Collectors.mapping(ShiftAssignmentMonthlyView::date, Collectors.toSet())
+                        ));
+                workDatesByEmp.forEach((code, dates) -> employeeWorkDays.put(code, dates.size()));
+
+                monthlyAssignments.stream()
+                        .filter(assignment -> finalEmployeeCodes.contains(assignment.employeeCode()))
+                        .forEach(assignment -> {
+                            long minutes = ChronoUnit.MINUTES.between(assignment.startAt(), assignment.endAt());
+                            LocalDate date = assignment.date();
+                            assignedMinutesByDate.merge(date, Math.max(0, minutes), Long::sum);
+                            headcountByDate.computeIfAbsent(date, k -> new HashSet<>()).add(assignment.employeeCode());
+                        });
             }
 
             if (storeCode != null && !storeCode.isEmpty() && !employees.isEmpty()) {
@@ -719,6 +745,7 @@ public class ShiftCalcController {
             
             // 日別人時サマリーを作成
             int daysInMonth = (int) ChronoUnit.DAYS.between(cycleStart, cycleEnd);
+            int resolutionMinutes = appSettingService.getTimeResolutionMinutes();
             // 検索フォームと見出しは「ユーザーが選択した月」を表示する
             int year = yearMonth.getYear();
             int month = yearMonth.getMonthValue();
@@ -733,23 +760,38 @@ public class ShiftCalcController {
             for (int day = 1; day <= daysInMonth; day++) {
                 LocalDate date = cycleStart.plusDays(day - 1);
                 StaffingBalanceService.DailyStaffingSummary summary = staffingSummaries.get(date);
+                long assignedMinutes = assignedMinutesByDate.getOrDefault(date, 0L);
+                int headcount = headcountByDate.getOrDefault(date, Set.of()).size();
                 
                 if (summary != null) {
+                    int requiredMinutes = Math.max(0, summary.getTotalRequired()) * resolutionMinutes;
                     dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(
                         summary.getTotalRequired(),
                         summary.getTotalAssigned(),
                         summary.getTotalShortageMinutes(),
-                        summary.getTotalExcessMinutes()
+                        summary.getTotalExcessMinutes(),
+                        requiredMinutes,
+                        assignedMinutes,
+                        headcount
                     ));
                 } else {
-                    dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(0, 0, 0, 0));
+                    dailyStaffingInfo.put(day, new DailyStaffingSummaryInfo(0, 0, 0, 0, 0, assignedMinutes, headcount));
                 }
+            }
+
+            if (!employees.isEmpty()) {
+                int totalDays = cycleDateList.size();
+                employees.forEach(emp -> {
+                    int workDays = employeeWorkDays.getOrDefault(emp.employeeCode(), 0);
+                    employeeOffDays.put(emp.employeeCode(), Math.max(0, totalDays - workDays));
+                });
             }
 
             model.addAttribute("year", year);
             model.addAttribute("month", month);
             model.addAttribute("daysInMonth", daysInMonth);
             model.addAttribute("stores", stores);
+            model.addAttribute("departments", departments);
             model.addAttribute("dateList", cycleDateList);
             model.addAttribute("selectedStoreCode", storeCode);
             model.addAttribute("selectedDepartmentCode", departmentCode);
@@ -758,6 +800,8 @@ public class ShiftCalcController {
             model.addAttribute("employeeMonthlyHours", employeeMonthlyHours);
             model.addAttribute("employeeOffKinds", employeeOffKinds);
             model.addAttribute("employeePreferOnTimes", employeePreferOnTimes);
+            model.addAttribute("employeeWorkDays", employeeWorkDays);
+            model.addAttribute("employeeOffDays", employeeOffDays);
             model.addAttribute("dailyStaffingInfo", dailyStaffingInfo);
             
             return "shift/monthly-shift";
@@ -766,11 +810,17 @@ public class ShiftCalcController {
             YearMonth currentMonth = YearMonth.now();
             List<Store> stores = storeMapper.selectByExample(null);
             stores.sort(Comparator.comparing(Store::getStoreCode));
+            List<DepartmentMaster> departments = List.of();
+            if (storeCode != null && !storeCode.isBlank()) {
+                departments = storeDepartmentMapper.findDepartmentsByStore(storeCode);
+                departments.sort(Comparator.comparing(DepartmentMaster::getDepartmentCode));
+            }
             
             model.addAttribute("year", currentMonth.getYear());
             model.addAttribute("month", currentMonth.getMonthValue());
             model.addAttribute("daysInMonth", currentMonth.lengthOfMonth());
             model.addAttribute("stores", stores);
+            model.addAttribute("departments", departments);
             model.addAttribute("selectedStoreCode", storeCode);
             model.addAttribute("selectedDepartmentCode", departmentCode);
             model.addAttribute("employees", List.of());
@@ -825,22 +875,35 @@ public class ShiftCalcController {
         private final int totalAssigned;
         private final int totalShortageMinutes;
         private final int totalExcessMinutes;
+        private final int requiredMinutes;
+        private final long assignedMinutes;
+        private final int headcount;
         
-        public DailyStaffingSummaryInfo(int totalRequired, int totalAssigned, int totalShortageMinutes, int totalExcessMinutes) {
+        public DailyStaffingSummaryInfo(int totalRequired, int totalAssigned, int totalShortageMinutes, int totalExcessMinutes,
+                                        int requiredMinutes, long assignedMinutes, int headcount) {
             this.totalRequired = totalRequired;
             this.totalAssigned = totalAssigned;
             this.totalShortageMinutes = totalShortageMinutes;
             this.totalExcessMinutes = totalExcessMinutes;
+            this.requiredMinutes = requiredMinutes;
+            this.assignedMinutes = assignedMinutes;
+            this.headcount = headcount;
         }
         
         public int getTotalRequired() { return totalRequired; }
         public int getTotalAssigned() { return totalAssigned; }
         public int getTotalShortageMinutes() { return totalShortageMinutes; }
         public int getTotalExcessMinutes() { return totalExcessMinutes; }
+        public int getRequiredMinutes() { return requiredMinutes; }
+        public long getAssignedMinutes() { return assignedMinutes; }
+        public int getHeadcount() { return headcount; }
         public int totalRequired() { return totalRequired; }
         public int totalAssigned() { return totalAssigned; }
         public int totalShortageMinutes() { return totalShortageMinutes; }
         public int totalExcessMinutes() { return totalExcessMinutes; }
+        public int requiredMinutes() { return requiredMinutes; }
+        public long assignedMinutes() { return assignedMinutes; }
+        public int headcount() { return headcount; }
     }
 
     private LocalTime toLocalTimeSafe(java.util.Date date) {
