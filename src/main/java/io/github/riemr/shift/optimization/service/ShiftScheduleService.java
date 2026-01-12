@@ -921,6 +921,7 @@ public class ShiftScheduleService {
             String employeeCode = change.employeeCode();
             String timeStr = change.time(); // "HH:mm" format
             String currentRegister = change.current();
+            String originalValue = change.original();
             
             // 時刻文字列をLocalTimeに変換
             String[] timeParts = timeStr.split(":");
@@ -944,13 +945,54 @@ public class ShiftScheduleService {
             } else {
                 registerAssignmentMapper.deleteByEmployeeCodeAndTimeRange(employeeCode, startAt, endAt);
             }
+
+            TaskValue originalTask = parseTaskValue(originalValue);
+            TaskValue currentTask = parseTaskValue(currentRegister);
+            if (storeCode != null && !storeCode.isBlank()) {
+                String deptToDelete = null;
+                if (originalTask != null && originalTask.departmentCode() != null && !originalTask.departmentCode().isBlank()) {
+                    deptToDelete = originalTask.departmentCode();
+                } else if (currentTask != null && currentTask.departmentCode() != null && !currentTask.departmentCode().isBlank()) {
+                    deptToDelete = currentTask.departmentCode();
+                }
+                if (deptToDelete != null) {
+                    departmentTaskAssignmentMapper.deleteByEmployeeStoreAndDepartmentAndTimeRange(
+                            storeCode, deptToDelete, employeeCode, startAt, endAt);
+                }
+            }
             
             // 新しい割り当てを作成（currentRegisterが空でない場合）
+            if (currentTask != null) {
+                DepartmentTaskAssignment assignment = new DepartmentTaskAssignment();
+                assignment.setStoreCode(storeCode);
+                assignment.setDepartmentCode(currentTask.departmentCode());
+                assignment.setTaskCode(currentTask.taskCode());
+                assignment.setEmployeeCode(employeeCode);
+                assignment.setStartAt(startAt);
+                assignment.setEndAt(endAt);
+                assignment.setCreatedBy("manual_edit");
+                departmentTaskAssignmentMapper.insert(assignment);
+                continue;
+            }
+
             if (currentRegister != null && !currentRegister.trim().isEmpty()) {
+                String trimmed = currentRegister.trim();
+                if ("break".equalsIgnoreCase(trimmed)) {
+                    DepartmentTaskAssignment assignment = new DepartmentTaskAssignment();
+                    assignment.setStoreCode(storeCode);
+                    assignment.setDepartmentCode("520");
+                    assignment.setTaskCode("BREAK");
+                    assignment.setEmployeeCode(employeeCode);
+                    assignment.setStartAt(startAt);
+                    assignment.setEndAt(endAt);
+                    assignment.setCreatedBy("manual_edit");
+                    departmentTaskAssignmentMapper.insert(assignment);
+                    continue;
+                }
                 RegisterAssignment assignment = new RegisterAssignment();
                 assignment.setStoreCode(storeCode);
                 assignment.setEmployeeCode(employeeCode);
-                assignment.setRegisterNo(Integer.parseInt(currentRegister));
+                assignment.setRegisterNo(Integer.parseInt(trimmed));
                 assignment.setStartAt(startAt);
                 assignment.setEndAt(endAt);
                 assignment.setCreatedBy("manual_edit");
@@ -961,6 +1003,21 @@ public class ShiftScheduleService {
         
         log.info("Saved {} shift assignment changes for date {}", request.changes().size(), date);
     }
+
+    private static TaskValue parseTaskValue(String value) {
+        if (value == null || value.isBlank()) return null;
+        if (!value.startsWith("TASK|")) return null;
+        String[] parts = value.split("\\|", 3);
+        String dept = parts.length > 1 ? parts[1] : "";
+        String task = parts.length > 2 ? parts[2] : "";
+        if (dept.isBlank()) {
+            dept = "520";
+        }
+        if (dept.isBlank() && task.isBlank()) return null;
+        return new TaskValue(dept, task);
+    }
+
+    private record TaskValue(String departmentCode, String taskCode) {}
 
     /**
      * 月次シフト（出勤）を1日単位で保存する。

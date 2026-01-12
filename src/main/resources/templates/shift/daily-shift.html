@@ -429,6 +429,7 @@ let isEditing = false;
 let hasChanges = false;
 let changes = new Map(); // key: employeeCode_time, value: {original, current}
 let employees = [];
+let taskMasterList = [];
 
 function gridColumnIndex(h, m) {
   return (h * PER_HOUR) + (m / RES_MIN) + 2;
@@ -473,6 +474,29 @@ function buildTimeSlots() {
   return timeSlots;
 }
 
+function selectedDepartmentCode() {
+  const code = $('departmentCode') ? $('departmentCode').value : '';
+  return code && code.trim() ? code.trim() : '520';
+}
+
+function isRegisterDepartment() {
+  const code = $('departmentCode') ? $('departmentCode').value : '';
+  return !code || code === '520';
+}
+
+function encodeTaskValue(departmentCode, taskCode) {
+  return `TASK|${departmentCode || ''}|${taskCode || ''}`;
+}
+
+function parseTaskValue(value) {
+  if (!value || !value.startsWith('TASK|')) return null;
+  const parts = value.split('|');
+  return {
+    departmentCode: parts[1] || '',
+    taskCode: parts[2] || ''
+  };
+}
+
 // Function to generate a consistent color based on employee name
 function getEmployeeColorClass(employeeName) {
   if (!employeeName) {
@@ -506,8 +530,9 @@ async function loadTaskMasterMap(storeCode, departmentCode) {
   try {
     const res = await fetch(`/shift/api/calc/task-masters?storeCode=${encodeURIComponent(storeCode)}${departmentCode ? `&departmentCode=${encodeURIComponent(departmentCode)}` : ''}`);
     const list = await res.json();
+    taskMasterList = Array.isArray(list) ? list : [];
     taskNameByCode.clear();
-    (list || []).forEach(t => {
+    taskMasterList.forEach(t => {
       const key = `${t.departmentCode || ''}::${t.taskCode}`;
       taskNameByCode.set(key, t.name || t.taskCode || '');
       if (!t.departmentCode) {
@@ -517,23 +542,29 @@ async function loadTaskMasterMap(storeCode, departmentCode) {
   } catch (e) {
     console.error('作業マスタ取得エラー:', e);
     taskNameByCode.clear();
+    taskMasterList = [];
   }
 }
 
 // ドラッグアンドドロップと右クリックメニュー処理
 let draggedAssignment = null;
 let registerSelector = null;
+let taskSelector = null;
 let contextMenu = null;
 
 // 割り当てセルのドラッグ処理
 function handleAssignmentDragStart(event) {
   const cell = event.target;
+  const isTask = cell.classList.contains('task-assigned') || cell.classList.contains('break-assigned');
   draggedAssignment = {
     sourceCell: cell,
     employeeCode: cell.dataset.employee,
     employeeName: cell.dataset.employeeName,
     time: cell.dataset.time,
-    registerNo: cell.dataset.currentRegister,
+    registerNo: isTask ? '' : cell.dataset.currentRegister,
+    taskCode: isTask ? cell.dataset.taskCode : '',
+    departmentCode: isTask ? cell.dataset.departmentCode : '',
+    type: isTask ? 'task' : 'register',
     assignedEmployeeName: cell.dataset.assignedEmployeeName
   };
   
@@ -717,7 +748,150 @@ function closeRegisterSelectorOnOutsideClick(event) {
   }
 }
 
+function resetAssignmentCell(cell) {
+  cell.classList.remove('assigned', 'break-assigned', 'task-assigned', 'modified', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+  cell.textContent = '';
+  cell.dataset.currentRegister = '';
+  cell.dataset.workKind = '';
+  cell.dataset.registerLabel = '';
+  cell.dataset.taskCode = '';
+  cell.dataset.departmentCode = '';
+  cell.dataset.taskLabel = '';
+  delete cell.dataset.assignedEmployeeName;
+  cell.draggable = false;
+  cell.removeEventListener('dragstart', handleAssignmentDragStart);
+  cell.removeEventListener('dragend', handleAssignmentDragEnd);
+}
+
+function applyRegisterValue(cell, registerValue, assignedEmployeeName = null) {
+  resetAssignmentCell(cell);
+  if (!registerValue) return;
+  const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
+  cell.classList.add('assigned');
+  if (registerValue === 'break') {
+    cell.classList.add('break-assigned');
+    cell.dataset.workKind = 'BREAK';
+    cell.dataset.registerLabel = '休';
+  } else {
+    const colorClass = getEmployeeColorClass(employeeNameForColor);
+    cell.classList.add(colorClass);
+    cell.dataset.workKind = 'REGISTER_OP';
+    cell.dataset.registerLabel = `R${registerValue}`;
+  }
+  cell.dataset.taskCode = '';
+  cell.dataset.departmentCode = '';
+  cell.dataset.taskLabel = '';
+  cell.dataset.assignedEmployeeName = employeeNameForColor;
+  cell.dataset.currentRegister = registerValue;
+  cell.draggable = true;
+  cell.addEventListener('dragstart', handleAssignmentDragStart);
+  cell.addEventListener('dragend', handleAssignmentDragEnd);
+}
+
+function applyTaskValue(cell, taskCode, departmentCode, assignedEmployeeName = null) {
+  resetAssignmentCell(cell);
+  if (!taskCode) return;
+  const deptCode = departmentCode || selectedDepartmentCode();
+  const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
+  const taskLabel = taskCode === 'BREAK' ? '休憩' : getTaskName(taskCode, deptCode);
+  if (taskCode === 'BREAK') {
+    cell.classList.add('break-assigned');
+    cell.dataset.workKind = 'BREAK';
+    cell.dataset.registerLabel = '休';
+  } else {
+    cell.classList.add('task-assigned');
+    cell.dataset.workKind = 'DEPARTMENT_TASK';
+    cell.dataset.registerLabel = '';
+  }
+  cell.dataset.taskCode = taskCode;
+  cell.dataset.departmentCode = deptCode;
+  cell.dataset.taskLabel = taskLabel;
+  cell.dataset.assignedEmployeeName = employeeNameForColor;
+  cell.dataset.currentRegister = encodeTaskValue(deptCode, taskCode);
+  cell.draggable = true;
+  cell.addEventListener('dragstart', handleAssignmentDragStart);
+  cell.addEventListener('dragend', handleAssignmentDragEnd);
+}
+
+function showTaskSelectorForCell(cell) {
+  hideTaskSelector();
+  hideRegisterSelector();
+
+  const deptCode = selectedDepartmentCode();
+  const tasks = (taskMasterList || []).filter(t => {
+    const tDept = t.departmentCode || '';
+    if (!deptCode || deptCode === '520') {
+      return tDept === '' || tDept === deptCode;
+    }
+    return tDept === deptCode;
+  });
+  const options = tasks.map(t => {
+    const label = t.name ? `${t.taskCode} - ${t.name}` : t.taskCode;
+    const optionDept = t.departmentCode || deptCode;
+    return `<option value="${optionDept}::${t.taskCode}">${label}</option>`;
+  }).join('');
+
+  taskSelector = document.createElement('div');
+  taskSelector.className = 'register-selector show';
+  taskSelector.innerHTML = `
+    <div class="mb-2"><strong>作業を選択:</strong></div>
+    <select class="form-select form-select-sm mb-2" id="taskSelectorSelect">
+      <option value="">未割当</option>
+      <option value="BREAK">休憩</option>
+      ${options}
+    </select>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-primary btn-sm" data-action="apply">設定</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="close">閉じる</button>
+    </div>
+  `;
+
+  taskSelector.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const action = e.target.dataset.action;
+      if (action === 'apply') {
+        const select = taskSelector.querySelector('#taskSelectorSelect');
+        const value = select ? select.value : '';
+        if (!value) {
+          assignTaskToCell(cell, '', deptCode);
+        } else if (value.includes('::')) {
+          const [taskDept, taskCode] = value.split('::');
+          assignTaskToCell(cell, taskCode || '', taskDept || deptCode);
+        } else {
+          assignTaskToCell(cell, value, deptCode);
+        }
+      }
+      hideTaskSelector();
+    });
+  });
+
+  cell.style.position = 'relative';
+  cell.appendChild(taskSelector);
+
+  setTimeout(() => {
+    document.addEventListener('click', closeTaskSelectorOnOutsideClick);
+  }, 10);
+}
+
+function hideTaskSelector() {
+  if (taskSelector) {
+    taskSelector.remove();
+    taskSelector = null;
+    document.removeEventListener('click', closeTaskSelectorOnOutsideClick);
+  }
+}
+
+function closeTaskSelectorOnOutsideClick(event) {
+  if (taskSelector && !taskSelector.contains(event.target)) {
+    hideTaskSelector();
+  }
+}
+
 function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
+  if (newValue === 'break') {
+    assignTaskToCell(cell, 'BREAK', selectedDepartmentCode(), assignedEmployeeName);
+    return;
+  }
   const employeeCode = cell.dataset.employee;
   const time = cell.dataset.time;
   const originalValue = cell.dataset.originalRegister || '';
@@ -733,54 +907,12 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
     });
     
     cell.dataset.currentRegister = newValue;
+    applyRegisterValue(cell, newValue, assignedEmployeeName);
     cell.classList.add('modified');
-    
     if (newValue) {
-      cell.classList.add('assigned');
-      const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
-      
-      if (newValue === 'break') {
-        // 休憩の場合
-        cell.classList.add('break-assigned');
-        cell.textContent = '';
-        cell.dataset.workKind = 'BREAK';
-        cell.dataset.registerLabel = '休';
-      } else {
-        // レジ割り当ての場合
-        const colorClass = getEmployeeColorClass(employeeNameForColor);
-        cell.classList.add(colorClass);
-        cell.textContent = '';
-        cell.dataset.workKind = 'REGISTER_OP';
-        cell.dataset.registerLabel = `R${newValue}`;
-        // 勤務時間外であっても、このスロットを勤務時間として取り込む
-        try {
-          addWorkingSlot(cell.dataset.employee, cell.dataset.time);
-        } catch(e) { console.warn('addWorkingSlot failed', e); }
-      }
-      cell.dataset.taskCode = '';
-      cell.dataset.departmentCode = '';
-      cell.dataset.taskLabel = '';
-      
-      cell.dataset.assignedEmployeeName = employeeNameForColor;
-      
-      // ドラッグ可能にする（重複イベント防止）
-      cell.draggable = true;
-      cell.removeEventListener('dragstart', handleAssignmentDragStart);
-      cell.removeEventListener('dragend', handleAssignmentDragEnd);
-      cell.addEventListener('dragstart', handleAssignmentDragStart);
-      cell.addEventListener('dragend', handleAssignmentDragEnd);
-    } else {
-      cell.classList.remove('assigned', 'break-assigned');
-      cell.textContent = '';
-      cell.classList.remove('color-0', 'color-1', 'color-2', 'color-3', 'color-4');
-      cell.draggable = false;
-      cell.removeEventListener('dragstart', handleAssignmentDragStart);
-      cell.removeEventListener('dragend', handleAssignmentDragEnd);
-      cell.dataset.workKind = '';
-      cell.dataset.registerLabel = '';
-      cell.dataset.taskCode = '';
-      cell.dataset.departmentCode = '';
-      cell.dataset.taskLabel = '';
+      try {
+        addWorkingSlot(cell.dataset.employee, cell.dataset.time);
+      } catch(e) { console.warn('addWorkingSlot failed', e); }
     }
     
     hasChanges = true;
@@ -792,14 +924,70 @@ function assignRegisterToCell(cell, newValue, assignedEmployeeName = null) {
     updateWorkHours();
     renderMergedAssignments();
   } else {
-    // 変更なし
+    // 変更なし（元の状態に復元）
+    if (newValue) {
+      applyRegisterValue(cell, newValue, assignedEmployeeName);
+    } else {
+      resetAssignmentCell(cell);
+    }
     changes.delete(key);
     cell.classList.remove('modified');
-    
     if (changes.size === 0) {
       hasChanges = false;
       hideSaveButtons();
     }
+    updateWorkModel();
+    updateStaffingBalance();
+    updateWorkHours();
+    renderMergedAssignments();
+  }
+}
+
+function assignTaskToCell(cell, taskCode, departmentCode, assignedEmployeeName = null) {
+  const employeeCode = cell.dataset.employee;
+  const time = cell.dataset.time;
+  const originalValue = cell.dataset.originalRegister || '';
+  const deptCode = departmentCode || selectedDepartmentCode();
+  const newValue = taskCode ? encodeTaskValue(deptCode, taskCode) : '';
+  const key = `${employeeCode}_${time}`;
+
+  if (newValue !== originalValue) {
+    changes.set(key, {
+      employeeCode,
+      time,
+      original: originalValue,
+      current: newValue
+    });
+
+    cell.dataset.currentRegister = newValue;
+    applyTaskValue(cell, taskCode, deptCode, assignedEmployeeName);
+    cell.classList.add('modified');
+    if (taskCode) {
+      cell.dataset.currentRegister = newValue;
+    }
+
+    hasChanges = true;
+    showSaveButtons();
+    updateWorkModel();
+    updateStaffingBalance();
+    updateWorkHours();
+    renderMergedAssignments();
+  } else {
+    if (taskCode) {
+      applyTaskValue(cell, taskCode, deptCode, assignedEmployeeName);
+    } else {
+      resetAssignmentCell(cell);
+    }
+    changes.delete(key);
+    cell.classList.remove('modified');
+    if (changes.size === 0) {
+      hasChanges = false;
+      hideSaveButtons();
+    }
+    updateWorkModel();
+    updateStaffingBalance();
+    updateWorkHours();
+    renderMergedAssignments();
   }
 }
 
@@ -967,7 +1155,9 @@ function handleRightClick(event) {
   hideContextMenu();
   
   const cell = event.currentTarget;
-  const isAssigned = cell.classList.contains('assigned');
+  const isAssigned = cell.classList.contains('assigned') ||
+    cell.classList.contains('task-assigned') ||
+    cell.classList.contains('break-assigned');
   
   showContextMenu(event.pageX, event.pageY, cell, isAssigned);
 }
@@ -975,26 +1165,51 @@ function handleRightClick(event) {
 function showContextMenu(x, y, cell, isAssigned) {
   contextMenu = document.createElement('div');
   contextMenu.className = 'context-menu show';
+  const isTaskAssigned = cell.classList.contains('task-assigned') || cell.classList.contains('break-assigned');
+  const registerMode = isRegisterDepartment();
   
   if (isAssigned) {
     // 割り当て済みセル用メニュー
-    contextMenu.innerHTML = `
-      <button class="context-menu-item" data-action="change-register">
-        <i class="bi bi-gear"></i> レジ変更
-      </button>
-      <div class="context-menu-divider"></div>
-      <button class="context-menu-item danger" data-action="remove-assignment">
-        <i class="bi bi-trash"></i> 割り当て解除
-      </button>
-    `;
+    if (isTaskAssigned) {
+      contextMenu.innerHTML = `
+        <button class="context-menu-item" data-action="change-task">
+          <i class="bi bi-gear"></i> 作業変更
+        </button>
+        <div class="context-menu-divider"></div>
+        <button class="context-menu-item danger" data-action="remove-assignment">
+          <i class="bi bi-trash"></i> 割り当て解除
+        </button>
+      `;
+    } else {
+      contextMenu.innerHTML = `
+        <button class="context-menu-item" data-action="change-register">
+          <i class="bi bi-gear"></i> レジ変更
+        </button>
+        <div class="context-menu-divider"></div>
+        <button class="context-menu-item danger" data-action="remove-assignment">
+          <i class="bi bi-trash"></i> 割り当て解除
+        </button>
+      `;
+    }
   } else {
     // 未割り当てセル用メニュー
     const employeeName = cell.dataset.employeeName;
-    contextMenu.innerHTML = `
-      <button class="context-menu-item" data-action="assign-register">
-        <i class="bi bi-plus-circle"></i> ${employeeName}に割り当て
-      </button>
-    `;
+    if (registerMode) {
+      contextMenu.innerHTML = `
+        <button class="context-menu-item" data-action="assign-register">
+          <i class="bi bi-plus-circle"></i> レジを割り当て
+        </button>
+        <button class="context-menu-item" data-action="assign-task">
+          <i class="bi bi-plus-circle"></i> 作業を割り当て
+        </button>
+      `;
+    } else {
+      contextMenu.innerHTML = `
+        <button class="context-menu-item" data-action="assign-task">
+          <i class="bi bi-plus-circle"></i> ${employeeName}に割り当て
+        </button>
+      `;
+    }
   }
   
   // イベントリスナーを追加
@@ -1037,11 +1252,17 @@ function handleContextMenuAction(action, cell) {
     case 'change-register':
       showRegisterSelectorForCell(cell);
       break;
+    case 'change-task':
+      showTaskSelectorForCell(cell);
+      break;
     case 'remove-assignment':
       removeAssignment(cell);
       break;
     case 'assign-register':
       showRegisterSelectorForCell(cell);
+      break;
+    case 'assign-task':
+      showTaskSelectorForCell(cell);
       break;
   }
 }
@@ -1077,22 +1298,15 @@ function moveAssignmentToEmployee(assignment, targetEmployeeCode, targetTime) {
   });
   
   // 元のセルの表示をクリア
-  sourceCell.classList.remove('assigned', 'break-assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4', 'task-assigned');
+  resetAssignmentCell(sourceCell);
   sourceCell.classList.add('modified');
-  sourceCell.textContent = '';
-  sourceCell.dataset.currentRegister = '';
-  sourceCell.draggable = false;
-  sourceCell.removeEventListener('dragstart', handleAssignmentDragStart);
-  sourceCell.removeEventListener('dragend', handleAssignmentDragEnd);
-  delete sourceCell.dataset.assignedEmployeeName;
-  sourceCell.dataset.workKind = '';
-  sourceCell.dataset.registerLabel = '';
-  sourceCell.dataset.taskCode = '';
-  sourceCell.dataset.departmentCode = '';
-  sourceCell.dataset.taskLabel = '';
   
   // 新しいセルに割り当てを追加
-  assignRegisterToCell(targetCell, assignment.registerNo, assignment.assignedEmployeeName);
+  if (assignment.type === 'task') {
+    assignTaskToCell(targetCell, assignment.taskCode, assignment.departmentCode, assignment.assignedEmployeeName);
+  } else {
+    assignRegisterToCell(targetCell, assignment.registerNo, assignment.assignedEmployeeName);
+  }
   
   hasChanges = true;
   showSaveButtons();
@@ -1134,7 +1348,7 @@ function removeAssignment(cell) {
   }
   
   // セルから割り当てを削除
-  cell.classList.remove('assigned', 'break-assigned', 'task-assigned', 'color-0', 'color-1', 'color-2', 'color-3', 'color-4');
+  resetAssignmentCell(cell);
   
   if (hasChanges) {
     cell.classList.add('modified');
@@ -1151,16 +1365,6 @@ function removeAssignment(cell) {
   renderMergedAssignments();
   
   cell.textContent = '';
-  cell.dataset.currentRegister = '';
-  cell.draggable = false;
-  cell.removeEventListener('dragstart', handleAssignmentDragStart);
-  cell.removeEventListener('dragend', handleAssignmentDragEnd);
-  delete cell.dataset.assignedEmployeeName;
-  cell.dataset.workKind = '';
-  cell.dataset.registerLabel = '';
-  cell.dataset.taskCode = '';
-  cell.dataset.departmentCode = '';
-  cell.dataset.taskLabel = '';
 }
 
 
@@ -1251,31 +1455,47 @@ function cancelChanges() {
         cell.dataset.taskLabel = '';
         
         if (change.original) {
-          // 元の割り当てを復元
-          cell.classList.add('assigned');
-          
-          if (change.original === 'break') {
-            // 休憩の場合
-            cell.classList.add('break-assigned');
+          const taskValue = parseTaskValue(change.original);
+          if (taskValue) {
+            const taskCode = taskValue.taskCode || '';
+            const deptCode = taskValue.departmentCode || selectedDepartmentCode();
+            const taskLabel = taskCode === 'BREAK' ? '休憩' : getTaskName(taskCode, deptCode);
+            if (taskCode === 'BREAK') {
+              cell.classList.add('break-assigned');
+              cell.dataset.workKind = 'BREAK';
+              cell.dataset.registerLabel = '休';
+            } else {
+              cell.classList.add('task-assigned');
+              cell.dataset.workKind = 'DEPARTMENT_TASK';
+              cell.dataset.registerLabel = '';
+            }
             cell.textContent = '';
-            cell.dataset.workKind = 'BREAK';
-            cell.dataset.registerLabel = '休';
+            cell.dataset.taskCode = taskCode;
+            cell.dataset.departmentCode = deptCode;
+            cell.dataset.taskLabel = taskLabel;
           } else {
-            // レジ割り当ての場合
-            cell.textContent = '';
-            cell.dataset.workKind = 'REGISTER_OP';
-            cell.dataset.registerLabel = `R${change.original}`;
-            
-            // 元の従業員名を使って色を復元
-            const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
-            const colorClass = getEmployeeColorClass(originalEmployeeName);
-            cell.classList.add(colorClass);
+            // 元の割り当てを復元（レジ）
+            cell.classList.add('assigned');
+            if (change.original === 'break') {
+              // 休憩の場合
+              cell.classList.add('break-assigned');
+              cell.textContent = '';
+              cell.dataset.workKind = 'BREAK';
+              cell.dataset.registerLabel = '休';
+            } else {
+              // レジ割り当ての場合
+              cell.textContent = '';
+              cell.dataset.workKind = 'REGISTER_OP';
+              cell.dataset.registerLabel = `R${change.original}`;
+              const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
+              const colorClass = getEmployeeColorClass(originalEmployeeName);
+              cell.classList.add(colorClass);
+            }
+            cell.dataset.taskCode = '';
+            cell.dataset.departmentCode = '';
+            cell.dataset.taskLabel = '';
           }
-          cell.dataset.taskCode = '';
-          cell.dataset.departmentCode = '';
-          cell.dataset.taskLabel = '';
-          
-          // ドラッグ機能を復元（重複イベント防止）
+
           cell.draggable = true;
           cell.removeEventListener('dragstart', handleAssignmentDragStart);
           cell.removeEventListener('dragend', handleAssignmentDragEnd);
@@ -1470,13 +1690,10 @@ async function loadResult(dateString){
         cell.dataset.originalRegister = '';
         setGridPosition(cell, shiftRowIndex, gridColumnIndex(h, m));
         
-        // レジ部門のみドラッグ＆ドロップ/右クリックメニューを有効化
-        if (IS_REGISTER_DEPT) {
-          cell.addEventListener('dragover', handleDragOver);
-          cell.addEventListener('drop', handleDrop);
-          cell.addEventListener('dragleave', handleDragLeave);
-          cell.addEventListener('contextmenu', handleRightClick);
-        }
+        cell.addEventListener('dragover', handleDragOver);
+        cell.addEventListener('drop', handleDrop);
+        cell.addEventListener('dragleave', handleDragLeave);
+        cell.addEventListener('contextmenu', handleRightClick);
         
         shiftGrid.appendChild(cell);
       }
@@ -1555,17 +1772,29 @@ async function loadResult(dateString){
           const workKind = assignment.workKind || 'REGISTER_OP';
           if (workKind === 'DEPARTMENT_TASK') {
             // 部門タスク割当（レジ番号無し）
-            cell.classList.add('task-assigned');
             const taskLabel = getTaskName(assignment.taskCode, assignment.departmentCode);
             cell.textContent = '';
             cell.dataset.workKind = workKind;
-            cell.dataset.taskCode = assignment.taskCode || '';
-            cell.dataset.departmentCode = assignment.departmentCode || '';
+            const taskCode = assignment.taskCode || '';
+            const deptCode = assignment.departmentCode || selectedDepartmentCode();
+            const taskValue = encodeTaskValue(deptCode, taskCode);
+            cell.dataset.taskCode = taskCode;
+            cell.dataset.departmentCode = deptCode;
             cell.dataset.taskLabel = taskLabel;
-            cell.dataset.registerLabel = '';
-            cell.dataset.originalRegister = '';
-            cell.dataset.currentRegister = '';
-            cell.draggable = false; // タスクはドラッグ移動不可（必要なら拡張）
+            cell.dataset.registerLabel = taskCode === 'BREAK' ? '休' : '';
+            cell.dataset.originalRegister = taskValue;
+            cell.dataset.currentRegister = taskValue;
+            if (taskCode === 'BREAK') {
+              cell.classList.add('break-assigned');
+              cell.dataset.workKind = 'BREAK';
+            } else {
+              cell.classList.add('task-assigned');
+            }
+            cell.draggable = true;
+            cell.removeEventListener('dragstart', handleAssignmentDragStart);
+            cell.removeEventListener('dragend', handleAssignmentDragEnd);
+            cell.addEventListener('dragstart', handleAssignmentDragStart);
+            cell.addEventListener('dragend', handleAssignmentDragEnd);
           } else {
             cell.classList.add('assigned');
             const registerValue = assignment.registerNo;
@@ -1590,16 +1819,11 @@ async function loadResult(dateString){
             cell.dataset.departmentCode = '';
             cell.dataset.taskLabel = '';
             
-            if (IS_REGISTER_DEPT) {
-              // レジ割り当てのみドラッグ可能
-              cell.draggable = true;
-              cell.removeEventListener('dragstart', handleAssignmentDragStart);
-              cell.removeEventListener('dragend', handleAssignmentDragEnd);
-              cell.addEventListener('dragstart', handleAssignmentDragStart);
-              cell.addEventListener('dragend', handleAssignmentDragEnd);
-            } else {
-              cell.draggable = false;
-            }
+            cell.draggable = true;
+            cell.removeEventListener('dragstart', handleAssignmentDragStart);
+            cell.removeEventListener('dragend', handleAssignmentDragEnd);
+            cell.addEventListener('dragstart', handleAssignmentDragStart);
+            cell.addEventListener('dragend', handleAssignmentDragEnd);
           }
           
           // 従業員名を正しく設定（APIからの名前またはセルの従業員名を使用）
