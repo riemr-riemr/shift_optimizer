@@ -658,32 +658,3 @@ ON CONFLICT DO NOTHING;
 INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
  ('USER','TASK_PLAN', false, false)
 ON CONFLICT DO NOTHING;
-
--- ------------------------------------------------
--- 15. task: 生成された部門タスク（作業）リクエスト
--- ------------------------------------------------
-CREATE TABLE IF NOT EXISTS task (
-    task_id                    BIGSERIAL PRIMARY KEY,
-    store_code                 VARCHAR(10) NOT NULL REFERENCES store(store_code),
-    work_date                  DATE        NOT NULL,
-    name                       VARCHAR(100),
-    description                TEXT,
-    schedule_type              VARCHAR(10) CHECK (schedule_type IN ('FIXED','FLEXIBLE')),
-    fixed_start_at             TIMESTAMP,
-    fixed_end_at               TIMESTAMP,
-    window_start_at            TIMESTAMP,
-    window_end_at              TIMESTAMP,
-    required_duration_minutes  INTEGER,
-    required_skill_code        VARCHAR(32),
-    required_staff_count       INTEGER,
-    priority                   INTEGER,
-    must_be_contiguous         SMALLINT,
-    created_by                 VARCHAR(64),
-    created_at                 TIMESTAMP DEFAULT now(),
-    updated_by                 VARCHAR(64),
-    updated_at                 TIMESTAMP DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date);
-ALTER TABLE IF EXISTS task_plan
-  ADD CONSTRAINT IF NOT EXISTS fk_task_plan_task_master
-  FOREIGN KEY (task_code, department_code) REFERENCES task_master(task_code, department_code);
