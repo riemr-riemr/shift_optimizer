@@ -12,6 +12,7 @@ import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.application.dto.RegisterDemandHourDto;
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
+import io.github.riemr.shift.application.service.TaskCategoryMasterService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
 import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
@@ -37,6 +38,7 @@ import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
+import io.github.riemr.shift.infrastructure.persistence.entity.TaskCategoryMaster;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskMaster;
 import io.github.riemr.shift.util.OffRequestKinds;
 import io.github.riemr.shift.util.EmployeeRequestKinds;
@@ -77,6 +79,7 @@ public class ShiftDailyShiftController {
     private final ShiftOptimizationPreparationService preparationService;
     private final StoreMapper storeMapper;
     private final RegisterDemandHourService registerDemandHourService;
+    private final TaskCategoryMasterService taskCategoryMasterService;
     private final TaskMasterService taskMasterService;
     private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
@@ -363,6 +366,12 @@ public class ShiftDailyShiftController {
         return list.stream()
                 .filter(t -> departmentCode.equals(t.getDepartmentCode()))
                 .toList();
+    }
+
+    @GetMapping("/api/calc/task-categories")
+    @ResponseBody
+    public List<TaskCategoryMaster> getTaskCategories() {
+        return taskCategoryMasterService.list();
     }
 
     @GetMapping("/api/calc/work-demand-slot/{date}")

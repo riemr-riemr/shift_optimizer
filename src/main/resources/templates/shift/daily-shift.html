@@ -91,24 +91,6 @@
   </div>
 </div>
 
-<!-- Staffing Balance Section -->
-<div class="row g-4 mt-2">
-  <div class="col-12">
-    <div class="card" id="staffingBalanceCard" style="display: none;">
-      <div class="card-header">
-        <h5 class="mb-0">
-          <i class="bi bi-graph-up-arrow me-2"></i>時間帯別人時過不足
-        </h5>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive" id="staffingBalanceContainer" style="max-height: 250px; overflow-x: auto; overflow-y: auto;">
-          <div id="staffingBalanceGrid" class="grid-container"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Work Model Section -->
 <div class="row g-4 mt-2">
   <div class="col-12">
@@ -169,25 +151,27 @@
         </div>
       </div>
       <div class="card-body p-0">
-        <div class="alert alert-info m-3" id="dragDropHelp">
-          <div class="d-flex align-items-start">
-            <i class="bi bi-info-circle me-2 mt-1"></i>
-            <div>
-              <strong>使い方:</strong><br>
-              <div class="mt-2">
-                <span class="badge bg-primary me-2">ドラッグ</span> 割り当て済みセルを他の従業員の同じ時間にドラッグして移動<br>
-                <span class="badge bg-success me-2">右クリック</span> セルを右クリックで割り当て・変更・解除メニュー
+        <div class="grid-pane flex-grow-1">
+          <div class="alert alert-info m-3" id="dragDropHelp">
+            <div class="d-flex align-items-start">
+              <i class="bi bi-info-circle me-2 mt-1"></i>
+              <div>
+                <strong>使い方:</strong><br>
+                <div class="mt-2">
+                  <span class="badge bg-primary me-2">ドラッグ</span> 割り当て済みセルを他の従業員の同じ時間にドラッグして移動<br>
+                  <span class="badge bg-success me-2">右クリック</span> セルを右クリックで割り当て・変更・解除メニュー
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div id="noDataMessage" class="text-center py-5 text-muted">
-          <i class="bi bi-calendar-x display-4 d-block mb-3"></i>
-          <h6>シフトデータがありません</h6>
-          <p class="mb-0">日付を選択して検索ボタンを押してください</p>
-        </div>
-        <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto; display: none;" id="tableContainer">
-          <div id="shiftGrid" class="grid-container shift-grid-container"></div>
+          <div id="noDataMessage" class="text-center py-5 text-muted">
+            <i class="bi bi-calendar-x display-4 d-block mb-3"></i>
+            <h6>シフトデータがありません</h6>
+            <p class="mb-0">日付を選択して検索ボタンを押してください</p>
+          </div>
+          <div class="table-responsive" style="max-height: 600px; overflow-x: auto; overflow-y: auto; display: none;" id="tableContainer">
+            <div id="shiftGrid" class="grid-container shift-grid-container"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -198,15 +182,14 @@
   /* Shift-specific grid layout */
   .shift-grid-container {
     /* grid-template-columns は解像度(RES_MIN)に応じてJSで動的設定 */
-    grid-auto-rows: 32px;
+    grid-auto-rows: 28px;
     align-items: stretch;
     grid-auto-flow: row;
   }
 
   #tableContainer,
   #workModelContainer,
-  #departmentWorkContainer,
-  #staffingBalanceContainer {
+  #departmentWorkContainer {
     border: 1px solid #dee2e6;
     border-radius: 6px;
     background: #fff;
@@ -214,8 +197,7 @@
 
   .shift-grid-container .grid-cell,
   #workModelGrid .grid-cell,
-  #departmentWorkGrid .grid-cell,
-  #staffingBalanceGrid .grid-cell {
+  #departmentWorkGrid .grid-cell {
     border-right: 1px solid #f0f0f0;
     border-bottom: 1px solid #f7f7f7;
     min-height: 28px;
@@ -225,8 +207,8 @@
 
   .shift-grid-container .grid-header,
   .shift-grid-container .grid-cell {
-    padding: 2px 4px;
-    line-height: 1.1;
+    padding: 0;
+    line-height: 1;
     box-sizing: border-box;
   }
 
@@ -268,8 +250,7 @@
 
   .shift-grid-container .grid-header,
   #workModelGrid .grid-header,
-  #departmentWorkGrid .grid-header,
-  #staffingBalanceGrid .grid-header {
+  #departmentWorkGrid .grid-header {
     position: sticky;
     top: 0;
     background: #f8f9fa;
@@ -285,9 +266,53 @@
 
   .shift-grid-container .grid-header.time-slot,
   #workModelGrid .grid-header.time-slot,
-  #departmentWorkGrid .grid-header.time-slot,
-  #staffingBalanceGrid .grid-header.time-slot {
+  #departmentWorkGrid .grid-header.time-slot {
     border-right: 1px solid #eee;
+  }
+
+  .shift-grid-container .staffing-summary-header {
+    background: rgba(78, 205, 196, 0.28);
+    color: var(--color-dark);
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border-color: var(--border-normal);
+    height: 24px;
+    gap: 6px;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .shift-grid-container .staffing-summary-cell {
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shift-grid-container .balance-hours {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0 3px;
+    border-radius: 3px;
+    margin-top: 1px;
+    line-height: 1.1;
+    display: inline-block;
+  }
+
+  .shift-grid-container .balance-hours.shortage {
+    background-color: var(--color-danger);
+    color: #fff;
+  }
+
+  .shift-grid-container .balance-hours.excess {
+    background-color: var(--color-success);
+    color: #fff;
+  }
+
+  .shift-grid-container .balance-hours.balanced {
+    background-color: var(--color-info);
+    color: #fff;
   }
 
   .shift-grid-container .employee-shift-cell {
@@ -305,15 +330,33 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    pointer-events: none;
+    pointer-events: auto;
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
+    cursor: grab;
+  }
+
+  .assignment-label {
+    pointer-events: none;
+  }
+
+  .assignment-resize-handle {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 10px;
+    height: 10px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 2px;
+    cursor: se-resize;
+    z-index: 3;
   }
 
   .assignment-block.assigned {
-    color: #fff;
+    background: #C7B2DE;
+    color: #2f2f2f;
   }
 
   .assignment-block.color-0 { background: var(--color-stock); }
@@ -323,16 +366,34 @@
   .assignment-block.color-4 { background: var(--color-default); }
 
   .assignment-block.task-assigned {
-    background: #6c757d;
     color: #fff;
-    border-left: 3px solid #495057;
   }
 
   .assignment-block.break-assigned {
-    background: var(--color-default);
-    color: #fff;
-    border: 1px solid var(--color-default);
+    background: #FAF500;
+    color: #2f2f2f;
+    border: 1px solid #E6D800;
   }
+
+  .work-model-block {
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 2px 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    z-index: 2;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #2f2f2f;
+    background: #87E7B0;
+  }
+
   
   /* Register selector (shift-specific) */
   .register-selector {
@@ -365,10 +426,10 @@
   }
   /* Department task (non-register) assignment style */
   .grid-cell.task-assigned {
-    background: #6c757d;
-    color: #fff;
+    background: transparent;
+    color: inherit;
     font-weight: 600;
-    border-left: 3px solid #495057;
+    border-left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -414,8 +475,15 @@
     text-overflow: ellipsis;
     pointer-events: none;
   }
+
+  @media (max-width: 992px) {
+    .grid-pane {
+      min-width: 0;
+    }
+  }
 </style>
 
+<script th:src="@{/js/grid-time-utils.js}"></script>
 <script th:inline="javascript">
 const $=id=>document.getElementById(id);
 
@@ -423,13 +491,22 @@ const $=id=>document.getElementById(id);
 const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
 const SLOT_COUNT = Math.floor(1440 / RES_MIN);
 const PER_HOUR = Math.floor(60 / RES_MIN);
+const CELL_WIDTH = 50;
+const STAFFING_ROW_COUNT = 3;
 
 // 編集状態管理
 let isEditing = false;
 let hasChanges = false;
 let changes = new Map(); // key: employeeCode_time, value: {original, current}
 let employees = [];
+let workModelState = null;
 let taskMasterList = [];
+const taskColorByCode = new Map();
+const taskCategoryColorByCode = new Map();
+const taskCategoryByTaskKey = new Map();
+let staffingRequiredByTime = new Map();
+let resizeState = null;
+let draggedBlock = null;
 
 function gridColumnIndex(h, m) {
   return (h * PER_HOUR) + (m / RES_MIN) + 2;
@@ -440,7 +517,7 @@ function setGridPosition(el, row, col) {
   el.style.gridColumn = String(col);
 }
 
-function createTimeHeaderRow(grid, label) {
+function createTimeHeaderRow(grid, label, rowIndex = 1) {
   const timeHeaderRow = document.createElement('div');
   timeHeaderRow.className = 'grid-row';
   timeHeaderRow.style.display = 'contents';
@@ -448,7 +525,7 @@ function createTimeHeaderRow(grid, label) {
   const emptyHeader = document.createElement('div');
   emptyHeader.className = 'grid-header';
   emptyHeader.textContent = label;
-  setGridPosition(emptyHeader, 1, 1);
+  setGridPosition(emptyHeader, rowIndex, 1);
   timeHeaderRow.appendChild(emptyHeader);
 
   for (let h = 0; h < 24; h++) {
@@ -457,21 +534,45 @@ function createTimeHeaderRow(grid, label) {
       const timeHeader = document.createElement('div');
       timeHeader.className = 'grid-header time-slot';
       timeHeader.textContent = m === 0 ? time : '';
-      setGridPosition(timeHeader, 1, gridColumnIndex(h, m));
+      setGridPosition(timeHeader, rowIndex, gridColumnIndex(h, m));
       timeHeaderRow.appendChild(timeHeader);
     }
   }
   grid.appendChild(timeHeaderRow);
 }
 
-function buildTimeSlots() {
-  const timeSlots = [];
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += RES_MIN) {
-      timeSlots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+function createStaffingRows(grid) {
+  const headers = [
+    { key: 'required', label: '必要人数', icon: 'bi-bar-chart' },
+    { key: 'assigned', label: '配置人数', icon: 'bi-bar-chart' },
+    { key: 'balance', label: '過不足', icon: 'bi-exclamation-triangle' }
+  ];
+
+  headers.forEach((header, rowOffset) => {
+    const rowIndex = rowOffset + 1;
+    const rowHeader = document.createElement('div');
+    rowHeader.className = 'grid-row-header staffing-summary-header';
+    rowHeader.innerHTML = `<i class="bi ${header.icon}"></i> ${header.label}`;
+    setGridPosition(rowHeader, rowIndex, 1);
+    grid.appendChild(rowHeader);
+
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += RES_MIN) {
+        const timeKey = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell staffing-summary-cell';
+        cell.dataset.rowType = header.key;
+        cell.dataset.time = timeKey;
+        cell.innerHTML = `<div class="balance-hours text-muted">-</div>`;
+        setGridPosition(cell, rowIndex, gridColumnIndex(h, m));
+        grid.appendChild(cell);
+      }
     }
-  }
-  return timeSlots;
+  });
+}
+
+function workModelKey(registerNo, timeKey) {
+  return `${registerNo}_${timeKey}`;
 }
 
 function selectedDepartmentCode() {
@@ -497,6 +598,31 @@ function parseTaskValue(value) {
   };
 }
 
+function formatSlotTime(slotTime) {
+  if (!slotTime) return '';
+  if (typeof slotTime === 'string') {
+    const trimmed = slotTime.trim();
+    const hhmm = /^\d{1,2}:\d{2}$/;
+    const hhmmss = /^\d{1,2}:\d{2}:\d{2}$/;
+    if (hhmm.test(trimmed)) return `${trimmed}:00`;
+    if (hhmmss.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const hh = String(parsed.getHours()).padStart(2, '0');
+      const mm = String(parsed.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}:00`;
+    }
+    return trimmed;
+  }
+  if (slotTime.hour !== undefined) {
+    const hh = String(slotTime.hour).padStart(2, '0');
+    const mm = String(slotTime.minute || 0).padStart(2, '0');
+    return `${hh}:${mm}:00`;
+  }
+  const str = slotTime.toString();
+  return str.length >= 8 ? str.substring(0, 8) : str;
+}
+
 // Function to generate a consistent color based on employee name
 function getEmployeeColorClass(employeeName) {
   if (!employeeName) {
@@ -509,14 +635,6 @@ function getEmployeeColorClass(employeeName) {
   return `color-${Math.abs(hash) % 5}`; // Use 5 distinct colors
 }
 
-function getTaskDisplayColor(taskCode) {
-  if (!taskCode) return '#95a5a6';
-  if (taskCode.includes('REG') || taskCode.includes('レジ')) return '#ff6b6b';
-  if (taskCode.includes('STOCK') || taskCode.includes('品出し')) return '#4ecdc4';
-  if (taskCode.includes('CLEAN') || taskCode.includes('清掃')) return '#45b7d1';
-  return '#95a5a6';
-}
-
 const taskNameByCode = new Map();
 
 function getTaskName(taskCode, departmentCode) {
@@ -525,23 +643,68 @@ function getTaskName(taskCode, departmentCode) {
   return taskNameByCode.get(deptKey) || taskNameByCode.get(`::${taskCode}`) || taskCode;
 }
 
+function getTaskColor(taskCode, departmentCode) {
+  if (!taskCode) return '#6c757d';
+  const deptKey = `${departmentCode || ''}::${taskCode}`;
+  const taskColor = taskColorByCode.get(deptKey) || taskColorByCode.get(`::${taskCode}`);
+  if (taskColor) return taskColor;
+  const categoryCode = taskCategoryByTaskKey.get(deptKey) || taskCategoryByTaskKey.get(`::${taskCode}`);
+  if (categoryCode) {
+    return taskCategoryColorByCode.get(categoryCode) || '#6c757d';
+  }
+  return '#6c757d';
+}
+
+async function loadTaskCategoryMap() {
+  if (taskCategoryColorByCode.size > 0) return;
+  try {
+    const categories = await fetch('/shift/api/calc/task-categories').then(r => r.json());
+    if (Array.isArray(categories)) {
+      categories.forEach(c => {
+        if (c && c.categoryCode && c.color) {
+          taskCategoryColorByCode.set(c.categoryCode, c.color);
+        }
+      });
+    }
+  } catch (e) {
+    console.error('作業カテゴリ取得エラー:', e);
+  }
+}
+
 async function loadTaskMasterMap(storeCode, departmentCode) {
   if (!storeCode) return;
   try {
+    await loadTaskCategoryMap();
     const res = await fetch(`/shift/api/calc/task-masters?storeCode=${encodeURIComponent(storeCode)}${departmentCode ? `&departmentCode=${encodeURIComponent(departmentCode)}` : ''}`);
     const list = await res.json();
     taskMasterList = Array.isArray(list) ? list : [];
     taskNameByCode.clear();
+    taskColorByCode.clear();
+    taskCategoryByTaskKey.clear();
     taskMasterList.forEach(t => {
       const key = `${t.departmentCode || ''}::${t.taskCode}`;
       taskNameByCode.set(key, t.name || t.taskCode || '');
+      if (t.color) {
+        taskColorByCode.set(key, t.color);
+      }
+      if (t.categoryCode) {
+        taskCategoryByTaskKey.set(key, t.categoryCode);
+      }
       if (!t.departmentCode) {
         taskNameByCode.set(`::${t.taskCode}`, t.name || t.taskCode || '');
+        if (t.color) {
+          taskColorByCode.set(`::${t.taskCode}`, t.color);
+        }
+        if (t.categoryCode) {
+          taskCategoryByTaskKey.set(`::${t.taskCode}`, t.categoryCode);
+        }
       }
     });
   } catch (e) {
     console.error('作業マスタ取得エラー:', e);
     taskNameByCode.clear();
+    taskColorByCode.clear();
+    taskCategoryByTaskKey.clear();
     taskMasterList = [];
   }
 }
@@ -583,6 +746,50 @@ function handleAssignmentDragEnd(event) {
   });
   
   hideContextMenu();
+}
+
+function handleBlockDragStart(event) {
+  event.stopPropagation();
+  const block = event.currentTarget;
+  draggedBlock = {
+    employeeCode: block.dataset.employee,
+    startSlot: parseInt(block.dataset.startSlot, 10),
+    endSlot: parseInt(block.dataset.endSlot, 10),
+    assignmentType: block.dataset.assignmentType,
+    currentValue: block.dataset.currentValue || '',
+    taskCode: block.dataset.taskCode || '',
+    departmentCode: block.dataset.departmentCode || '',
+    taskColor: block.dataset.taskColor || '',
+    registerValue: block.dataset.registerValue || '',
+    assignedEmployeeName: block.dataset.assignedEmployeeName || ''
+  };
+  block.classList.add('dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', '');
+}
+
+function handleBlockDragEnd(event) {
+  event.currentTarget.classList.remove('dragging');
+  draggedBlock = null;
+  document.querySelectorAll('.drag-over').forEach(cell => {
+    cell.classList.remove('drag-over');
+  });
+}
+
+function handleBlockDragOver(event) {
+  if (!draggedBlock) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+
+function handleBlockDrop(event) {
+  if (!draggedBlock) return;
+  event.preventDefault();
+  const targetEmployee = event.currentTarget.dataset.employee;
+  if (!targetEmployee || targetEmployee === draggedBlock.employeeCode) return;
+  const slotIndex = slotIndexFromClientX(event.clientX);
+  const targetTime = slotToTime(slotIndex);
+  moveAssignmentBlockToEmployee(draggedBlock, targetEmployee, targetTime);
 }
 
 // 店舗変更で部門一覧をロード
@@ -649,14 +856,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function handleDragOver(event) {
-  if (!draggedAssignment) return;
+  if (!draggedAssignment && !draggedBlock) return;
   
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   
   const cell = event.currentTarget;
   const targetEmployee = cell.dataset.employee;
-  const sourceEmployee = draggedAssignment.employeeCode;
+  const sourceEmployee = draggedAssignment ? draggedAssignment.employeeCode : draggedBlock.employeeCode;
   
   // 異なる従業員のセルのみドロップ可能
   if (targetEmployee !== sourceEmployee) {
@@ -672,18 +879,23 @@ function handleDragLeave(event) {
 function handleDrop(event) {
   event.preventDefault();
   
-  if (!draggedAssignment) return;
+  if (!draggedAssignment && !draggedBlock) return;
   
   const cell = event.currentTarget;
   cell.classList.remove('drag-over');
   
   const targetEmployee = cell.dataset.employee;
-  const sourceEmployee = draggedAssignment.employeeCode;
-  const targetTime = draggedAssignment.time;
+  const sourceEmployee = draggedAssignment ? draggedAssignment.employeeCode : draggedBlock.employeeCode;
   
   // 異なる従業員への移動のみ許可
   if (targetEmployee !== sourceEmployee) {
-    moveAssignmentToEmployee(draggedAssignment, targetEmployee, targetTime);
+    if (draggedBlock) {
+      const targetTime = cell.dataset.time;
+      moveAssignmentBlockToEmployee(draggedBlock, targetEmployee, targetTime);
+    } else {
+      const targetTime = draggedAssignment.time;
+      moveAssignmentToEmployee(draggedAssignment, targetEmployee, targetTime);
+    }
   }
 }
 
@@ -757,6 +969,7 @@ function resetAssignmentCell(cell) {
   cell.dataset.taskCode = '';
   cell.dataset.departmentCode = '';
   cell.dataset.taskLabel = '';
+  cell.dataset.taskColor = '';
   delete cell.dataset.assignedEmployeeName;
   cell.draggable = false;
   cell.removeEventListener('dragstart', handleAssignmentDragStart);
@@ -766,22 +979,20 @@ function resetAssignmentCell(cell) {
 function applyRegisterValue(cell, registerValue, assignedEmployeeName = null) {
   resetAssignmentCell(cell);
   if (!registerValue) return;
-  const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
   cell.classList.add('assigned');
   if (registerValue === 'break') {
     cell.classList.add('break-assigned');
     cell.dataset.workKind = 'BREAK';
     cell.dataset.registerLabel = '休';
   } else {
-    const colorClass = getEmployeeColorClass(employeeNameForColor);
-    cell.classList.add(colorClass);
     cell.dataset.workKind = 'REGISTER_OP';
     cell.dataset.registerLabel = `R${registerValue}`;
   }
   cell.dataset.taskCode = '';
   cell.dataset.departmentCode = '';
   cell.dataset.taskLabel = '';
-  cell.dataset.assignedEmployeeName = employeeNameForColor;
+  cell.dataset.assignedEmployeeName = assignedEmployeeName || cell.dataset.employeeName;
+  cell.dataset.taskColor = '';
   cell.dataset.currentRegister = registerValue;
   cell.draggable = true;
   cell.addEventListener('dragstart', handleAssignmentDragStart);
@@ -792,8 +1003,8 @@ function applyTaskValue(cell, taskCode, departmentCode, assignedEmployeeName = n
   resetAssignmentCell(cell);
   if (!taskCode) return;
   const deptCode = departmentCode || selectedDepartmentCode();
-  const employeeNameForColor = assignedEmployeeName || cell.dataset.employeeName;
   const taskLabel = taskCode === 'BREAK' ? '休憩' : getTaskName(taskCode, deptCode);
+  const taskColor = taskCode === 'BREAK' ? '#FAF500' : getTaskColor(taskCode, deptCode);
   if (taskCode === 'BREAK') {
     cell.classList.add('break-assigned');
     cell.dataset.workKind = 'BREAK';
@@ -806,7 +1017,8 @@ function applyTaskValue(cell, taskCode, departmentCode, assignedEmployeeName = n
   cell.dataset.taskCode = taskCode;
   cell.dataset.departmentCode = deptCode;
   cell.dataset.taskLabel = taskLabel;
-  cell.dataset.assignedEmployeeName = employeeNameForColor;
+  cell.dataset.assignedEmployeeName = assignedEmployeeName || cell.dataset.employeeName;
+  cell.dataset.taskColor = taskColor;
   cell.dataset.currentRegister = encodeTaskValue(deptCode, taskCode);
   cell.draggable = true;
   cell.addEventListener('dragstart', handleAssignmentDragStart);
@@ -1084,27 +1296,71 @@ function buildAssignmentLabel(cell) {
   return '';
 }
 
+function getAssignmentMetaFromCell(cell) {
+  if (!cell) return null;
+  const currentValue = cell.dataset.currentRegister || '';
+  const assignedEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName || '';
+  if (cell.classList.contains('task-assigned')) {
+    return {
+      type: 'task',
+      taskCode: cell.dataset.taskCode || '',
+      departmentCode: cell.dataset.departmentCode || '',
+      taskColor: cell.dataset.taskColor || '',
+      currentValue,
+      assignedEmployeeName
+    };
+  }
+  if (cell.classList.contains('break-assigned')) {
+    if (currentValue && currentValue.startsWith('TASK|')) {
+      const parsed = parseTaskValue(currentValue) || {};
+      return {
+        type: 'task',
+        taskCode: parsed.taskCode || 'BREAK',
+        departmentCode: parsed.departmentCode || cell.dataset.departmentCode || '',
+        taskColor: cell.dataset.taskColor || '#FAF500',
+        currentValue,
+        assignedEmployeeName
+      };
+    }
+    return {
+      type: 'register',
+      registerValue: 'break',
+      currentValue,
+      assignedEmployeeName
+    };
+  }
+  if (cell.classList.contains('assigned')) {
+    return {
+      type: 'register',
+      registerValue: currentValue,
+      currentValue,
+      assignedEmployeeName
+    };
+  }
+  return null;
+}
+
 function renderMergedAssignments() {
   const shiftGrid = $('shiftGrid');
   if (!shiftGrid || !Array.isArray(employees) || employees.length === 0) return;
   shiftGrid.querySelectorAll('.assignment-block').forEach(block => block.remove());
+  shiftGrid.querySelectorAll('.assignment-resize-handle').forEach(handle => handle.remove());
 
   employees.forEach((employee, employeeIndex) => {
-    const rowIndex = 2 + (employeeIndex * 2);
+    const rowIndex = STAFFING_ROW_COUNT + 2 + (employeeIndex * 2);
     let currentKey = null;
     let currentLabel = '';
     let currentClasses = [];
     let segmentStart = null;
+    let currentMeta = null;
 
     for (let slot = 0; slot <= SLOT_COUNT; slot++) {
       let key = null;
       let label = '';
       let classList = [];
+      let meta = null;
       if (slot < SLOT_COUNT) {
-        const totalMinutes = slot * RES_MIN;
-        const hour = Math.floor(totalMinutes / 60);
-        const minute = totalMinutes % 60;
-        const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const time = slotToTime(slot);
         const cell = shiftGrid.querySelector(`.employee-shift-cell[data-employee="${employee.employeeCode}"][data-time="${time}"]`);
         key = buildAssignmentKey(cell);
         if (key) {
@@ -1116,11 +1372,9 @@ function renderMergedAssignments() {
             classList.push('break-assigned');
           } else if (cell.classList.contains('assigned')) {
             classList.push('assigned');
-            ['color-0', 'color-1', 'color-2', 'color-3', 'color-4'].forEach(c => {
-              if (cell.classList.contains(c)) classList.push(c);
-            });
           }
           cell.textContent = '';
+          meta = getAssignmentMetaFromCell(cell);
         }
       }
 
@@ -1128,23 +1382,387 @@ function renderMergedAssignments() {
         if (currentKey && segmentStart !== null) {
           const block = document.createElement('div');
           block.className = currentClasses.join(' ');
-          block.textContent = currentLabel;
+          block.innerHTML = `<span class="assignment-label">${currentLabel}</span>`;
           block.style.gridRow = `${rowIndex}`;
           block.style.gridColumn = `${segmentStart + 2} / ${slot + 2}`;
+          if (currentMeta && currentMeta.type === 'task') {
+            const isBreak = currentMeta.taskCode === 'BREAK';
+            block.style.background = isBreak ? '#FAF500' : (currentMeta.taskColor || '#6c757d');
+            block.style.color = isBreak ? '#2f2f2f' : '#fff';
+          }
+          block.draggable = true;
+          block.dataset.employee = employee.employeeCode;
+          block.dataset.startSlot = String(segmentStart);
+          block.dataset.endSlot = String(slot);
+          if (currentMeta) {
+            block.dataset.assignmentType = currentMeta.type;
+            block.dataset.currentValue = currentMeta.currentValue || '';
+            block.dataset.taskCode = currentMeta.taskCode || '';
+            block.dataset.departmentCode = currentMeta.departmentCode || '';
+            block.dataset.taskColor = currentMeta.taskColor || '';
+            block.dataset.registerValue = currentMeta.registerValue || '';
+            block.dataset.assignedEmployeeName = currentMeta.assignedEmployeeName || '';
+          }
+          block.addEventListener('dragstart', handleBlockDragStart);
+          block.addEventListener('dragend', handleBlockDragEnd);
+          block.addEventListener('dragover', handleBlockDragOver);
+          block.addEventListener('drop', handleBlockDrop);
           shiftGrid.appendChild(block);
+          const endSlotIndex = slot - 1;
+          const endTime = slotToTime(endSlotIndex);
+          const endCell = shiftGrid.querySelector(`.employee-shift-cell[data-employee="${employee.employeeCode}"][data-time="${endTime}"]`);
+          if (endCell && currentMeta) {
+            const handle = document.createElement('div');
+            handle.className = 'assignment-resize-handle';
+            handle.dataset.employee = employee.employeeCode;
+            handle.dataset.startSlot = String(segmentStart);
+            handle.dataset.endSlot = String(slot);
+            handle.dataset.currentKey = currentKey;
+            handle.dataset.currentValue = currentMeta.currentValue || '';
+            handle.dataset.assignmentType = currentMeta.type;
+            handle.dataset.taskCode = currentMeta.taskCode || '';
+            handle.dataset.departmentCode = currentMeta.departmentCode || '';
+            handle.dataset.registerValue = currentMeta.registerValue || '';
+            handle.dataset.assignedEmployeeName = currentMeta.assignedEmployeeName || '';
+            handle.addEventListener('mousedown', handleResizeMouseDown);
+            endCell.appendChild(handle);
+          }
         }
         if (key) {
           currentKey = key;
           currentLabel = label;
           currentClasses = classList;
           segmentStart = slot;
+          currentMeta = meta;
         } else {
           currentKey = null;
           currentLabel = '';
           currentClasses = [];
           segmentStart = null;
+          currentMeta = null;
         }
       }
+    }
+  });
+}
+
+function slotIndexFromClientX(clientX) {
+  const shiftGrid = $('shiftGrid');
+  const tableContainer = $('tableContainer');
+  if (!shiftGrid) return 0;
+  const rect = shiftGrid.getBoundingClientRect();
+  const scrollLeft = tableContainer ? tableContainer.scrollLeft : 0;
+  const headerWidth = 120;
+  const relativeX = clientX - rect.left + scrollLeft - headerWidth;
+  const raw = Math.floor(relativeX / CELL_WIDTH);
+  if (Number.isNaN(raw)) return 0;
+  return Math.max(0, Math.min(SLOT_COUNT - 1, raw));
+}
+
+function isAssignedCell(cell) {
+  if (!cell) return false;
+  return cell.classList.contains('assigned') ||
+    cell.classList.contains('task-assigned') ||
+    cell.classList.contains('break-assigned');
+}
+
+function findMaxExtendSlot(employeeCode, startSlot, currentKey) {
+  for (let slot = startSlot + 1; slot < SLOT_COUNT; slot++) {
+    const time = slotToTime(slot);
+    const cell = document.querySelector(`.employee-shift-cell[data-employee="${employeeCode}"][data-time="${time}"]`);
+    if (!cell) continue;
+    const key = buildAssignmentKey(cell);
+    if (isAssignedCell(cell)) {
+      if (!currentKey || key !== currentKey) {
+        return slot;
+      }
+    }
+  }
+  return SLOT_COUNT;
+}
+
+function updateAssignmentCell(cell, newValue, meta) {
+  const employeeCode = cell.dataset.employee;
+  const time = cell.dataset.time;
+  const originalValue = cell.dataset.originalRegister || '';
+  const changeKey = `${employeeCode}_${time}`;
+
+  if (newValue !== originalValue) {
+    changes.set(changeKey, {
+      employeeCode,
+      time,
+      original: originalValue,
+      current: newValue
+    });
+    cell.classList.add('modified');
+  } else {
+    changes.delete(changeKey);
+    cell.classList.remove('modified');
+  }
+
+  if (!newValue) {
+    resetAssignmentCell(cell);
+    return;
+  }
+
+  if (meta.type === 'task') {
+    const parsed = parseTaskValue(newValue) || { taskCode: meta.taskCode, departmentCode: meta.departmentCode };
+    const taskCode = parsed.taskCode || meta.taskCode || '';
+    const deptCode = parsed.departmentCode || meta.departmentCode || selectedDepartmentCode();
+    applyTaskValue(cell, taskCode, deptCode, meta.assignedEmployeeName);
+  } else {
+    applyRegisterValue(cell, newValue, meta.assignedEmployeeName);
+  }
+}
+
+function buildNewValueFromMeta(meta) {
+  if (!meta) return '';
+  if (meta.type === 'task') {
+    return meta.currentValue || encodeTaskValue(meta.departmentCode || selectedDepartmentCode(), meta.taskCode || '');
+  }
+  return meta.registerValue || meta.currentValue || '';
+}
+
+function moveAssignmentBlockToEmployee(block, targetEmployeeCode, targetTime) {
+  if (!block || !targetTime) return;
+  const startSlot = parseInt(block.startSlot, 10);
+  const endSlot = parseInt(block.endSlot, 10);
+  if (Number.isNaN(startSlot) || Number.isNaN(endSlot)) return;
+  const duration = endSlot - startSlot;
+  const targetStartSlot = timeToSlot(targetTime);
+  if (targetStartSlot < 0) return;
+  const targetEndSlot = Math.min(targetStartSlot + duration, SLOT_COUNT);
+
+  const meta = {
+    type: block.assignmentType,
+    taskCode: block.taskCode,
+    departmentCode: block.departmentCode,
+    taskColor: block.taskColor,
+    registerValue: block.registerValue,
+    currentValue: block.currentValue,
+    assignedEmployeeName: block.assignedEmployeeName
+  };
+  const newValue = buildNewValueFromMeta(meta);
+
+  let hasConflict = false;
+  for (let slot = targetStartSlot; slot < targetEndSlot; slot++) {
+    const time = slotToTime(slot);
+    const cell = document.querySelector(`.employee-shift-cell[data-employee="${targetEmployeeCode}"][data-time="${time}"]`);
+    if (!cell) continue;
+    if (isAssignedCell(cell)) {
+      hasConflict = true;
+      break;
+    }
+  }
+
+  if (hasConflict) {
+    const ok = confirm('移動先に割り当てが存在します。上書きしますか？');
+    if (!ok) return;
+  }
+
+  for (let slot = startSlot; slot < endSlot; slot++) {
+    const time = slotToTime(slot);
+    const cell = document.querySelector(`.employee-shift-cell[data-employee="${block.employeeCode}"][data-time="${time}"]`);
+    if (!cell) continue;
+    updateAssignmentCell(cell, '', meta);
+  }
+
+  for (let slot = targetStartSlot; slot < targetEndSlot; slot++) {
+    const time = slotToTime(slot);
+    const cell = document.querySelector(`.employee-shift-cell[data-employee="${targetEmployeeCode}"][data-time="${time}"]`);
+    if (!cell) continue;
+    const original = cell.dataset.originalRegister || '';
+    if (!original && newValue) {
+      try {
+        addWorkingSlot(targetEmployeeCode, time);
+      } catch (e) {
+        console.warn('addWorkingSlot failed', e);
+      }
+    }
+    updateAssignmentCell(cell, newValue, meta);
+  }
+
+  hasChanges = changes.size > 0;
+  if (hasChanges) {
+    showSaveButtons();
+  } else {
+    hideSaveButtons();
+  }
+  updateWorkModel();
+  updateStaffingBalance();
+  updateWorkHours();
+  renderMergedAssignments();
+}
+
+function applyAssignmentRangeChange(state, newEndSlot) {
+  if (!state) return;
+  const employeeCode = state.employeeCode;
+  const startSlot = state.startSlot;
+  const oldEndSlot = state.endSlot;
+  if (newEndSlot === oldEndSlot) return;
+
+  const meta = {
+    type: state.assignmentType,
+    taskCode: state.taskCode,
+    departmentCode: state.departmentCode,
+    taskColor: state.taskColor,
+    registerValue: state.registerValue,
+    assignedEmployeeName: state.assignedEmployeeName
+  };
+
+  const newValue = state.assignmentType === 'task'
+    ? (state.currentValue || encodeTaskValue(meta.departmentCode, meta.taskCode))
+    : (state.registerValue || state.currentValue);
+
+  if (newEndSlot > oldEndSlot) {
+    for (let slot = oldEndSlot; slot < newEndSlot; slot++) {
+      const time = slotToTime(slot);
+      const cell = document.querySelector(`.employee-shift-cell[data-employee="${employeeCode}"][data-time="${time}"]`);
+      if (!cell) continue;
+      const original = cell.dataset.originalRegister || '';
+      if (!original && newValue) {
+        try {
+          addWorkingSlot(employeeCode, time);
+        } catch (e) {
+          console.warn('addWorkingSlot failed', e);
+        }
+      }
+      updateAssignmentCell(cell, newValue, meta);
+    }
+  } else {
+    for (let slot = newEndSlot; slot < oldEndSlot; slot++) {
+      const time = slotToTime(slot);
+      const cell = document.querySelector(`.employee-shift-cell[data-employee="${employeeCode}"][data-time="${time}"]`);
+      if (!cell) continue;
+      updateAssignmentCell(cell, '', meta);
+    }
+  }
+
+  hasChanges = changes.size > 0;
+  if (hasChanges) {
+    showSaveButtons();
+  } else {
+    hideSaveButtons();
+  }
+  updateWorkModel();
+  updateStaffingBalance();
+  updateWorkHours();
+  renderMergedAssignments();
+}
+
+function handleResizeMouseDown(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const handle = event.currentTarget;
+  const employeeCode = handle.dataset.employee;
+  const startSlot = parseInt(handle.dataset.startSlot, 10);
+  const endSlot = parseInt(handle.dataset.endSlot, 10);
+  const currentKey = handle.dataset.currentKey || '';
+  const assignmentType = handle.dataset.assignmentType || 'register';
+  const currentValue = handle.dataset.currentValue || '';
+  const taskCode = handle.dataset.taskCode || '';
+  const departmentCode = handle.dataset.departmentCode || '';
+  const registerValue = handle.dataset.registerValue || '';
+  const assignedEmployeeName = handle.dataset.assignedEmployeeName || '';
+  const maxEndSlot = findMaxExtendSlot(employeeCode, startSlot, currentKey);
+
+  resizeState = {
+    employeeCode,
+    startSlot,
+    endSlot,
+    currentKey,
+    assignmentType,
+    currentValue,
+    taskCode,
+    departmentCode,
+    registerValue,
+    assignedEmployeeName,
+    maxEndSlot,
+    newEndSlot: endSlot,
+    startClientX: event.clientX,
+    startEndSlot: endSlot
+  };
+
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', handleResizeMouseMove);
+  document.addEventListener('mouseup', handleResizeMouseUp);
+}
+
+function handleResizeMouseMove(event) {
+  if (!resizeState) return;
+  const deltaX = event.clientX - resizeState.startClientX;
+  const deltaSlots = deltaX >= 0
+    ? Math.floor(deltaX / CELL_WIDTH)
+    : Math.ceil(deltaX / CELL_WIDTH);
+  let proposedEnd = resizeState.startEndSlot + deltaSlots;
+  if (proposedEnd < resizeState.startSlot + 1) {
+    proposedEnd = resizeState.startSlot + 1;
+  }
+  if (proposedEnd > resizeState.maxEndSlot) {
+    proposedEnd = resizeState.maxEndSlot;
+  }
+  resizeState.newEndSlot = proposedEnd;
+}
+
+function handleResizeMouseUp() {
+  if (!resizeState) return;
+  const state = resizeState;
+  resizeState = null;
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', handleResizeMouseMove);
+  document.removeEventListener('mouseup', handleResizeMouseUp);
+
+  applyAssignmentRangeChange(state, state.newEndSlot);
+}
+
+function renderMergedWorkModelBlocks(employeeByTimeRegister) {
+  const workModelGrid = $('workModelGrid');
+  if (!workModelGrid || !workModelState) return;
+  workModelGrid.querySelectorAll('.work-model-block').forEach(block => block.remove());
+
+  const { registerNos, timeSlots, demandByTimeRegister } = workModelState;
+  registerNos.forEach((registerNo, rowIndex) => {
+    let startIdx = null;
+    let currentName = '';
+
+    timeSlots.forEach((slotKey, idx) => {
+      const demand = demandByTimeRegister.get(workModelKey(registerNo, slotKey)) || 0;
+      const employeeName = employeeByTimeRegister.get(workModelKey(registerNo, slotKey)) || '';
+      if (demand > 0 && employeeName) {
+        if (startIdx === null || employeeName !== currentName) {
+          if (startIdx !== null) {
+            const block = document.createElement('div');
+            block.className = 'work-model-block';
+            const shortName = currentName.length >= 2 ? currentName.substring(0, 2) : currentName;
+            block.textContent = shortName;
+            block.style.gridRow = `${rowIndex + 2}`;
+            block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
+            workModelGrid.appendChild(block);
+          }
+          startIdx = idx;
+          currentName = employeeName;
+        }
+      } else if (startIdx !== null) {
+        const block = document.createElement('div');
+        block.className = 'work-model-block';
+        const shortName = currentName.length >= 2 ? currentName.substring(0, 2) : currentName;
+        block.textContent = shortName;
+        block.style.gridRow = `${rowIndex + 2}`;
+        block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
+        workModelGrid.appendChild(block);
+        startIdx = null;
+        currentName = '';
+      }
+    });
+
+    if (startIdx !== null) {
+      const block = document.createElement('div');
+      block.className = 'work-model-block';
+      const shortName = currentName.length >= 2 ? currentName.substring(0, 2) : currentName;
+      block.textContent = shortName;
+      block.style.gridRow = `${rowIndex + 2}`;
+      block.style.gridColumn = `${startIdx + 2} / ${timeSlots.length + 2}`;
+      workModelGrid.appendChild(block);
     }
   });
 }
@@ -1453,6 +2071,7 @@ function cancelChanges() {
         cell.dataset.taskCode = '';
         cell.dataset.departmentCode = '';
         cell.dataset.taskLabel = '';
+        cell.dataset.taskColor = '';
         
         if (change.original) {
           const taskValue = parseTaskValue(change.original);
@@ -1473,6 +2092,7 @@ function cancelChanges() {
             cell.dataset.taskCode = taskCode;
             cell.dataset.departmentCode = deptCode;
             cell.dataset.taskLabel = taskLabel;
+            cell.dataset.taskColor = taskCode === 'BREAK' ? '#FAF500' : getTaskColor(taskCode, deptCode);
           } else {
             // 元の割り当てを復元（レジ）
             cell.classList.add('assigned');
@@ -1487,13 +2107,11 @@ function cancelChanges() {
               cell.textContent = '';
               cell.dataset.workKind = 'REGISTER_OP';
               cell.dataset.registerLabel = `R${change.original}`;
-              const originalEmployeeName = cell.dataset.assignedEmployeeName || cell.dataset.employeeName;
-              const colorClass = getEmployeeColorClass(originalEmployeeName);
-              cell.classList.add(colorClass);
             }
             cell.dataset.taskCode = '';
             cell.dataset.departmentCode = '';
             cell.dataset.taskLabel = '';
+            cell.dataset.taskColor = '';
           }
 
           cell.draggable = true;
@@ -1528,16 +2146,15 @@ $('btnToday').onclick=()=>{
   loadResult(today);
 };
 
-// スクロール同期機能（常にON）
-let isScrolling = false;
+  // スクロール同期機能（常にON）
+  let isScrolling = false;
 
-function setupScrollSync() {
-  const staffingBalanceContainer = $('staffingBalanceContainer');
-  const workModelContainer = $('workModelContainer');
-  const departmentWorkContainer = $('departmentWorkContainer');
-  const shiftContainer = $('tableContainer');
+  function setupScrollSync() {
+    const workModelContainer = $('workModelContainer');
+    const departmentWorkContainer = $('departmentWorkContainer');
+    const shiftContainer = $('tableContainer');
   
-  const containers = [staffingBalanceContainer, workModelContainer, departmentWorkContainer, shiftContainer].filter(c => c);
+    const containers = [workModelContainer, departmentWorkContainer, shiftContainer].filter(c => c);
   
   if (containers.length === 0) return;
   
@@ -1632,17 +2249,15 @@ async function loadResult(dateString){
       tableContainer.style.display = 'block';
       $('dragDropHelp').style.display = 'block';
       
-      // 作業モデルと人時過不足データも同時に取得・表示
+      // 作業モデルと部門別作業量も同時に取得・表示
       loadWorkModel(dateString, data);
       loadDepartmentWorkModel(dateString);
-      loadStaffingBalance(dateString);
     } else {
       noDataMessage.style.display = 'block';
       tableContainer.style.display = 'none';
       $('dragDropHelp').style.display = 'none';
       $('workModelCard').style.display = 'none';
       $('departmentWorkCard').style.display = 'none';
-      $('staffingBalanceCard').style.display = 'none';
       return;
     }
   } catch (error) {
@@ -1652,7 +2267,6 @@ async function loadResult(dateString){
     $('dragDropHelp').style.display = 'none';
     $('workModelCard').style.display = 'none';
     $('departmentWorkCard').style.display = 'none';
-    $('staffingBalanceCard').style.display = 'none';
     return;
   }
 
@@ -1662,11 +2276,13 @@ async function loadResult(dateString){
   shiftGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
   const deptCodeForGrid = $('departmentCode').value || '';
   const IS_REGISTER_DEPT = (!deptCodeForGrid || deptCodeForGrid === '520');
-  createTimeHeaderRow(shiftGrid, '従業員');
+  createStaffingRows(shiftGrid);
+  createTimeHeaderRow(shiftGrid, '従業員', STAFFING_ROW_COUNT + 1);
+  loadStaffingBalance(dateString);
 
   // 従業員ごとの行を作成（シフト割り当て行 + 勤務時間行）
   employees.forEach((employee, employeeIndex) => {
-    const shiftRowIndex = 2 + (employeeIndex * 2);
+    const shiftRowIndex = STAFFING_ROW_COUNT + 2 + (employeeIndex * 2);
     const workRowIndex = shiftRowIndex + 1;
     // シフト割り当て行のヘッダー
     const employeeRowHeader = document.createElement('div');
@@ -1758,8 +2374,6 @@ async function loadResult(dateString){
     data.forEach(assignment => {
       const start = new Date(assignment.startAt);
       const end = new Date(assignment.endAt);
-      const colorClass = getEmployeeColorClass(assignment.employeeName);
-
       // 解像度単位でセルを塗りつぶし
       let currentTime = new Date(start);
       while (currentTime < end) {
@@ -1778,9 +2392,11 @@ async function loadResult(dateString){
             const taskCode = assignment.taskCode || '';
             const deptCode = assignment.departmentCode || selectedDepartmentCode();
             const taskValue = encodeTaskValue(deptCode, taskCode);
+            const taskColor = taskCode === 'BREAK' ? '#FAF500' : getTaskColor(taskCode, deptCode);
             cell.dataset.taskCode = taskCode;
             cell.dataset.departmentCode = deptCode;
             cell.dataset.taskLabel = taskLabel;
+            cell.dataset.taskColor = taskColor;
             cell.dataset.registerLabel = taskCode === 'BREAK' ? '休' : '';
             cell.dataset.originalRegister = taskValue;
             cell.dataset.currentRegister = taskValue;
@@ -1808,7 +2424,6 @@ async function loadResult(dateString){
             cell.dataset.currentRegister = 'break';
             } else {
             // レジ割り当ての場合
-            cell.classList.add(colorClass);
             cell.textContent = '';
             cell.dataset.workKind = workKind;
             cell.dataset.registerLabel = `R${assignment.registerNo}`;
@@ -1818,6 +2433,7 @@ async function loadResult(dateString){
             cell.dataset.taskCode = '';
             cell.dataset.departmentCode = '';
             cell.dataset.taskLabel = '';
+            cell.dataset.taskColor = '';
             
             cell.draggable = true;
             cell.removeEventListener('dragstart', handleAssignmentDragStart);
@@ -1860,94 +2476,49 @@ async function loadStaffingBalance(dateString) {
     const storeCode = $('storeCode').value;
     const departmentCode = $('departmentCode').value || '';
     const staffingData = await fetch(`/shift/api/calc/staffing-balance/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode?`&departmentCode=${encodeURIComponent(departmentCode)}`:''}`).then(r => r.json());
-    const staffingGrid = $('staffingBalanceGrid');
-    const staffingCard = $('staffingBalanceCard');
-    
-    staffingGrid.innerHTML = ''; // Clear previous content
-    console.log('Staffing balance data:', staffingData); // デバッグ用
-    
+    const shiftGrid = $('shiftGrid');
+    if (!shiftGrid) return;
+
+    staffingRequiredByTime = new Map();
     if (staffingData && staffingData.length > 0) {
-      staffingCard.style.display = 'block';
-      
-      // ヘッダー行を作成（必要・配置・差分の3行）
-      const headers = ['必要人数', '配置人数', '過不足'];
-      
-      headers.forEach(headerText => {
-        // 行ヘッダー
-        const rowHeader = document.createElement('div');
-        rowHeader.className = 'grid-row-header';
-        rowHeader.textContent = headerText;
-        staffingGrid.appendChild(rowHeader);
-        
-        // 時間スロット（解像度単位）
-        for (let h = 0; h < 24; h++) {
-          for (let m = 0; m < 60; m += RES_MIN) {
-            const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-            
-            // 該当する時間帯のデータを検索
-            const balanceData = staffingData.find(data => {
-              if (!data.slotTime) return false;
-              const timeStr = typeof data.slotTime === 'string' ? data.slotTime : 
-                             (data.slotTime.hour !== undefined ? 
-                              `${String(data.slotTime.hour).padStart(2, '0')}:${String(data.slotTime.minute).padStart(2, '0')}:00` : 
-                              data.slotTime.toString());
-              return timeStr === targetTime;
-            });
-            
-            const cell = document.createElement('div');
-            cell.className = 'grid-cell staffing-balance-cell';
-            
-            if (balanceData) {
-              const required = balanceData.requiredStaff || 0;
-              const assigned = balanceData.assignedStaff || 0;
-              const balance = assigned - required;
-              
-              if (headerText === '必要人数') {
-                cell.textContent = required;
-                if (required > 0) {
-                  cell.style.background = '#4ecdc4';
-                  cell.style.color = 'white';
-                }
-              } else if (headerText === '配置人数') {
-                cell.textContent = assigned;
-                if (assigned > 0) {
-                  cell.style.background = '#45b7d1';
-                  cell.style.color = 'white';
-                }
-              } else if (headerText === '過不足') {
-                if (balance < 0) {
-                  cell.classList.add('shortage');
-                  cell.innerHTML = `<div class="balance-value">${balance}</div><div class="balance-detail">不足</div>`;
-                } else if (balance > 0) {
-                  cell.classList.add('excess');
-                  cell.innerHTML = `<div class="balance-value">+${balance}</div><div class="balance-detail">超過</div>`;
-                } else if (required > 0) {
-                  cell.classList.add('balanced');
-                  cell.innerHTML = `<div class="balance-value">0</div><div class="balance-detail">適正</div>`;
-                } else {
-                  cell.textContent = '-';
-                }
-              }
-            } else {
-              cell.textContent = '-';
-            }
-            
-            staffingGrid.appendChild(cell);
+      staffingData.forEach(data => {
+        const timeKey = formatSlotTime(data.slotTime);
+        if (!timeKey) return;
+        const required = Number(data.requiredStaff || 0);
+        const assigned = Number(data.assignedStaff || 0);
+        staffingRequiredByTime.set(timeKey, required);
+
+        const requiredCell = shiftGrid.querySelector(`.staffing-summary-cell[data-row-type="required"][data-time="${timeKey}"]`);
+        if (requiredCell) {
+          requiredCell.innerHTML = `<div class="balance-hours text-muted">${required}</div>`;
+        }
+        const assignedCell = shiftGrid.querySelector(`.staffing-summary-cell[data-row-type="assigned"][data-time="${timeKey}"]`);
+        if (assignedCell) {
+          assignedCell.innerHTML = `<div class="balance-hours text-muted">${assigned}</div>`;
+        }
+        const balanceCell = shiftGrid.querySelector(`.staffing-summary-cell[data-row-type="balance"][data-time="${timeKey}"]`);
+        if (balanceCell) {
+          const balance = assigned - required;
+          if (balance < 0) {
+            balanceCell.innerHTML = `<div class="balance-hours shortage">${balance}</div>`;
+          } else if (balance > 0) {
+            balanceCell.innerHTML = `<div class="balance-hours excess">+${balance}</div>`;
+          } else if (required > 0) {
+            balanceCell.innerHTML = `<div class="balance-hours balanced">0</div>`;
+          } else {
+            balanceCell.innerHTML = `<div class="balance-hours text-muted">-</div>`;
           }
         }
       });
-      
-      // 人時過不足用のCSSグリッドを設定（解像度に応じて）
-      const sbCols = Math.floor(1440 / RES_MIN);
-      staffingGrid.style.gridTemplateColumns = `120px repeat(${sbCols}, 50px)`;
-      staffingGrid.style.gridTemplateRows = 'repeat(3, 35px)';
-      staffingGrid.classList.add('shift-grid-container');
     } else {
-      staffingCard.style.display = 'none';
+      staffingRequiredByTime = new Map();
+      shiftGrid.querySelectorAll('.staffing-summary-cell').forEach(cell => {
+        cell.innerHTML = `<div class="balance-hours text-muted">-</div>`;
+      });
     }
   } catch (error) {
     console.error('人時過不足データ取得エラー:', error);
-    $('staffingBalanceCard').style.display = 'none';
+    staffingRequiredByTime = new Map();
   }
 }
 
@@ -1985,11 +2556,13 @@ async function loadWorkModel(dateString, shiftData) {
         registerNos = Array.from({length: maxDemand}, (_, i) => i + 1);
       }
       
+      const timeSlots = buildTimeSlots();
       // 各時間帯での需要データを事前に処理
       const demandByTimeRegister = new Map();
       for (let h = 0; h < 24; h++) {
         for (let m = 0; m < 60; m += RES_MIN) {
           const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+          const slotKey = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           registerNos.forEach(regNo => {
             const quarterData = workModelData.find(d => {
               if (!d.slotTime) return false;
@@ -2001,7 +2574,7 @@ async function loadWorkModel(dateString, shiftData) {
               return timeStr === targetTime;
             });
             const demandCount = quarterData ? (quarterData.requiredUnits || 0) : 0;
-            demandByTimeRegister.set(`${regNo}_${h}_${m}`, demandCount);
+            demandByTimeRegister.set(workModelKey(regNo, slotKey), demandCount);
           });
         }
       }
@@ -2020,7 +2593,8 @@ async function loadWorkModel(dateString, shiftData) {
           while (currentTime < end) {
             const hour = currentTime.getHours();
             const minute = currentTime.getMinutes();
-            const key = `${hour}_${minute}_${registerNo}`;
+            const slotKey = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+            const key = workModelKey(registerNo, slotKey);
             employeeByTimeRegister.set(key, employeeName);
             currentTime.setMinutes(currentTime.getMinutes() + RES_MIN);
           }
@@ -2028,49 +2602,50 @@ async function loadWorkModel(dateString, shiftData) {
       }
 
       // レジ番号の行を作成（需要で指定されたレジ）
-      for (const registerNo of registerNos) {
+      registerNos.forEach((registerNo, rowIndex) => {
         const registerRowHeader = document.createElement('div');
         registerRowHeader.className = 'grid-row-header';
         registerRowHeader.textContent = `レジ ${registerNo}`;
+        setGridPosition(registerRowHeader, rowIndex + 2, 1);
         workModelGrid.appendChild(registerRowHeader);
 
-        for (let h = 0; h < 24; h++) {
-          for (let m = 0; m < 60; m += RES_MIN) {
-            const demandCount = demandByTimeRegister.get(`${registerNo}_${h}_${m}`) || 0;
-            
-            // この時間帯にこのレジ番号が必要な場合のみセルを作成
-            if (demandCount > 0) {
-              const cell = document.createElement('div');
-              cell.className = 'grid-cell work-model-cell register-needed';
-              
-              // 割り当てられた従業員名を取得
-              const employeeKey = `${h}_${m}_${registerNo}`;
-              const employeeName = employeeByTimeRegister.get(employeeKey);
-              
-              if (employeeName) {
-                // 従業員名の頭2文字を表示
-                const shortName = employeeName.length >= 2 ? employeeName.substring(0, 2) : employeeName;
-                cell.textContent = shortName;
-                cell.classList.add('has-employee');
-              }
-              
-              workModelGrid.appendChild(cell);
-            } else {
-              // 不要な場合は空のdivを作成（グリッドレイアウト維持のため）
-              const emptyCell = document.createElement('div');
-              emptyCell.className = 'grid-cell work-model-cell-empty';
-              workModelGrid.appendChild(emptyCell);
+        timeSlots.forEach((slotKey, idx) => {
+          const demandCount = demandByTimeRegister.get(workModelKey(registerNo, slotKey)) || 0;
+          const [h, m] = slotKey.split(':').map(Number);
+          if (demandCount > 0) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell work-model-cell register-needed';
+            cell.dataset.time = slotKey;
+            cell.dataset.register = registerNo;
+            setGridPosition(cell, rowIndex + 2, gridColumnIndex(h, m));
+            const employeeKey = workModelKey(registerNo, slotKey);
+            const employeeName = employeeByTimeRegister.get(employeeKey);
+            if (employeeName) {
+              const shortName = employeeName.length >= 2 ? employeeName.substring(0, 2) : employeeName;
+              cell.textContent = shortName;
+              cell.classList.add('has-employee');
             }
+            workModelGrid.appendChild(cell);
+          } else {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'grid-cell work-model-cell-empty';
+            emptyCell.dataset.time = slotKey;
+            emptyCell.dataset.register = registerNo;
+            setGridPosition(emptyCell, rowIndex + 2, gridColumnIndex(h, m));
+            workModelGrid.appendChild(emptyCell);
           }
-        }
-      }
+        });
+      });
       
       // 作業モデル用のCSSグリッドを設定（解像度に合わせて動的化）
       workModelGrid.style.gridTemplateColumns = `120px repeat(${SLOT_COUNT}, 50px)`;
       workModelGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
       workModelGrid.classList.add('shift-grid-container');
+      workModelState = { registerNos, timeSlots, demandByTimeRegister };
+      renderMergedWorkModelBlocks(employeeByTimeRegister);
     } else {
       workModelCard.style.display = 'none';
+      workModelState = null;
     }
   } catch (error) {
     console.error('作業モデルデータ取得エラー:', error);
@@ -2145,7 +2720,7 @@ async function loadDepartmentWorkModel(dateString) {
             if (startIdx !== null) {
               const block = document.createElement('div');
               block.className = 'dept-plan-block';
-              block.style.background = getTaskDisplayColor(taskCode);
+              block.style.background = getTaskColor(taskCode, deptCode);
               block.style.gridRow = `${rowIndex + 2}`;
               block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
               block.textContent = `${taskLabel} x${currentDemand}`;
@@ -2157,7 +2732,7 @@ async function loadDepartmentWorkModel(dateString) {
         } else if (startIdx !== null) {
           const block = document.createElement('div');
           block.className = 'dept-plan-block';
-          block.style.background = getTaskDisplayColor(taskCode);
+          block.style.background = getTaskColor(taskCode, deptCode);
           block.style.gridRow = `${rowIndex + 2}`;
           block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
           block.textContent = `${taskLabel} x${currentDemand}`;
@@ -2170,7 +2745,7 @@ async function loadDepartmentWorkModel(dateString) {
       if (startIdx !== null) {
         const block = document.createElement('div');
         block.className = 'dept-plan-block';
-        block.style.background = getTaskDisplayColor(taskCode);
+        block.style.background = getTaskColor(taskCode, deptCode);
         block.style.gridRow = `${rowIndex + 2}`;
         block.style.gridColumn = `${startIdx + 2} / ${timeSlots.length + 2}`;
         block.textContent = `${taskLabel} x${currentDemand}`;
@@ -2189,6 +2764,7 @@ async function loadDepartmentWorkModel(dateString) {
 
 // 現在の割り当て状況で作業モデルを更新
 function updateWorkModel() {
+  if (!workModelState) return;
   // 現在のシフトデータを収集
   const currentShiftData = [];
   const shiftCells = document.querySelectorAll('.grid-cell.assigned[data-current-register]');
@@ -2217,55 +2793,38 @@ function updateWorkModel() {
   });
   
   // 作業モデルのセルを更新
-  const workModelCells = document.querySelectorAll('.work-model-cell.register-needed');
-  
   // 従業員マッピングを再作成
   const employeeByTimeRegister = new Map();
   currentShiftData.forEach(assignment => {
     const start = new Date(assignment.startAt);
     const hour = start.getHours();
     const minute = start.getMinutes();
-    const key = `${hour}_${minute}_${assignment.registerNo}`;
+    const slotKey = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    const key = workModelKey(assignment.registerNo, slotKey);
     employeeByTimeRegister.set(key, assignment.employeeName);
   });
-  
-  // 各セルを更新
-  let cellIndex = 0;
-  const workModelGrid = $('workModelGrid');
-  if (!workModelGrid) return;
-  
-  // 作業モデルのグリッド構造を仮定してセルを更新
-  const workModelData = document.querySelectorAll('.work-model-cell.register-needed');
-  
-  // 現在表示されている作業モデルを基に更新
-  for (let registerNo = 1; registerNo <= 10; registerNo++) { // 最大レジ数を仮定
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += RES_MIN) {
-        const cell = workModelData[cellIndex];
-        if (cell) {
-          const employeeKey = `${h}_${m}_${registerNo}`;
-          const employeeName = employeeByTimeRegister.get(employeeKey);
-          
-          cell.classList.remove('has-employee');
-          cell.textContent = '';
-          
-          if (employeeName) {
-            const shortName = employeeName.length >= 2 ? employeeName.substring(0, 2) : employeeName;
-            cell.textContent = shortName;
-            cell.classList.add('has-employee');
-          }
-          
-          cellIndex++;
-        }
-      }
+
+  const workModelCells = document.querySelectorAll('.work-model-cell.register-needed');
+  workModelCells.forEach(cell => {
+    const register = cell.dataset.register;
+    const time = cell.dataset.time;
+    if (!register || !time) return;
+    const key = workModelKey(register, time);
+    const employeeName = employeeByTimeRegister.get(key);
+    if (employeeName) {
+      cell.classList.add('has-employee');
+    } else {
+      cell.classList.remove('has-employee');
     }
-  }
+    cell.textContent = '';
+  });
+  renderMergedWorkModelBlocks(employeeByTimeRegister);
 }
 
 // 現在の割り当て状況で人時過不足を更新
 function updateStaffingBalance() {
-  const staffingGrid = $('staffingBalanceGrid');
-  if (!staffingGrid) return;
+  const shiftGrid = $('shiftGrid');
+  if (!shiftGrid) return;
   
   // 現在のシフトデータを収集
   const currentShiftData = [];
@@ -2292,59 +2851,28 @@ function updateStaffingBalance() {
     assignedCountsByTime.set(timeKey, (assignedCountsByTime.get(timeKey) || 0) + 1);
   });
   
-  // 過不足行（3行目）のセルを更新
-  const balanceCells = staffingGrid.querySelectorAll('.grid-cell');
-  
-  // 3行目の過不足セルのみ更新（0から始まるインデックスで2行目）
-  const rowSize = 1 + SLOT_COUNT; // ヘッダー1 + 時間スロット
-  const balanceRowStartIndex = rowSize * 2; // 3行目の開始インデックス
-  
-  for (let i = 0; i < SLOT_COUNT; i++) { // 時間スロット
-    const cellIndex = balanceRowStartIndex + 1 + i; // +1はヘッダー分
-    const cell = balanceCells[cellIndex];
-    
-    if (cell) {
-      const h = Math.floor(i / PER_HOUR);
-      const m = (i % PER_HOUR) * RES_MIN;
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += RES_MIN) {
       const targetTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-      
-      // 元の必要人数を取得（データから）
-      const requiredCell = balanceCells[1 + i]; // 1行目の対応するセル
-      const required = requiredCell ? parseInt(requiredCell.textContent) || 0 : 0;
-      
-      // 現在の配置人数を取得
+      const required = staffingRequiredByTime.get(targetTime) || 0;
       const assigned = assignedCountsByTime.get(targetTime) || 0;
-      
-      // 配置人数行（2行目）を更新
-      const assignedCell = balanceCells[rowSize + 1 + i];
+
+      const assignedCell = shiftGrid.querySelector(`.staffing-summary-cell[data-row-type="assigned"][data-time="${targetTime}"]`);
       if (assignedCell) {
-        assignedCell.textContent = assigned;
-        if (assigned > 0) {
-          assignedCell.style.background = '#45b7d1';
-          assignedCell.style.color = 'white';
-        } else {
-          assignedCell.style.background = '#f8f9fa';
-          assignedCell.style.color = '#6c757d';
-        }
+        assignedCell.innerHTML = `<div class="balance-hours text-muted">${assigned}</div>`;
       }
-      
-      // 過不足を計算して更新
-      const balance = assigned - required;
-      
-      // セルのクラスをリセット
-      cell.classList.remove('shortage', 'excess', 'balanced');
-      
-      if (balance < 0) {
-        cell.classList.add('shortage');
-        cell.innerHTML = `<div class="balance-value">${balance}</div><div class="balance-detail">不足</div>`;
-      } else if (balance > 0) {
-        cell.classList.add('excess');
-        cell.innerHTML = `<div class="balance-value">+${balance}</div><div class="balance-detail">超過</div>`;
-      } else if (required > 0) {
-        cell.classList.add('balanced');
-        cell.innerHTML = `<div class="balance-value">0</div><div class="balance-detail">適正</div>`;
-      } else {
-        cell.textContent = '-';
+      const balanceCell = shiftGrid.querySelector(`.staffing-summary-cell[data-row-type="balance"][data-time="${targetTime}"]`);
+      if (balanceCell) {
+        const balance = assigned - required;
+        if (balance < 0) {
+          balanceCell.innerHTML = `<div class="balance-hours shortage">${balance}</div>`;
+        } else if (balance > 0) {
+          balanceCell.innerHTML = `<div class="balance-hours excess">+${balance}</div>`;
+        } else if (required > 0) {
+          balanceCell.innerHTML = `<div class="balance-hours balanced">0</div>`;
+        } else {
+          balanceCell.innerHTML = `<div class="balance-hours text-muted">-</div>`;
+        }
       }
     }
   }

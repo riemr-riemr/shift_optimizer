@@ -17,6 +17,7 @@ import io.github.riemr.shift.infrastructure.mapper.RegisterDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper;
 import io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentTaskAssignmentMapper;
+import io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment;
 import lombok.RequiredArgsConstructor;
 
@@ -28,6 +29,7 @@ public class StaffingBalanceService {
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final ShiftAssignmentMapper shiftMapper;
     private final DepartmentTaskAssignmentMapper departmentTaskAssignmentMapper;
+    private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
 
     public List<StaffingBalanceDto> getStaffingBalance(String storeCode, LocalDate targetDate) {
@@ -76,6 +78,10 @@ public class StaffingBalanceService {
                     b.setRequiredStaff(cur + (qs.getDemand() == null ? 0 : qs.getDemand()));
                 }
             }
+            List<String> departments = storeDepartmentMapper.findDepartmentsByStore(storeCode).stream()
+                    .map(d -> d.getDepartmentCode())
+                    .toList();
+            addDepartmentTaskRequired(balanceMap, storeCode, targetDate, departments, resMin);
         }
 
         if (isRegister) {
@@ -110,6 +116,7 @@ public class StaffingBalanceService {
                 var b = balanceMap.get(e.getKey());
                 if (b != null) b.setRequiredStaff(e.getValue());
             }
+            addDepartmentTaskRequired(balanceMap, storeCode, targetDate, List.of(departmentCode), resMin);
 
             // Use month range-like query by date boundaries via selectByMonth or add a date method; we will scan by month proxy
             var dayAssignments = departmentTaskAssignmentMapper.selectByMonth(targetDate, targetDate.plusDays(1), storeCode, departmentCode);
@@ -129,6 +136,36 @@ public class StaffingBalanceService {
         }
 
         return new ArrayList<>(balanceMap.values());
+    }
+
+    private void addDepartmentTaskRequired(Map<LocalTime, StaffingBalanceDto> balanceMap,
+                                           String storeCode,
+                                           LocalDate targetDate,
+                                           List<String> departments,
+                                           int resMin) {
+        if (departments == null || departments.isEmpty()) return;
+        LocalTime startTime = LocalTime.of(8, 0);
+        LocalTime endTime = LocalTime.of(23, 0).minusMinutes(resMin);
+        for (String dept : departments) {
+            if (dept == null || dept.isBlank()) continue;
+            var dayAssignments = departmentTaskAssignmentMapper.selectByMonth(targetDate, targetDate.plusDays(1), storeCode, dept);
+            for (var a : dayAssignments) {
+                if ("BREAK".equalsIgnoreCase(a.getTaskCode())) continue;
+                LocalDateTime startDateTime = a.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime endDateTime = a.getEndAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+                LocalDateTime slotDateTime = LocalDateTime.of(targetDate, startTime);
+                while (!slotDateTime.isAfter(LocalDateTime.of(targetDate, endTime))) {
+                    if (!slotDateTime.isBefore(startDateTime) && slotDateTime.isBefore(endDateTime)) {
+                        LocalTime slotTime = slotDateTime.toLocalTime();
+                        StaffingBalanceDto balance = balanceMap.get(slotTime);
+                        if (balance != null) {
+                            balance.setRequiredStaff(balance.getRequiredStaff() + 1);
+                        }
+                    }
+                    slotDateTime = slotDateTime.plusMinutes(resMin);
+                }
+            }
+        }
     }
 
     public List<StaffingBalanceDto> getStaffingBalanceForMonth(String storeCode, LocalDate startOfMonth) {

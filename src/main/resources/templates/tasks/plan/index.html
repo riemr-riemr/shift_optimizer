@@ -243,6 +243,7 @@
   </div>
 
   <!-- 共通タスクツリー -->
+  <script th:src="@{/js/grid-time-utils.js}"></script>
   <script th:src="@{/js/task-tree.js}"></script>
   <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function() {
@@ -997,44 +998,6 @@
       }
       rebuildTaskSelects();
 
-      function timeToSlot(timeStr) {
-        if (!timeStr) return -1;
-        try {
-          let hours, minutes;
-          // If already a Date object
-          if (timeStr instanceof Date) {
-            hours = timeStr.getHours();
-            minutes = timeStr.getMinutes();
-          } else if (typeof timeStr === 'string') {
-            const s = timeStr.trim();
-            // Pure HH:mm or HH:mm:ss
-            const hhmm = /^\d{1,2}:\d{2}$/;
-            const hhmmss = /^\d{1,2}:\d{2}:\d{2}$/;
-            if (hhmm.test(s) || hhmmss.test(s)) {
-              const parts = s.split(':');
-              hours = parseInt(parts[0], 10);
-              minutes = parseInt(parts[1], 10);
-            } else {
-              // Likely ISO or full datetime → let Date parse
-              const d = new Date(s);
-              if (isNaN(d.getTime())) return -1;
-              hours = d.getHours();
-              minutes = d.getMinutes();
-            }
-          } else {
-            // Fallback: construct Date from value
-            const d = new Date(timeStr);
-            if (isNaN(d.getTime())) return -1;
-            hours = d.getHours();
-            minutes = d.getMinutes();
-          }
-          return Math.floor((hours * 60 + minutes) / RES_MIN);
-        } catch (e) {
-          console.warn(`timeToSlot error for ${timeStr}:`, e);
-          return -1;
-        }
-      }
-
       // Context menu handlers and modal editing for grid blocks
       const ctxMenu = document.getElementById('planCtxMenu');
       const ctxEditBtn = document.getElementById('ctxEditBtn');
@@ -1503,12 +1466,6 @@
         });
       }
 
-      function timeLabelFromSlot(slot) {
-        const startMin = slot * RES_MIN;
-        const h = Math.floor(startMin / 60);
-        const m = startMin % 60;
-        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-      }
       function timesFromRange(startSlot, endSlotExclusive) {
         const startMin = startSlot * RES_MIN;
         const endMinRaw = endSlotExclusive * RES_MIN; // could be 1440 when reaching 24:00
