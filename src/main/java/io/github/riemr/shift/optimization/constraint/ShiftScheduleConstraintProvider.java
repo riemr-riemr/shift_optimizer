@@ -43,7 +43,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             employeeNotDoubleBooked(factory),
             forbidMultipleRegistersSameSlot(factory),
             lunchBreakForLongShifts(factory),
-            forbidAssignmentOutsideShiftTime(factory), // 出勤時間外割り当て禁止
 
             // Soft constraints (ASSIGNMENT only)
             penalizeUnassignedSlotForAssignment(factory),
@@ -56,7 +55,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             
             balanceWorkload(factory),
             minimizeRegisterSwitching(factory),
-            preferConsistentRegisterAssignment(factory)
+            preferConsistentRegisterAssignment(factory),
+            preferConsistentDepartmentAssignment(factory)
         };
     }
 
@@ -362,13 +362,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ConstraintCollectors.count())
-                .penalize(HardSoftScore.ofSoft(2), (emp, cnt) -> {
+                .penalize(HardSoftScore.ofSoft(1), (emp, cnt) -> {
                     // 平均から離れるほど高ペナルティ（従業員間の公平性を促進）
                     // 基準値を8時間分(32スロット)として設定
                     int target = 32; // 8時間 * 4スロット/時間
                     int deviation = Math.abs(cnt.intValue() - target);
                     // 性能向上のため線形ペナルティに変更
-                    return Math.min(deviation * 2, 100); // キャップ付き線形ペナルティ
+                    return Math.min(deviation, 50); // キャップ付き線形ペナルティ
                 })
                 .asConstraint("Balance workload");
     }
@@ -392,7 +392,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, 
                          ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
-                .penalize(HardSoftScore.ONE_SOFT,
+                .penalize(HardSoftScore.ofSoft(50),
                           (emp, date, assignments) -> countRegisterSwitches(assignments))
                 .asConstraint("Minimize register switching");
     }
@@ -414,7 +414,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
                          ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
-                .penalize(HardSoftScore.ONE_SOFT,
+                .penalize(HardSoftScore.ofSoft(50),
                         (emp, date, assignments) -> {
                             // 理想的なブロック数（1ブロック）からの差分をペナルティとする
                             int actualBlocks = countConsistentRegisterBlocks(assignments);
@@ -422,6 +422,31 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                             return Math.max(0, actualBlocks - idealBlocks);
                         })
                 .asConstraint("Penalize register assignment fragmentation");
+    }
+
+    /**
+     * 部門作業の一貫性優先制約（ソフト制約・ペナルティ方式）
+     * 同一部門での連続勤務ブロックが少ないことにペナルティを課す
+     * 部門作業が細切れになることを抑制
+     *
+     * @param f 制約ファクトリ
+     * @return 部門作業の不一貫性ペナルティ制約
+     */
+    private Constraint preferConsistentDepartmentAssignment(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
+                        && sa.getDepartmentCode() != null)
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                         ShiftAssignmentPlanningEntity::getShiftDate,
+                         ConstraintCollectors.toList())
+                .penalize(HardSoftScore.ofSoft(30),
+                        (emp, date, assignments) -> {
+                            int actualBlocks = countConsistentDepartmentBlocks(assignments);
+                            int idealBlocks = 1;
+                            return Math.max(0, actualBlocks - idealBlocks);
+                        })
+                .asConstraint("Penalize department assignment fragmentation");
     }
 
     /**
@@ -499,6 +524,48 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             blocks++;
         }
         
+        return blocks;
+    }
+
+    /**
+     * 同一部門での連続勤務ブロック数をカウント
+     *
+     * @param assignments 同一従業員・同一日の勤務割り当てリスト
+     * @return 同一部門での連続勤務ブロック数
+     */
+    private static int countConsistentDepartmentBlocks(List<ShiftAssignmentPlanningEntity> assignments) {
+        if (assignments.isEmpty()) return 0;
+
+        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        int blocks = 0;
+        String currentDepartment = null;
+        boolean inBlock = false;
+
+        for (int i = 0; i < assignments.size(); i++) {
+            ShiftAssignmentPlanningEntity current = assignments.get(i);
+            if (current.getWorkKind() != WorkKind.DEPARTMENT_TASK) continue;
+            if (i == 0) {
+                currentDepartment = current.getDepartmentCode();
+                inBlock = true;
+            } else {
+                ShiftAssignmentPlanningEntity previous = assignments.get(i - 1);
+                if (current.getStartAt().equals(previous.getEndAt())
+                        && current.getDepartmentCode().equals(currentDepartment)) {
+                    inBlock = true;
+                } else {
+                    if (inBlock) {
+                        blocks++;
+                    }
+                    currentDepartment = current.getDepartmentCode();
+                    inBlock = true;
+                }
+            }
+        }
+
+        if (inBlock) {
+            blocks++;
+        }
+
         return blocks;
     }
 

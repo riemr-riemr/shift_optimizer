@@ -130,9 +130,27 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
                     if (j == i) { j = i + 1; acc = slotMinutes; }
 
                     // 候補から最適従業員を選択（スキル降順、負荷軽い順）
+                    List<ShiftAssignmentPlanningEntity> block = slots.subList(i, j);
                     List<Employee> cands = slots.get(i).getAvailableEmployees();
                     if (cands == null || cands.isEmpty()) { i = j; continue; }
-                    List<Employee> ranked = cands.stream()
+                    List<Employee> eligible = cands;
+                    if (block.size() > 1) {
+                        List<Employee> tmp = new ArrayList<>();
+                        for (Employee e : cands) {
+                            if (isCandidateForAllSlots(e, block)) {
+                                tmp.add(e);
+                            }
+                        }
+                        eligible = tmp;
+                    }
+                    if (eligible.isEmpty() && block.size() > 1) {
+                        // ブロック内で可用候補が共通しない場合は最小ブロックに縮退
+                        j = i + 1;
+                        block = slots.subList(i, j);
+                        eligible = cands;
+                    }
+                    if (eligible.isEmpty()) { i = j; continue; }
+                    List<Employee> ranked = eligible.stream()
                             .sorted(Comparator
                                     .comparing((Employee e) -> skillForRegister(regSkillByEmp, e.getEmployeeCode(), reg.getRegisterNo())).reversed()
                                     .thenComparing(e -> totalMinutesAssigned(assignedIntervals, e.getEmployeeCode(), date)))
@@ -149,10 +167,10 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
                     }
                     if (chosen != null) {
                         // ブロック割当
-                        assignBlock(scoreDirector, chosen, slots.subList(i, j));
+                        assignBlock(scoreDirector, chosen, block);
                         addInterval(assignedIntervals, chosen.getEmployeeCode(), date,
-                                slots.get(i).getStartAt(), slots.get(j - 1).getEndAt());
-                        totalAssigned += (j - i);
+                                block.get(0).getStartAt(), block.get(block.size() - 1).getEndAt());
+                        totalAssigned += block.size();
                     }
                     i = j;
                 }
@@ -183,11 +201,29 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
                     }
                     if (j == i) { j = i + 1; acc = slotMinutes; }
 
+                    List<ShiftAssignmentPlanningEntity> block = slots.subList(i, j);
                     List<Employee> cands = slots.get(i).getAvailableEmployees();
                     if (cands == null || cands.isEmpty()) { i = j; continue; }
+                    List<Employee> eligible = cands;
+                    if (block.size() > 1) {
+                        List<Employee> tmp = new ArrayList<>();
+                        for (Employee e : cands) {
+                            if (isCandidateForAllSlots(e, block)) {
+                                tmp.add(e);
+                            }
+                        }
+                        eligible = tmp;
+                    }
+                    if (eligible.isEmpty() && block.size() > 1) {
+                        // ブロック内で可用候補が共通しない場合は最小ブロックに縮退
+                        j = i + 1;
+                        block = slots.subList(i, j);
+                        eligible = cands;
+                    }
+                    if (eligible.isEmpty()) { i = j; continue; }
                     // 部門スキル降順、負荷軽い順
                     String dept = slots.get(i).getDepartmentCode();
-                    List<Employee> ranked = cands.stream()
+                    List<Employee> ranked = eligible.stream()
                             .sorted(Comparator
                                     .comparing((Employee e) -> skillForDepartment(deptSkillByEmp, e.getEmployeeCode(), dept)).reversed()
                                     .thenComparing(e -> totalMinutesAssigned(assignedIntervals, e.getEmployeeCode(), date)))
@@ -203,10 +239,10 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
                         }
                     }
                     if (chosen != null) {
-                        assignBlock(scoreDirector, chosen, slots.subList(i, j));
+                        assignBlock(scoreDirector, chosen, block);
                         addInterval(assignedIntervals, chosen.getEmployeeCode(), date,
-                                slots.get(i).getStartAt(), slots.get(j - 1).getEndAt());
-                        totalAssigned += (j - i);
+                                block.get(0).getStartAt(), block.get(block.size() - 1).getEndAt());
+                        totalAssigned += block.size();
                     }
                     i = j;
                 }
@@ -234,6 +270,18 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
             slot.setAssignedEmployee(e);
             sd.afterVariableChanged(slot, "assignedEmployee");
         }
+    }
+
+    private boolean isCandidateForAllSlots(Employee e, List<ShiftAssignmentPlanningEntity> block) {
+        if (e == null) return false;
+        String code = e.getEmployeeCode();
+        for (var slot : block) {
+            List<Employee> cands = slot.getAvailableEmployees();
+            if (cands == null || cands.isEmpty()) return false;
+            boolean ok = cands.stream().anyMatch(c -> code != null && code.equals(c.getEmployeeCode()));
+            if (!ok) return false;
+        }
+        return true;
     }
 
     private static class Interval {
@@ -267,4 +315,3 @@ public class AssignmentInitialSolutionBuilder implements CustomPhaseCommand<Shif
         return sum;
     }
 }
-
