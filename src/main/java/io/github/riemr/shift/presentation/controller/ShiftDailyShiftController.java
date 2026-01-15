@@ -33,7 +33,9 @@ import io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper;
 import io.github.riemr.shift.application.dto.ShiftAssignmentSaveRequest;
 import io.github.riemr.shift.application.dto.ShiftAttendanceSaveRequest;
 import io.github.riemr.shift.application.dto.EmployeeRequestDeleteRequest;
+import io.github.riemr.shift.application.dto.WorkDemandSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
+import io.github.riemr.shift.application.service.WorkDemandIntervalService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
@@ -81,6 +83,7 @@ public class ShiftDailyShiftController {
     private final RegisterDemandHourService registerDemandHourService;
     private final TaskCategoryMasterService taskCategoryMasterService;
     private final TaskMasterService taskMasterService;
+    private final WorkDemandIntervalService workDemandIntervalService;
     private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
     private final RegisterAssignmentMapper registerAssignmentMapper;
@@ -372,6 +375,23 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public List<TaskCategoryMaster> getTaskCategories() {
         return taskCategoryMasterService.list();
+    }
+
+    @GetMapping("/api/calc/work-demands/{date}")
+    @ResponseBody
+    public List<DemandIntervalDto> getWorkDemands(@PathVariable("date") String dateString,
+                                                  @RequestParam("storeCode") String storeCode,
+                                                  @RequestParam("departmentCode") String departmentCode) {
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        return workDemandIntervalService.list(storeCode, date, departmentCode);
+    }
+
+    @PostMapping("/api/calc/work-demands/save")
+    @ResponseBody
+    public Map<String, Object> saveWorkDemands(@RequestBody WorkDemandSaveRequest request) {
+        LocalDate date = LocalDate.parse(request.getDate(), DateTimeFormatter.ISO_LOCAL_DATE);
+        workDemandIntervalService.replaceForDate(request.getStoreCode(), date, request.getDepartmentCode(), request.getIntervals());
+        return Map.of("success", true);
     }
 
     @GetMapping("/api/calc/work-demand-slot/{date}")

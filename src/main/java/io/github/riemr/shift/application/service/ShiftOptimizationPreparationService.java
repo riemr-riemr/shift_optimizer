@@ -43,15 +43,6 @@ public class ShiftOptimizationPreparationService {
         LocalDate cycleStart = month;
         LocalDate cycleEndInclusive = month.plusMonths(1).minusDays(1);
         
-        try {
-            // 1. 作業計画の適用（task_plan → work_demand_interval）
-            taskPlanService.applyReplacing(storeCode, cycleStart, cycleEndInclusive, "auto_apply");
-            log.info("✅ Applied task plans for store {} from {} to {}", storeCode, cycleStart, cycleEndInclusive);
-        } catch (Exception e) {
-            log.error("❌ Failed to apply task plans before optimization", e);
-            success = false;
-        }
-        
         // 部門作業需要の物質化（全部門対象）
         try {
             LocalDate from = cycleStart;

@@ -231,9 +231,6 @@ public class ShiftScheduleService {
                 log.info("Executing task plan materialization for store: {}, dept: {}", storeCode, departmentCode);
                 System.out.println("DEBUG: ShiftScheduleService executing task plan materialization for store: " + storeCode + ", dept: " + departmentCode);
                 
-                // taskPlanServiceを使用して作業計画を物質化
-                taskPlanService.applyReplacing(storeCode, cycleStart, cycleEnd.minusDays(1), "optimization_prep");
-                
                 if (departmentCode != null && !departmentCode.isBlank()) {
                     System.out.println("DEBUG: Processing specific department: " + departmentCode);
                     // 部門タスク割当（従業員未割当の枠）も物質化しておく

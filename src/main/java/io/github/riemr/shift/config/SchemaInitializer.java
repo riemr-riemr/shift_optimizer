@@ -119,12 +119,14 @@ public class SchemaInitializer {
                     "to_time TIME NOT NULL, " +
                     "demand INTEGER NOT NULL, " +
                     "task_code VARCHAR(32), " +
+                    "lane INT, " +
                     "created_at TIMESTAMPTZ DEFAULT now(), " +
                     "updated_at TIMESTAMPTZ DEFAULT now(), " +
                     "CONSTRAINT chk_work_from_lt_to CHECK (to_time > from_time)" +
                     ")");
             jdbc.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_work_demand_interval ON work_demand_interval (store_code, department_code, target_date, from_time, to_time, COALESCE(task_code, ''))");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_work_demand_interval_date ON work_demand_interval (store_code, department_code, target_date)");
+            try { jdbc.execute("ALTER TABLE work_demand_interval ADD COLUMN IF NOT EXISTS lane INT"); } catch (Exception ignore) {}
 
             jdbc.execute("CREATE TABLE IF NOT EXISTS attendance_group_constraint (" +
                     "constraint_id BIGSERIAL PRIMARY KEY, " +
@@ -187,25 +189,7 @@ public class SchemaInitializer {
                     "PRIMARY KEY (plan_id, week_of_month, day_of_week)" +
                     ")");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_monthly_task_plan_wom_plan ON monthly_task_plan_wom(plan_id)");
-
-            // Non-register tasks table (expanded from weekly/monthly plans)
-            jdbc.execute("CREATE TABLE IF NOT EXISTS task (" +
-                    "task_id BIGSERIAL PRIMARY KEY, " +
-                    "store_code VARCHAR(10) NOT NULL REFERENCES store(store_code), " +
-                    "work_date DATE NOT NULL, " +
-                    "name VARCHAR(100) NOT NULL, " +
-                    "description TEXT, " +
-                    "schedule_type VARCHAR(10) CHECK (schedule_type IN ('FIXED','FLEXIBLE')), " +
-                    "fixed_start_at TIMESTAMP, fixed_end_at TIMESTAMP, " +
-                    "window_start_at TIMESTAMP, window_end_at TIMESTAMP, " +
-                    "required_duration_minutes INT, " +
-                    "required_skill_code VARCHAR(32), " +
-                    "required_staff_count INT, " +
-                    "priority INT, must_be_contiguous SMALLINT, " +
-                    "created_by VARCHAR(64) DEFAULT 'auto', created_at TIMESTAMPTZ DEFAULT now(), " +
-                    "updated_by VARCHAR(64) DEFAULT 'auto', updated_at TIMESTAMPTZ DEFAULT now()" +
-                    ")");
-            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_task_store_date ON task(store_code, work_date)");
+            try { jdbc.execute("DROP TABLE IF EXISTS task"); } catch (Exception ignore) {}
 
             // Ensure department_task_assignment schema (allow NULL employee_code)
             jdbc.execute("CREATE TABLE IF NOT EXISTS department_task_assignment (" +

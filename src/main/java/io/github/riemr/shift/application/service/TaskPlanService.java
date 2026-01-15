@@ -1,9 +1,7 @@
 package io.github.riemr.shift.application.service;
 
-import io.github.riemr.shift.application.repository.TaskRepository;
 import io.github.riemr.shift.application.repository.MonthlyTaskPlanRepository;
 import io.github.riemr.shift.application.repository.TaskPlanRepository;
-import io.github.riemr.shift.infrastructure.persistence.entity.Task;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
 import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentTaskAssignment;
@@ -20,18 +18,15 @@ import java.util.*;
 @Service
 public class TaskPlanService {
     private final TaskPlanRepository planRepository;
-    private final TaskRepository taskRepository;
     private final MonthlyTaskPlanRepository monthlyRepository;
     private final DepartmentTaskAssignmentMapper deptTaskAssignmentMapper;
     private final WorkDemandIntervalMapper workDemandIntervalMapper;
 
     public TaskPlanService(TaskPlanRepository planRepository,
-                           TaskRepository taskRepository,
                            MonthlyTaskPlanRepository monthlyRepository,
                            DepartmentTaskAssignmentMapper deptTaskAssignmentMapper,
                            WorkDemandIntervalMapper workDemandIntervalMapper) {
         this.planRepository = planRepository;
-        this.taskRepository = taskRepository;
         this.monthlyRepository = monthlyRepository;
         this.deptTaskAssignmentMapper = deptTaskAssignmentMapper;
         this.workDemandIntervalMapper = workDemandIntervalMapper;
@@ -173,76 +168,6 @@ public class TaskPlanService {
         return c;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int applyReplacing(String storeCode, LocalDate from, LocalDate to, String createdBy) {
-        Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
-        Date toDate = Date.from(to.atStartOfDay(ZoneId.systemDefault()).toInstant());
-        taskRepository.deleteByStoreAndDateRange(storeCode, fromDate, toDate);
-        return generate(storeCode, from, to, createdBy);
-    }
-
-    @Transactional
-    public int generate(String storeCode, LocalDate from, LocalDate to, String createdBy) {
-        int created = 0;
-        ZoneId zone = ZoneId.systemDefault();
-
-        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            short dow = (short) d.getDayOfWeek().getValue();
-            List<TaskPlan> plans = planRepository.listWeeklyEffective(storeCode, dow, Date.from(d.atStartOfDay(zone).toInstant()));
-
-            for (TaskPlan p : plans) {
-                created += createTasksFromPlan(storeCode, d, p, createdBy);
-            }
-            // Monthly (DOM/WOM) plans
-            List<MonthlyTaskPlan> monthly = monthlyRepository.listEffectiveByStoreAndDate(storeCode, Date.from(d.atStartOfDay(zone).toInstant()));
-            for (MonthlyTaskPlan mp : monthly) {
-                created += createTasksFromMonthly(storeCode, d, mp, createdBy);
-            }
-        }
-        return created;
-    }
-
-    private int createTasksFromPlan(String storeCode, LocalDate date, TaskPlan p, String createdBy) {
-        if ("FIXED".equals(resolveType(p))) {
-            int count = Math.max(1, nvl(p.getRequiredStaffCount(), 1));
-            for (int i = 0; i < count; i++) {
-                Task t = new Task();
-                t.setStoreCode(storeCode);
-                t.setWorkDate(toDate(date));
-                t.setName(p.getTaskCode());
-                t.setDescription("Weekly:" + p.getTaskCode());
-                t.setScheduleType("FIXED");
-                t.setFixedStartAt(toDate(date.atTime(toLocalTime(p.getFixedStartTime()))));
-                t.setFixedEndAt(toDate(date.atTime(toLocalTime(p.getFixedEndTime()))));
-                t.setRequiredStaffCount(1);
-                t.setPriority(p.getPriority());
-                t.setCreatedBy(createdBy);
-                t.setCreatedAt(new Date());
-                t.setUpdatedBy(createdBy);
-                t.setUpdatedAt(new Date());
-                taskRepository.save(t);
-            }
-            return count;
-        } else {
-            Task t = new Task();
-            t.setStoreCode(storeCode);
-            t.setWorkDate(toDate(date));
-            t.setName(p.getTaskCode());
-            t.setDescription("Weekly:" + p.getTaskCode());
-            t.setScheduleType("FLEXIBLE");
-            t.setWindowStartAt(toDate(date.atTime(toLocalTime(p.getWindowStartTime()))));
-            t.setWindowEndAt(toDate(date.atTime(toLocalTime(p.getWindowEndTime()))));
-            t.setRequiredDurationMinutes(p.getRequiredDurationMinutes());
-            t.setPriority(p.getPriority());
-            t.setMustBeContiguous(p.getMustBeContiguous());
-            t.setCreatedBy(createdBy);
-            t.setCreatedAt(new Date());
-            t.setUpdatedBy(createdBy);
-            t.setUpdatedAt(new Date());
-            taskRepository.save(t);
-            return 1;
-        }
-    }
 
     /**
      * 週次・月次の作業計画から、work_demand_interval を再生成（指定範囲/店舗/部門）。
@@ -273,7 +198,7 @@ public class TaskPlanService {
                 int result = toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
                         toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
                         toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
-                        p.getRequiredStaffCount());
+                        p.getRequiredStaffCount(), p.getLane());
                 created += result;
                 System.out.println("DEBUG: Weekly plan processing result: " + result);
             }
@@ -282,7 +207,7 @@ public class TaskPlanService {
                 created += toWorkDemandRows(storeCode, departmentCode, d, p.getTaskCode(), p.getScheduleType(),
                         toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
                         toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
-                        p.getRequiredStaffCount());
+                        p.getRequiredStaffCount(), p.getLane());
             }
         }
         System.out.println("DEBUG: materializeWorkDemands completed - created " + created + " work demand intervals for dept: " + departmentCode);
@@ -319,7 +244,7 @@ public class TaskPlanService {
                     totalCreated += toWorkDemandRows(storeCode, p.getDepartmentCode(), d, p.getTaskCode(), p.getScheduleType(),
                             toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
                             toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
-                            p.getRequiredStaffCount());
+                            p.getRequiredStaffCount(), p.getLane());
                 }
             }
             for (MonthlyTaskPlan p : monthly) {
@@ -327,7 +252,7 @@ public class TaskPlanService {
                     totalCreated += toWorkDemandRows(storeCode, p.getDepartmentCode(), d, p.getTaskCode(), p.getScheduleType(),
                             toLocalTime(p.getFixedStartTime()), toLocalTime(p.getFixedEndTime()),
                             toLocalTime(p.getWindowStartTime()), toLocalTime(p.getWindowEndTime()),
-                            p.getRequiredStaffCount());
+                            p.getRequiredStaffCount(), p.getLane());
                 }
             }
         }
@@ -337,7 +262,7 @@ public class TaskPlanService {
 
     private int toWorkDemandRows(String storeCode, String departmentCode, LocalDate date, String taskCode,
                                  String scheduleType, LocalTime fixedStart, LocalTime fixedEnd,
-                                 LocalTime winStart, LocalTime winEnd, Integer requiredStaff) {
+                                 LocalTime winStart, LocalTime winEnd, Integer requiredStaff, Integer lane) {
         System.out.println("DEBUG: toWorkDemandRows - task: " + taskCode + ", scheduleType: " + scheduleType + ", fixedStart: " + fixedStart + ", fixedEnd: " + fixedEnd + ", winStart: " + winStart + ", winEnd: " + winEnd);
         
         int demand = Math.max(1, nvl(requiredStaff, 1));
@@ -363,6 +288,7 @@ public class TaskPlanService {
                     .to(to)
                     .demand(demand)
                     .taskCode(taskCode)
+                    .lane(lane)
                     .build();
             System.out.println("DEBUG: Inserting work demand interval for task: " + taskCode);
             workDemandIntervalMapper.insert(dto);
@@ -376,50 +302,6 @@ public class TaskPlanService {
     }
     // Special-day generation removed; use monthly_task_plan
 
-    private int createTasksFromMonthly(String storeCode, LocalDate date, MonthlyTaskPlan p, String createdBy) {
-        if ("FIXED".equals(resolveType(p.getScheduleType()))) {
-            int count = Math.max(1, nvl(p.getRequiredStaffCount(), 1));
-            for (int i = 0; i < count; i++) {
-                Task t = new Task();
-                t.setStoreCode(storeCode);
-                t.setWorkDate(toDate(date));
-                t.setName(p.getTaskCode());
-                t.setDescription("Monthly:" + p.getTaskCode());
-                t.setScheduleType("FIXED");
-                t.setFixedStartAt(toDate(date.atTime(toLocalTime(p.getFixedStartTime()))));
-                t.setFixedEndAt(toDate(date.atTime(toLocalTime(p.getFixedEndTime()))));
-                t.setRequiredStaffCount(1);
-                t.setPriority(p.getPriority());
-                t.setCreatedBy(createdBy);
-                t.setCreatedAt(new Date());
-                t.setUpdatedBy(createdBy);
-                t.setUpdatedAt(new Date());
-                taskRepository.save(t);
-            }
-            return count;
-        } else {
-            Task t = new Task();
-            t.setStoreCode(storeCode);
-            t.setWorkDate(toDate(date));
-            t.setName(p.getTaskCode());
-            t.setDescription("Monthly:" + p.getTaskCode());
-            t.setScheduleType("FLEXIBLE");
-            t.setWindowStartAt(toDate(date.atTime(toLocalTime(p.getWindowStartTime()))));
-            t.setWindowEndAt(toDate(date.atTime(toLocalTime(p.getWindowEndTime()))));
-            t.setRequiredDurationMinutes(p.getRequiredDurationMinutes());
-            t.setPriority(p.getPriority());
-            t.setMustBeContiguous(p.getMustBeContiguous());
-            t.setCreatedBy(createdBy);
-            t.setCreatedAt(new Date());
-            t.setUpdatedBy(createdBy);
-            t.setUpdatedAt(new Date());
-            taskRepository.save(t);
-            return 1;
-        }
-    }
-
-    private static String resolveType(TaskPlan p) { return p.getScheduleType() != null ? p.getScheduleType() : "FIXED"; }
-    private static String resolveType(String scheduleType) { return scheduleType != null ? scheduleType : "FIXED"; }
     private static int nvl(Integer v, int def) { return v == null ? def : v; }
     private static Date toDate(LocalDate d) { return Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
     private static Date toDate(LocalDateTime dt) { return Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }

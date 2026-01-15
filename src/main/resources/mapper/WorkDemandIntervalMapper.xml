@@ -10,10 +10,11 @@
     <result column="to_time" property="to"/>
     <result column="demand" property="demand"/>
     <result column="task_code" property="taskCode"/>
+    <result column="lane" property="lane"/>
   </resultMap>
 
   <select id="selectByDate" resultMap="WorkDemandIntervalMap">
-    SELECT store_code, department_code, target_date, from_time, to_time, demand, task_code
+    SELECT store_code, department_code, target_date, from_time, to_time, demand, task_code, lane
     FROM work_demand_interval
     WHERE store_code = #{storeCode}
       AND department_code = #{departmentCode}
@@ -22,7 +23,7 @@
   </select>
 
   <select id="selectByMonth" resultMap="WorkDemandIntervalMap">
-    SELECT store_code, department_code, target_date, from_time, to_time, demand, task_code
+    SELECT store_code, department_code, target_date, from_time, to_time, demand, task_code, lane
     FROM work_demand_interval
     WHERE store_code = #{storeCode}
       AND department_code = #{departmentCode}
@@ -32,8 +33,8 @@
   </select>
 
   <insert id="insert" parameterType="io.github.riemr.shift.application.dto.DemandIntervalDto">
-    INSERT INTO work_demand_interval (store_code, department_code, target_date, from_time, to_time, demand, task_code)
-    VALUES (#{storeCode}, #{departmentCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{taskCode})
+    INSERT INTO work_demand_interval (store_code, department_code, target_date, from_time, to_time, demand, task_code, lane)
+    VALUES (#{storeCode}, #{departmentCode}, #{targetDate}, #{from}, #{to}, #{demand}, #{taskCode}, #{lane})
   </insert>
 
   <delete id="deleteById">

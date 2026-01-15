@@ -119,9 +119,62 @@
         </h5>
       </div>
       <div class="card-body p-0">
-        <div class="table-responsive" id="departmentWorkContainer" style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-          <div id="departmentWorkGrid" class="grid-container"></div>
+        <div class="p-3">
+          <div class="grid-editor mt-2" id="departmentTaskEditor">
+            <div th:replace="~{fragments/task-selection :: taskSelection('deptTaskCode','deptTaskDept','deptTaskLabel','deptTaskTreeList','作業選択')}"></div>
+            <div class="grid-pane flex-grow-1">
+              <div class="time-grid-wrapper" id="departmentWorkContainer">
+                <div id="departmentTaskGrid" class="time-grid"></div>
+              </div>
+              <div id="deptTaskMessage" class="alert alert-danger py-1 px-2 small d-none mt-2" role="alert"></div>
+              <div class="d-flex justify-content-end mt-2">
+                <button id="deptTaskSaveBtn" type="button" class="btn btn-sm btn-success">保存</button>
+              </div>
+              <div class="form-text mt-1">ドラッグで範囲選択して登録します（1セル=[[${timeResolutionMinutes}]]分）。作業を選択して操作してください。</div>
+            </div>
+          </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 部門作業計画の右クリックメニュー -->
+<div id="deptTaskCtxMenu" class="card shadow" style="position:absolute; display:none; z-index:2000; min-width: 160px;">
+  <div class="list-group list-group-flush">
+    <button type="button" class="list-group-item list-group-item-action" id="deptTaskEditBtn">編集</button>
+    <button type="button" class="list-group-item list-group-item-action text-danger" id="deptTaskDeleteBtn">削除</button>
+  </div>
+</div>
+
+<!-- 部門作業計画の編集モーダル -->
+<div class="modal fade" id="deptTaskEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">作業計画の編集</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">人数</label>
+            <input type="number" min="1" class="form-control" id="deptEditStaff" value="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label">開始</label>
+            <input type="time" class="form-control" id="deptEditStart" th:attr="step=${timeResolutionMinutes*60}">
+          </div>
+
+          <div class="col-6">
+            <label class="form-label">終了</label>
+            <input type="time" class="form-control" id="deptEditEnd" th:attr="step=${timeResolutionMinutes*60}">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="deptTaskModalSaveBtn">保存</button>
       </div>
     </div>
   </div>
@@ -196,8 +249,7 @@
   }
 
   .shift-grid-container .grid-cell,
-  #workModelGrid .grid-cell,
-  #departmentWorkGrid .grid-cell {
+  #workModelGrid .grid-cell {
     border-right: 1px solid #f0f0f0;
     border-bottom: 1px solid #f7f7f7;
     min-height: 28px;
@@ -249,8 +301,7 @@
   }
 
   .shift-grid-container .grid-header,
-  #workModelGrid .grid-header,
-  #departmentWorkGrid .grid-header {
+  #workModelGrid .grid-header {
     position: sticky;
     top: 0;
     background: #f8f9fa;
@@ -265,8 +316,7 @@
   }
 
   .shift-grid-container .grid-header.time-slot,
-  #workModelGrid .grid-header.time-slot,
-  #departmentWorkGrid .grid-header.time-slot {
+  #workModelGrid .grid-header.time-slot {
     border-right: 1px solid #eee;
   }
 
@@ -448,32 +498,85 @@
     background: rgba(13, 110, 253, 0.15); /* bootstrap primary tint */
   }
 
-  /* Department workload grid */
-  .department-work-cell {
-    background: rgba(69, 183, 209, 0.12);
-    color: #0f3d47;
-    font-weight: 600;
-    text-align: center;
+  /* Department task editor (tasks/plan-like) */
+  .time-grid-wrapper {
+    overflow-x: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
   }
-  .department-work-cell.has-demand {
-    border-left: 2px solid rgba(69, 183, 209, 0.6);
+  .time-grid {
+    display: grid;
+    grid-auto-rows: 28px;
+    position: relative;
   }
-  .department-work-cell-empty {
+  .time-grid .cell {
+    border-right: 1px solid #f0f0f0;
+    border-bottom: 1px solid #f7f7f7;
+    cursor: pointer;
+  }
+  .time-grid .cell:hover { background: #f1f5ff; }
+  .time-grid .cell.selecting { background: #ffe599; }
+  .time-grid .cell.selected-range { background: #b6e0fe; }
+  .time-grid .row-label {
+    position: sticky;
+    left: 0;
     background: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #6c757d;
   }
-  .dept-plan-block {
-    border-radius: 3px;
-    color: #fff;
-    font-weight: 600;
-    font-size: 0.7rem;
-    text-align: center;
-    padding: 2px 4px;
+  .time-grid .header {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 3;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 12px;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .time-grid .header-hour { border-right: 1px solid #eee; }
+  .plan-block {
+    position: absolute;
+    border: 1px solid #333;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    z-index: 4;
+    border-radius: 3px;
     overflow: hidden;
+    z-index: 4;
+    cursor: pointer;
+  }
+  .plan-block .resize-handle {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 10px;
+    height: 10px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 2px;
+    cursor: se-resize;
+  }
+  .plan-block .task-label {
+    font-size: 10px;
+    color: #fff;
+    font-weight: bold;
     white-space: nowrap;
+    overflow: hidden;
     text-overflow: ellipsis;
-    pointer-events: none;
+    padding: 2px 16px 2px 4px;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+  }
+  .plan-window {
+    position: absolute;
+    border: 1px dashed rgba(0,0,0,0.2);
+    border-radius: 3px;
+    z-index: 3;
   }
 
   @media (max-width: 992px) {
@@ -484,6 +587,7 @@
 </style>
 
 <script th:src="@{/js/grid-time-utils.js}"></script>
+<script th:src="@{/js/task-tree.js}"></script>
 <script th:inline="javascript">
 const $=id=>document.getElementById(id);
 
@@ -504,9 +608,18 @@ let taskMasterList = [];
 const taskColorByCode = new Map();
 const taskCategoryColorByCode = new Map();
 const taskCategoryByTaskKey = new Map();
+let taskCategoryList = [];
 let staffingRequiredByTime = new Map();
 let resizeState = null;
 let draggedBlock = null;
+const DEPT_TASK_LANES = 15;
+let deptTaskPlans = [];
+let deptTaskPlanMap = new Map();
+let deptTaskDirty = false;
+let deptDragState = { active: false, row: null, startCol: null, endCol: null };
+let deptResizeState = null;
+let deptMoveState = null;
+let deptCtxPlanId = null;
 
 function gridColumnIndex(h, m) {
   return (h * PER_HOUR) + (m / RES_MIN) + 2;
@@ -660,6 +773,7 @@ async function loadTaskCategoryMap() {
   try {
     const categories = await fetch('/shift/api/calc/task-categories').then(r => r.json());
     if (Array.isArray(categories)) {
+      taskCategoryList = categories;
       categories.forEach(c => {
         if (c && c.categoryCode && c.color) {
           taskCategoryColorByCode.set(c.categoryCode, c.color);
@@ -700,13 +814,40 @@ async function loadTaskMasterMap(storeCode, departmentCode) {
         }
       }
     });
+    renderDeptTaskTree();
   } catch (e) {
     console.error('作業マスタ取得エラー:', e);
     taskNameByCode.clear();
     taskColorByCode.clear();
     taskCategoryByTaskKey.clear();
     taskMasterList = [];
+    renderDeptTaskTree();
   }
+}
+
+function renderDeptTaskTree() {
+  if (typeof TaskTree === 'undefined') return;
+  const container = document.getElementById('deptTaskTreeList');
+  if (!container) return;
+  const masters = Array.isArray(taskMasterList) ? taskMasterList : [];
+  const categories = Array.isArray(taskCategoryList) ? taskCategoryList : [];
+  const taskTree = new TaskTree({
+    container,
+    masters,
+    categories,
+    onTaskSelect: (code, data) => {
+      const hid = document.getElementById('deptTaskCode');
+      if (hid) hid.value = code || '';
+      const deptHid = document.getElementById('deptTaskDept');
+      if (deptHid) deptHid.value = (data && data.departmentCode) ? data.departmentCode : selectedDepartmentCode();
+      const lbl = document.getElementById('deptTaskLabel');
+      if (lbl) lbl.textContent = data ? `${data.name}` : '未選択';
+    }
+  });
+  taskTree.render();
+  const searchEl = document.getElementById('deptTaskTreeList-search');
+  if (searchEl) taskTree.attachSearch(searchEl);
+  taskTree.enableKeyboardNavigation();
 }
 
 // ドラッグアンドドロップと右クリックメニュー処理
@@ -812,6 +953,31 @@ document.addEventListener('DOMContentLoaded', () => {
     storeSelect.addEventListener('change', loadDepartments);
     // 初期状態（未選択）では部門はプレースホルダのみにする
     loadDepartments();
+  }
+
+  const deptTaskSaveBtn = $('deptTaskSaveBtn');
+  if (deptTaskSaveBtn) {
+    deptTaskSaveBtn.addEventListener('click', saveDeptTasks);
+  }
+  const deptTaskEditBtn = $('deptTaskEditBtn');
+  if (deptTaskEditBtn) {
+    deptTaskEditBtn.addEventListener('click', () => {
+      if (!deptCtxPlanId) return;
+      const plan = deptTaskPlanMap.get(deptCtxPlanId);
+      if (plan) openDeptEditModal(plan);
+      closeDeptCtxMenu();
+    });
+  }
+  const deptTaskDeleteBtn = $('deptTaskDeleteBtn');
+  if (deptTaskDeleteBtn) {
+    deptTaskDeleteBtn.addEventListener('click', () => {
+      if (deptCtxPlanId) deleteDeptPlan(deptCtxPlanId);
+      closeDeptCtxMenu();
+    });
+  }
+  const deptModalSaveBtn = $('deptTaskModalSaveBtn');
+  if (deptModalSaveBtn) {
+    deptModalSaveBtn.addEventListener('click', saveDeptTaskModal);
   }
 
   // 単日作業割当の実行ボタン
@@ -2653,109 +2819,466 @@ async function loadWorkModel(dateString, shiftData) {
   }
 }
 
+function showDeptTaskMessage(message) {
+  const el = $('deptTaskMessage');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.remove('d-none');
+}
+
+function clearDeptTaskMessage() {
+  const el = $('deptTaskMessage');
+  if (!el) return;
+  el.classList.add('d-none');
+  el.textContent = '';
+}
+
+function initDepartmentTaskGrid() {
+  const grid = $('departmentTaskGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const cols = SLOT_COUNT;
+  const labelPx = 60;
+  const slotPx = CELL_WIDTH;
+  grid.style.gridTemplateColumns = `${labelPx}px repeat(${cols}, ${slotPx}px)`;
+
+  // header label
+  const headerLabel = document.createElement('div');
+  headerLabel.className = 'header';
+  headerLabel.textContent = 'Lane';
+  headerLabel.style.gridColumn = '1 / 2';
+  headerLabel.style.gridRow = '1 / 2';
+  grid.appendChild(headerLabel);
+
+  // hour headers
+  for (let h = 0; h < 24; h++) {
+    const header = document.createElement('div');
+    header.className = 'header header-hour';
+    header.textContent = `${String(h).padStart(2, '0')}:00`;
+    header.style.gridRow = '1 / 2';
+    header.style.gridColumn = `${2 + h * PER_HOUR} / span ${PER_HOUR}`;
+    grid.appendChild(header);
+  }
+
+  for (let row = 0; row < DEPT_TASK_LANES; row++) {
+    const rowLabel = document.createElement('div');
+    rowLabel.className = 'row-label';
+    rowLabel.textContent = String(row + 1);
+    rowLabel.style.gridColumn = '1 / 2';
+    rowLabel.style.gridRow = `${row + 2} / ${row + 3}`;
+    grid.appendChild(rowLabel);
+
+    for (let col = 0; col < cols; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = String(row);
+      cell.dataset.col = String(col);
+      cell.style.gridRow = `${row + 2} / ${row + 3}`;
+      cell.style.gridColumn = `${col + 2} / ${col + 3}`;
+      cell.addEventListener('mousedown', handleDeptCellMouseDown);
+      cell.addEventListener('mouseenter', handleDeptCellMouseEnter);
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function clearDeptSelection() {
+  const grid = $('departmentTaskGrid');
+  if (!grid) return;
+  grid.querySelectorAll('.cell.selecting').forEach(el => el.classList.remove('selecting'));
+}
+
+function highlightDeptRange(rowIndex, c1, c2) {
+  const grid = $('departmentTaskGrid');
+  if (!grid) return;
+  clearDeptSelection();
+  const from = Math.min(c1, c2);
+  const to = Math.max(c1, c2);
+  const cells = grid.querySelectorAll(`.cell[data-row="${rowIndex}"]`);
+  for (let i = from; i <= to; i++) {
+    const el = Array.from(cells).find(x => Number(x.dataset.col) === i);
+    if (el) el.classList.add('selecting');
+  }
+}
+
+function applyDeptTaskStyle(element, taskCode, departmentCode) {
+  const taskColor = getTaskColor(taskCode, departmentCode);
+  element.style.backgroundColor = taskColor;
+  element.style.borderLeft = `4px solid ${taskColor}`;
+  const isBreak = taskCode === 'BREAK';
+  element.style.color = isBreak ? '#2f2f2f' : '#fff';
+  element.style.background = `linear-gradient(135deg, ${taskColor}E6, ${taskColor}CC)`;
+}
+
+function assignDeptTaskLanes(plans) {
+  const lanes = Array.from({ length: DEPT_TASK_LANES }, () => []);
+  const sorted = [...plans].sort((a, b) => {
+    return timeToSlot(a.fixedStartTime) - timeToSlot(b.fixedStartTime);
+  });
+  sorted.forEach(plan => {
+    if (plan.lane && plan.lane > 0) return;
+    const start = timeToSlot(plan.fixedStartTime);
+    const end = timeToSlot(plan.fixedEndTime);
+    for (let i = 0; i < lanes.length; i++) {
+      const lanePlans = lanes[i];
+      const conflict = lanePlans.some(p => {
+        const ps = timeToSlot(p.fixedStartTime);
+        const pe = timeToSlot(p.fixedEndTime);
+        return start < pe && end > ps;
+      });
+      if (!conflict) {
+        plan.lane = i + 1;
+        lanePlans.push(plan);
+        return;
+      }
+    }
+    plan.lane = 1;
+  });
+}
+
+function createOrUpdateDeptBlock(plan) {
+  const grid = $('departmentTaskGrid');
+  if (!grid) return;
+  const cols = SLOT_COUNT;
+  const labelPx = 60;
+  const slotPx = CELL_WIDTH;
+  const rowPx = 28;
+  const headerPx = 28;
+  const rowIndex = Math.max(0, (plan.lane || 1) - 1);
+  const fromCol = timeToSlot(plan.fixedStartTime);
+  const toColExclusive = timeToSlot(plan.fixedEndTime);
+  if (fromCol < 0 || toColExclusive <= fromCol) return;
+  const staff = Math.max(1, Number(plan.requiredStaffCount || 1));
+  const left = labelPx + fromCol * slotPx;
+  const top = headerPx + rowIndex * rowPx;
+  const width = Math.max(1, (toColExclusive - fromCol)) * slotPx;
+  const height = staff * rowPx;
+  const taskName = getTaskName(plan.taskCode, plan.departmentCode);
+  let block = document.getElementById(`dept-plan-block-${plan.idKey}`);
+  if (!block) {
+    block = document.createElement('div');
+    block.id = `dept-plan-block-${plan.idKey}`;
+    block.className = 'plan-block';
+    grid.appendChild(block);
+  }
+  block.style.left = `${left}px`;
+  block.style.top = `${top}px`;
+  block.style.width = `${width}px`;
+  block.style.height = `${height}px`;
+  block.dataset.planId = plan.idKey;
+  block.dataset.taskCode = plan.taskCode || '';
+  block.dataset.departmentCode = plan.departmentCode || '';
+  block.dataset.staff = String(staff);
+  block.dataset.row = String(rowIndex);
+  block.dataset.startCol = String(fromCol);
+  block.dataset.endCol = String(toColExclusive);
+  block.innerHTML = `<div class="task-label" title="${taskName}">${taskName}</div><div class="resize-handle"></div>`;
+  applyDeptTaskStyle(block, plan.taskCode, plan.departmentCode);
+
+  block.addEventListener('mousedown', handleDeptBlockMouseDown);
+  block.addEventListener('contextmenu', handleDeptBlockContextMenu);
+  const handle = block.querySelector('.resize-handle');
+  if (handle) {
+    handle.addEventListener('mousedown', handleDeptResizeMouseDown);
+  }
+}
+
+function renderDeptTaskPlans() {
+  const grid = $('departmentTaskGrid');
+  if (!grid) return;
+  grid.querySelectorAll('.plan-block').forEach(el => el.remove());
+  grid.querySelectorAll('.plan-window').forEach(el => el.remove());
+  deptTaskPlans.forEach(plan => {
+    createOrUpdateDeptBlock(plan);
+  });
+}
+
+function setDeptTaskDirty() {
+  deptTaskDirty = true;
+  const btn = $('deptTaskSaveBtn');
+  if (btn) btn.disabled = false;
+}
+
+function handleDeptCellMouseDown(event) {
+  if (event.button !== 0) return;
+  const taskCode = document.getElementById('deptTaskCode')?.value || '';
+  if (!taskCode) {
+    showDeptTaskMessage('作業を選択してください');
+    return;
+  }
+  clearDeptTaskMessage();
+  const cell = event.currentTarget;
+  deptDragState.active = true;
+  deptDragState.row = Number(cell.dataset.row);
+  deptDragState.startCol = Number(cell.dataset.col);
+  deptDragState.endCol = Number(cell.dataset.col);
+  highlightDeptRange(deptDragState.row, deptDragState.startCol, deptDragState.endCol);
+  document.addEventListener('mouseup', handleDeptMouseUp);
+}
+
+function handleDeptCellMouseEnter(event) {
+  if (!deptDragState.active) return;
+  const cell = event.currentTarget;
+  if (Number(cell.dataset.row) !== deptDragState.row) return;
+  deptDragState.endCol = Number(cell.dataset.col);
+  highlightDeptRange(deptDragState.row, deptDragState.startCol, deptDragState.endCol);
+}
+
+function handleDeptMouseUp() {
+  document.removeEventListener('mouseup', handleDeptMouseUp);
+  if (!deptDragState.active) return;
+  const fromCol = Math.min(deptDragState.startCol, deptDragState.endCol);
+  const toCol = Math.max(deptDragState.startCol, deptDragState.endCol) + 1;
+  const taskCode = document.getElementById('deptTaskCode')?.value || '';
+  const departmentCode = document.getElementById('deptTaskDept')?.value || selectedDepartmentCode();
+  if (taskCode) {
+    const idKey = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const plan = {
+      idKey,
+      taskCode,
+      departmentCode,
+      name: getTaskName(taskCode, departmentCode),
+      fixedStartTime: timeLabelFromSlot(fromCol),
+      fixedEndTime: timeLabelFromSlot(toCol),
+      requiredStaffCount: 1,
+      lane: deptDragState.row + 1
+    };
+    deptTaskPlans.push(plan);
+    deptTaskPlanMap.set(idKey, plan);
+    renderDeptTaskPlans();
+    setDeptTaskDirty();
+  }
+  deptDragState.active = false;
+  clearDeptSelection();
+}
+
+function handleDeptBlockMouseDown(event) {
+  const block = event.currentTarget;
+  if (event.target.classList.contains('resize-handle')) return;
+  event.preventDefault();
+  const planId = block.dataset.planId;
+  const plan = deptTaskPlanMap.get(planId);
+  if (!plan) return;
+  deptMoveState = {
+    planId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startRow: Number(block.dataset.row),
+    startCol: Number(block.dataset.startCol),
+    endCol: Number(block.dataset.endCol)
+  };
+  document.addEventListener('mousemove', handleDeptMoveMouseMove);
+  document.addEventListener('mouseup', handleDeptMoveMouseUp);
+}
+
+function handleDeptMoveMouseMove(event) {
+  if (!deptMoveState) return;
+  const dx = event.clientX - deptMoveState.startX;
+  const dy = event.clientY - deptMoveState.startY;
+  const colOffset = Math.round(dx / CELL_WIDTH);
+  const rowOffset = Math.round(dy / 28);
+  const newStart = Math.max(0, Math.min(SLOT_COUNT - 1, deptMoveState.startCol + colOffset));
+  const duration = deptMoveState.endCol - deptMoveState.startCol;
+  const newEnd = Math.min(SLOT_COUNT, newStart + duration);
+  const newRow = Math.max(0, Math.min(DEPT_TASK_LANES - 1, deptMoveState.startRow + rowOffset));
+  deptMoveState.preview = { startCol: newStart, endCol: newEnd, row: newRow };
+}
+
+function handleDeptMoveMouseUp() {
+  document.removeEventListener('mousemove', handleDeptMoveMouseMove);
+  document.removeEventListener('mouseup', handleDeptMoveMouseUp);
+  if (!deptMoveState) return;
+  const plan = deptTaskPlanMap.get(deptMoveState.planId);
+  if (plan && deptMoveState.preview) {
+    const prev = deptMoveState.preview;
+    plan.fixedStartTime = timeLabelFromSlot(prev.startCol);
+    plan.fixedEndTime = timeLabelFromSlot(prev.endCol);
+    plan.lane = prev.row + 1;
+    renderDeptTaskPlans();
+    setDeptTaskDirty();
+  }
+  deptMoveState = null;
+}
+
+function handleDeptResizeMouseDown(event) {
+  event.stopPropagation();
+  const block = event.currentTarget.closest('.plan-block');
+  if (!block) return;
+  const planId = block.dataset.planId;
+  const plan = deptTaskPlanMap.get(planId);
+  if (!plan) return;
+  deptResizeState = {
+    planId,
+    startX: event.clientX,
+    startCol: Number(block.dataset.startCol),
+    endCol: Number(block.dataset.endCol)
+  };
+  document.addEventListener('mousemove', handleDeptResizeMouseMove);
+  document.addEventListener('mouseup', handleDeptResizeMouseUp);
+}
+
+function handleDeptResizeMouseMove(event) {
+  if (!deptResizeState) return;
+  const dx = event.clientX - deptResizeState.startX;
+  const colOffset = Math.round(dx / CELL_WIDTH);
+  let newEnd = deptResizeState.endCol + colOffset;
+  newEnd = Math.max(deptResizeState.startCol + 1, Math.min(SLOT_COUNT, newEnd));
+  deptResizeState.previewEnd = newEnd;
+}
+
+function handleDeptResizeMouseUp() {
+  document.removeEventListener('mousemove', handleDeptResizeMouseMove);
+  document.removeEventListener('mouseup', handleDeptResizeMouseUp);
+  if (!deptResizeState) return;
+  const plan = deptTaskPlanMap.get(deptResizeState.planId);
+  if (plan && deptResizeState.previewEnd) {
+    plan.fixedEndTime = timeLabelFromSlot(deptResizeState.previewEnd);
+    renderDeptTaskPlans();
+    setDeptTaskDirty();
+  }
+  deptResizeState = null;
+}
+
+function handleDeptBlockContextMenu(event) {
+  event.preventDefault();
+  const block = event.currentTarget;
+  deptCtxPlanId = block.dataset.planId;
+  const menu = $('deptTaskCtxMenu');
+  if (!menu) return;
+  menu.style.left = `${event.pageX}px`;
+  menu.style.top = `${event.pageY}px`;
+  menu.style.display = 'block';
+  document.addEventListener('click', closeDeptCtxMenu, { once: true });
+}
+
+function closeDeptCtxMenu() {
+  const menu = $('deptTaskCtxMenu');
+  if (menu) menu.style.display = 'none';
+}
+
+function openDeptEditModal(plan) {
+  const modalEl = document.getElementById('deptTaskEditModal');
+  if (!modalEl) return;
+  const staffInput = document.getElementById('deptEditStaff');
+  const startInput = document.getElementById('deptEditStart');
+  const endInput = document.getElementById('deptEditEnd');
+  if (staffInput) staffInput.value = String(plan.requiredStaffCount || 1);
+  if (startInput) startInput.value = plan.fixedStartTime || '';
+  if (endInput) endInput.value = plan.fixedEndTime || '';
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+}
+
+function saveDeptTaskModal() {
+  if (!deptCtxPlanId) return;
+  const plan = deptTaskPlanMap.get(deptCtxPlanId);
+  if (!plan) return;
+  plan.requiredStaffCount = Number(document.getElementById('deptEditStaff')?.value || 1);
+  plan.fixedStartTime = document.getElementById('deptEditStart')?.value || plan.fixedStartTime;
+  plan.fixedEndTime = document.getElementById('deptEditEnd')?.value || plan.fixedEndTime;
+  renderDeptTaskPlans();
+  setDeptTaskDirty();
+  const modalEl = document.getElementById('deptTaskEditModal');
+  if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+}
+
+function deleteDeptPlan(planId) {
+  const plan = deptTaskPlanMap.get(planId);
+  if (!plan) return;
+  deptTaskPlans = deptTaskPlans.filter(p => p.idKey !== planId);
+  deptTaskPlanMap.delete(planId);
+  renderDeptTaskPlans();
+  setDeptTaskDirty();
+}
+
+function buildDeptTaskUpserts() {
+  return deptTaskPlans.map(plan => ({
+    taskCode: plan.taskCode,
+    departmentCode: plan.departmentCode || selectedDepartmentCode(),
+    fromTime: plan.fixedStartTime,
+    toTime: plan.fixedEndTime,
+    demand: plan.requiredStaffCount || 1,
+    lane: plan.lane || null
+  }));
+}
+
+async function saveDeptTasks() {
+  if (!deptTaskDirty) return;
+  const storeCode = $('storeCode').value;
+  const date = $('date').value;
+  const deptCode = $('departmentCode').value || '';
+  if (!storeCode || !date || !deptCode) {
+    showDeptTaskMessage('日付・店舗・部門を選択してください');
+    return;
+  }
+  const saveBtn = $('deptTaskSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+  }
+  try {
+    const res = await fetch('/shift/api/calc/work-demands/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeCode,
+        date,
+        departmentCode: deptCode,
+        intervals: buildDeptTaskUpserts()
+      })
+    });
+    if (!res.ok) throw new Error('保存に失敗しました');
+    deptTaskDirty = false;
+    if (saveBtn) saveBtn.textContent = '保存';
+    await loadDepartmentWorkModel(date);
+  } catch (e) {
+    console.error(e);
+    showDeptTaskMessage(e.message || '保存に失敗しました');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    }
+  }
+}
+
 async function loadDepartmentWorkModel(dateString) {
   try {
     const storeCode = $('storeCode').value;
     const departmentCode = $('departmentCode').value || '';
     const departmentWorkCard = $('departmentWorkCard');
-    const departmentWorkGrid = $('departmentWorkGrid');
-    const data = await fetch(`/shift/api/calc/department-task-slot/${dateString}?storeCode=${encodeURIComponent(storeCode)}${departmentCode ? `&departmentCode=${encodeURIComponent(departmentCode)}` : ''}`).then(r=>r.json());
-    departmentWorkGrid.innerHTML = '';
-    if (!data || data.length === 0) {
+    if (!departmentCode) {
+      departmentWorkCard.style.display = 'none';
+      return;
+    }
+    const data = await fetch(`/shift/api/calc/work-demands/${dateString}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`).then(r=>r.json());
+    if (!data) {
       departmentWorkCard.style.display = 'none';
       return;
     }
     departmentWorkCard.style.display = 'block';
-
-    createTimeHeaderRow(departmentWorkGrid, '作業');
-
-    const rows = Array.from(new Set(data.map(d => `${d.departmentCode || 'DEPT'}::${d.taskCode || 'TASK'}`))).sort();
-    const demandByTaskTime = new Map();
-
-    const toTimeKey = (slotTime) => {
-      if (!slotTime) return null;
-      if (typeof slotTime === 'string') return slotTime.substring(0, 5);
-      if (slotTime.hour !== undefined) {
-        const hh = String(slotTime.hour).padStart(2, '0');
-        const mm = String(slotTime.minute || 0).padStart(2, '0');
-        return `${hh}:${mm}`;
-      }
-      return slotTime.toString().substring(0, 5);
-    };
-
-    data.forEach(d => {
-      const t = toTimeKey(d.slotTime);
-      if (!t) return;
-      const key = `${d.departmentCode || 'DEPT'}::${d.taskCode || 'TASK'}_${t}`;
-      demandByTaskTime.set(key, d.requiredUnits || 0);
+    initDepartmentTaskGrid();
+    deptTaskPlans = [];
+    deptTaskPlanMap = new Map();
+    deptTaskDirty = false;
+    const saveBtn = $('deptTaskSaveBtn');
+    if (saveBtn) saveBtn.disabled = true;
+    data.forEach((interval, idx) => {
+      const plan = {
+        idKey: `wd-${idx}-${interval.taskCode || ''}-${interval.from || ''}-${interval.to || ''}`,
+        taskCode: interval.taskCode || '',
+        departmentCode: interval.departmentCode || departmentCode || '',
+        name: '',
+        fixedStartTime: interval.from ? interval.from.substring(0, 5) : '',
+        fixedEndTime: interval.to ? interval.to.substring(0, 5) : '',
+        requiredStaffCount: interval.demand || 1,
+        lane: interval.lane || 0
+      };
+      deptTaskPlans.push(plan);
+      deptTaskPlanMap.set(plan.idKey, plan);
     });
-
-    const timeSlots = buildTimeSlots();
-
-    rows.forEach((rowKey, rowIndex) => {
-      const [deptCode, taskCode] = rowKey.split('::');
-      const taskRowHeader = document.createElement('div');
-      taskRowHeader.className = 'grid-row-header';
-      const taskLabel = taskCode === 'TASK' ? '作業' : getTaskName(taskCode, deptCode);
-      const headerLabel = departmentCode ? taskLabel : `${deptCode} / ${taskLabel}`;
-      taskRowHeader.textContent = headerLabel;
-      taskRowHeader.style.gridRow = `${rowIndex + 2}`;
-      taskRowHeader.style.gridColumn = '1';
-      departmentWorkGrid.appendChild(taskRowHeader);
-
-      timeSlots.forEach((_, idx) => {
-        const emptyCell = document.createElement('div');
-        emptyCell.className = 'grid-cell department-work-cell-empty';
-        emptyCell.style.gridRow = `${rowIndex + 2}`;
-        emptyCell.style.gridColumn = `${idx + 2}`;
-        departmentWorkGrid.appendChild(emptyCell);
-      });
-
-      let startIdx = null;
-      let currentDemand = 0;
-      timeSlots.forEach((timeKey, idx) => {
-        const demand = demandByTaskTime.get(`${rowKey}_${timeKey}`) || 0;
-        if (demand > 0) {
-          if (startIdx === null || demand !== currentDemand) {
-            if (startIdx !== null) {
-              const block = document.createElement('div');
-              block.className = 'dept-plan-block';
-              block.style.background = getTaskColor(taskCode, deptCode);
-              block.style.gridRow = `${rowIndex + 2}`;
-              block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
-              block.textContent = `${taskLabel} x${currentDemand}`;
-              departmentWorkGrid.appendChild(block);
-            }
-            startIdx = idx;
-            currentDemand = demand;
-          }
-        } else if (startIdx !== null) {
-          const block = document.createElement('div');
-          block.className = 'dept-plan-block';
-          block.style.background = getTaskColor(taskCode, deptCode);
-          block.style.gridRow = `${rowIndex + 2}`;
-          block.style.gridColumn = `${startIdx + 2} / ${idx + 2}`;
-          block.textContent = `${taskLabel} x${currentDemand}`;
-          departmentWorkGrid.appendChild(block);
-          startIdx = null;
-          currentDemand = 0;
-        }
-      });
-
-      if (startIdx !== null) {
-        const block = document.createElement('div');
-        block.className = 'dept-plan-block';
-        block.style.background = getTaskColor(taskCode, deptCode);
-        block.style.gridRow = `${rowIndex + 2}`;
-        block.style.gridColumn = `${startIdx + 2} / ${timeSlots.length + 2}`;
-        block.textContent = `${taskLabel} x${currentDemand}`;
-        departmentWorkGrid.appendChild(block);
-      }
-    });
-
-    departmentWorkGrid.style.gridTemplateColumns = `120px repeat(${SLOT_COUNT}, 50px)`;
-    departmentWorkGrid.style.minWidth = `${120 + (SLOT_COUNT * 50)}px`;
-    departmentWorkGrid.classList.add('shift-grid-container');
+    assignDeptTaskLanes(deptTaskPlans);
+    renderDeptTaskPlans();
   } catch (error) {
     console.error('部門別作業量データ取得エラー:', error);
     $('departmentWorkCard').style.display = 'none';
