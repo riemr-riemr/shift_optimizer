@@ -43,6 +43,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             employeeNotDoubleBooked(factory),
             forbidMultipleRegistersSameSlot(factory),
             lunchBreakForLongShifts(factory),
+            forbidAssignmentNearShiftBoundaries(factory),
 
             // Soft constraints (ASSIGNMENT only)
             penalizeUnassignedSlotForAssignment(factory),
@@ -75,13 +76,18 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
                         ShiftAssignmentPlanningEntity::getShiftDate,
                         ConstraintCollectors.toList())
-                .filter((emp, date, assignments) -> {
-                    int spanMinutes = continuousSpanMinutes(assignments);
-                    if (spanMinutes < 360) return false; // 6時間未満は要求しない
-                    return !hasGapOfAtLeast(assignments, 60);
+                .join(ShiftAssignment.class,
+                        Joiners.equal((emp, date, list) -> emp.getEmployeeCode(), ShiftAssignment::getEmployeeCode),
+                        Joiners.equal((emp, date, list) -> date,
+                                shift -> shift.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()))
+                .filter((emp, date, assignments, shift) -> {
+                    if (shift.getStartAt() == null || shift.getEndAt() == null) return false;
+                    long shiftMinutes = (shift.getEndAt().getTime() - shift.getStartAt().getTime()) / (1000 * 60);
+                    if (shiftMinutes < 360) return false; // 6時間未満は要求しない
+                    return !hasGapWithinWindow(assignments, shift.getStartAt(), shift.getEndAt(), 120, 60);
                 })
                 .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Missing 60min break when daily work >= 6h");
+                .asConstraint("Missing 60min break within 2h buffer when daily work >= 6h");
     }
 
     private static int continuousSpanMinutes(List<ShiftAssignmentPlanningEntity> assignments) {
@@ -110,6 +116,33 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             if (prevEnd == null || curStart == null) continue;
             long gapMin = (curStart.getTime() - prevEnd.getTime()) / (1000 * 60);
             if (gapMin >= minutes) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasGapWithinWindow(List<ShiftAssignmentPlanningEntity> assignments,
+                                              Date shiftStart,
+                                              Date shiftEnd,
+                                              int bufferMinutes,
+                                              int gapMinutes) {
+        if (assignments == null || assignments.size() <= 1) return false;
+        if (shiftStart == null || shiftEnd == null) return false;
+        long bufferMs = bufferMinutes * 60_000L;
+        Date minStart = new Date(shiftStart.getTime() + bufferMs);
+        Date maxEnd = new Date(shiftEnd.getTime() - bufferMs);
+        if (!minStart.before(maxEnd)) return false;
+        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
+        long gapMs = gapMinutes * 60_000L;
+        for (int i = 1; i < assignments.size(); i++) {
+            Date prevEnd = assignments.get(i - 1).getEndAt();
+            Date curStart = assignments.get(i).getStartAt();
+            if (prevEnd == null || curStart == null) continue;
+            if (curStart.getTime() - prevEnd.getTime() < gapMs) continue;
+            Date breakStart = prevEnd;
+            Date breakEnd = new Date(prevEnd.getTime() + gapMs);
+            if (!breakStart.before(minStart) && !breakEnd.after(maxEnd)) {
+                return true;
+            }
         }
         return false;
     }
@@ -593,6 +626,37 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 })
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Forbid assignment outside shift time");
+    }
+
+    /**
+     * 出勤開始直後・終了直前の1セルは割り当て禁止（ハード制約）
+     * 1セルの長さは割当スロットの分解能（startAt〜endAt）を使用する。
+     */
+    private Constraint forbidAssignmentNearShiftBoundaries(ConstraintFactory f) {
+        return f.forEach(ShiftAssignmentPlanningEntity.class)
+                .filter(sa -> sa.getAssignedEmployee() != null
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
+                .join(ShiftAssignment.class,
+                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), ShiftAssignment::getEmployeeCode),
+                        Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate,
+                                shift -> shift.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()))
+                .filter((sa, shift) -> {
+                    if (sa.getStartAt() == null || sa.getEndAt() == null
+                            || shift.getStartAt() == null || shift.getEndAt() == null) {
+                        return false;
+                    }
+                    int slotMinutes = sa.getWorkMinutes();
+                    if (slotMinutes <= 0) return false;
+                    long slotMs = slotMinutes * 60_000L;
+                    Date minStart = new Date(shift.getStartAt().getTime() + slotMs);
+                    Date maxEnd = new Date(shift.getEndAt().getTime() - slotMs);
+                    if (!minStart.before(maxEnd)) {
+                        return true;
+                    }
+                    return sa.getStartAt().before(minStart) || sa.getEndAt().after(maxEnd);
+                })
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Forbid assignment within 1-slot buffer at shift edges");
     }
     
 }

@@ -1374,16 +1374,11 @@ public class ShiftScheduleService {
                     return true;
                 }).toList();
             } else if ("ASSIGNMENT".equals(stage)) {
-                // 当該スロット内に出勤が重なる従業員のみ（既存ロスター基準）
-                var start = a.getStartAt().toInstant();
-                var end = a.getEndAt().toInstant();
+                // 当該スロット内に出勤が重なる従業員のみ（開始直後/終了直前1セルは除外）
                 Set<String> onDuty = new HashSet<>();
                 for (var sa : attendance) {
                     if (sa.getStartAt() == null || sa.getEndAt() == null) continue;
-                    var s = sa.getStartAt().toInstant();
-                    var e = sa.getEndAt().toInstant();
-                    boolean overlap = s.isBefore(end) && e.isAfter(start);
-                    if (overlap) {
+                    if (isWithinShiftWithBuffer(a, sa)) {
                         onDuty.add(sa.getEmployeeCode());
                     }
                 }
@@ -1563,6 +1558,24 @@ public class ShiftScheduleService {
         var bs = pref.getBaseStartTime().toLocalTime();
         var be = pref.getBaseEndTime().toLocalTime();
         return (slotStart.equals(bs) || slotStart.isAfter(bs)) && (slotEnd.isBefore(be) || slotEnd.equals(be));
+    }
+
+    private boolean isWithinShiftWithBuffer(ShiftAssignmentPlanningEntity slot, ShiftAssignment shift) {
+        if (slot == null || shift == null) return false;
+        if (slot.getStartAt() == null || slot.getEndAt() == null
+                || shift.getStartAt() == null || shift.getEndAt() == null) {
+            return false;
+        }
+        if (slot.getStartAt().before(shift.getStartAt()) || slot.getEndAt().after(shift.getEndAt())) {
+            return false;
+        }
+        long slotMinutes = Duration.between(slot.getStartAt().toInstant(), slot.getEndAt().toInstant()).toMinutes();
+        if (slotMinutes <= 0) return false;
+        long bufferMs = slotMinutes * 60_000L;
+        long minStartMs = shift.getStartAt().getTime() + bufferMs;
+        long maxEndMs = shift.getEndAt().getTime() - bufferMs;
+        if (minStartMs >= maxEndMs) return false;
+        return slot.getStartAt().getTime() >= minStartMs && slot.getEndAt().getTime() <= maxEndMs;
     }
 
     // 連勤上限（cap）を超えるか（この日を出勤にすると cap+1 連勤になるか）を、既存ロスターの出勤日だけで判定
@@ -2545,7 +2558,7 @@ public class ShiftScheduleService {
 
             if (shiftMinutes < 360) continue;
             List<ShiftAssignmentPlanningEntity> slots = byEmpDate.get(shift.getEmployeeCode() + "@" + date);
-            Optional<BreakWindow> window = findBreakWindow(slots);
+            Optional<BreakWindow> window = findBreakWindow(slots, shift.getStartAt(), shift.getEndAt(), 120);
             if (window.isEmpty()) {
                 log.warn("Break window not found for employee={} date={}", shift.getEmployeeCode(), date);
                 continue;
@@ -2563,8 +2576,16 @@ public class ShiftScheduleService {
         }
     }
 
-    private Optional<BreakWindow> findBreakWindow(List<ShiftAssignmentPlanningEntity> slots) {
+    private Optional<BreakWindow> findBreakWindow(List<ShiftAssignmentPlanningEntity> slots,
+                                                  Date shiftStart,
+                                                  Date shiftEnd,
+                                                  int bufferMinutes) {
         if (slots == null || slots.size() < 2) return Optional.empty();
+        if (shiftStart == null || shiftEnd == null) return Optional.empty();
+        long bufferMs = bufferMinutes * 60_000L;
+        Date minStart = new Date(shiftStart.getTime() + bufferMs);
+        Date maxEnd = new Date(shiftEnd.getTime() - bufferMs);
+        if (!minStart.before(maxEnd)) return Optional.empty();
         List<ShiftAssignmentPlanningEntity> sorted = slots.stream()
                 .filter(a -> a.getStartAt() != null && a.getEndAt() != null)
                 .sorted(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt))
@@ -2577,6 +2598,9 @@ public class ShiftScheduleService {
             if (gapMin >= 60) {
                 Date startAt = prevEnd;
                 Date endAt = new Date(prevEnd.getTime() + 60L * 60L * 1000L);
+                if (startAt.before(minStart) || endAt.after(maxEnd)) {
+                    continue;
+                }
                 return Optional.of(new BreakWindow(startAt, endAt));
             }
         }

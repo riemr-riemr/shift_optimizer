@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -89,16 +90,13 @@ public class AssignmentService {
             LocalDate date = a.getShiftDate();
             List<Employee> cands;
 
-            var start = a.getStartAt().toInstant();
-            var end = a.getEndAt().toInstant();
             Set<String> onDuty = new HashSet<>();
             for (var sa : attendance) {
                 if (sa.getStartAt() == null || sa.getEndAt() == null) continue;
-                var s = sa.getStartAt().toInstant();
-                var e = sa.getEndAt().toInstant();
-                // タスク時間が出勤時間に完全に包含される場合のみ候補とする
-                boolean fullyContained = !start.isBefore(s) && !end.isAfter(e);
-                if (fullyContained) onDuty.add(sa.getEmployeeCode());
+                // 出勤時間内かつ開始直後/終了直前1セルを除外
+                if (isWithinShiftWithBuffer(a, sa)) {
+                    onDuty.add(sa.getEmployeeCode());
+                }
             }
 
             if (!onDuty.isEmpty()) {
@@ -184,6 +182,24 @@ public class AssignmentService {
         var bs = pref.getBaseStartTime().toLocalTime();
         var be = pref.getBaseEndTime().toLocalTime();
         return (slotStart.equals(bs) || slotStart.isAfter(bs)) && (slotEnd.isBefore(be) || slotEnd.equals(be));
+    }
+
+    private boolean isWithinShiftWithBuffer(ShiftAssignmentPlanningEntity slot, ShiftAssignment shift) {
+        if (slot == null || shift == null) return false;
+        if (slot.getStartAt() == null || slot.getEndAt() == null
+                || shift.getStartAt() == null || shift.getEndAt() == null) {
+            return false;
+        }
+        if (slot.getStartAt().before(shift.getStartAt()) || slot.getEndAt().after(shift.getEndAt())) {
+            return false;
+        }
+        long slotMinutes = Duration.between(slot.getStartAt().toInstant(), slot.getEndAt().toInstant()).toMinutes();
+        if (slotMinutes <= 0) return false;
+        long bufferMs = slotMinutes * 60_000L;
+        long minStartMs = shift.getStartAt().getTime() + bufferMs;
+        long maxEndMs = shift.getEndAt().getTime() - bufferMs;
+        if (minStartMs >= maxEndMs) return false;
+        return slot.getStartAt().getTime() >= minStartMs && slot.getEndAt().getTime() <= maxEndMs;
     }
 
     private boolean wouldExceedConsecutiveCap(Set<LocalDate> attendanceDays, LocalDate date, int cap) {
