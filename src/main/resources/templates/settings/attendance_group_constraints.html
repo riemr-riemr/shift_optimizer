@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <title>出勤グループ制約</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-people"></i> 出勤グループ制約</h1>
+    <p class="mb-0">ATTENDANCEフェーズのグループ制約を設定します</p>
+  </div>
+
+  <div th:if="${success}" class="alert alert-success">[[${success}]]</div>
+  <div th:if="${error}" class="alert alert-danger">[[${error}]]</div>
+
+  <div class="card mb-3">
+    <div class="card-header">フィルタ</div>
+    <div class="card-body">
+      <form method="get" th:action="@{/settings/attendance-groups}" class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">店舗</label>
+          <select name="storeCode" class="form-select">
+            <option th:each="s : ${stores}" th:value="${s.storeCode}" th:text="${s.storeCode}"
+                    th:selected="${s.storeCode == storeCode}"></option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">部門</label>
+          <select name="departmentCode" class="form-select">
+            <option value="">(全体)</option>
+            <option th:each="d : ${departments}" th:value="${d.departmentCode}" th:text="${d.departmentName}"
+                    th:selected="${d.departmentCode == departmentCode}"></option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-outline-primary" type="submit"><i class="bi bi-funnel"></i> 表示</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">新規登録</div>
+    <div class="card-body">
+      <form th:action="@{/settings/attendance-groups}" method="post" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">店舗</label>
+          <select name="storeCode" class="form-select" required>
+            <option th:each="s : ${stores}" th:value="${s.storeCode}" th:text="${s.storeCode}"
+                    th:selected="${s.storeCode == storeCode}"></option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">部門</label>
+          <select name="departmentCode" class="form-select">
+            <option value="">(全体)</option>
+            <option th:each="d : ${departments}" th:value="${d.departmentCode}" th:text="${d.departmentName}"
+                    th:selected="${d.departmentCode == departmentCode}"></option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">制約種別</label>
+          <select name="ruleType" class="form-select" id="ruleType">
+            <option value="MIN_ON_DUTY">同日に休まない（最低出勤人数）</option>
+            <option value="NO_SAME_DAY_WORK">同日に出勤しない（最低1人休み）</option>
+            <option value="ALL_OR_NOTHING">同日に出勤（全員 or 全員休み）</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">最低出勤人数</label>
+          <input name="minOnDuty" id="minOnDuty" type="number" class="form-control" min="1" value="1">
+          <div class="form-text">「同日に休まない」のみ使用</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">対象従業員</label>
+          <select name="memberEmployeeCodes" class="form-select" multiple size="8" required>
+            <option th:each="e : ${employees}" th:value="${e.employeeCode}"
+                    th:text="${e.employeeCode + ' ' + e.employeeName}"></option>
+          </select>
+          <div class="form-text">Ctrl/Commandで複数選択</div>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary"><i class="bi bi-save"></i> 登録</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">一覧</div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+        <tr>
+          <th>ID</th>
+          <th>店舗</th>
+          <th>部門</th>
+          <th>種別</th>
+          <th>最低出勤</th>
+          <th>従業員</th>
+          <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="c : ${constraints}">
+          <td th:text="${c.constraintId}"></td>
+          <td th:text="${c.storeCode}"></td>
+          <td th:text="${c.departmentCode} ?: '(全体)'"></td>
+          <td th:text="${c.ruleType}"></td>
+          <td th:text="${c.minOnDuty} ?: '-'"></td>
+          <td>
+            <span th:each="m, iter : ${c.memberLabels}">
+              <span th:text="${m}"></span><span th:if="${!iter.last}">, </span>
+            </span>
+          </td>
+          <td>
+            <form th:action="@{/settings/attendance-groups/delete}" method="post">
+              <input type="hidden" name="constraintId" th:value="${c.constraintId}">
+              <input type="hidden" name="storeCode" th:value="${storeCode}">
+              <input type="hidden" name="departmentCode" th:value="${departmentCode}">
+              <button class="btn btn-sm btn-outline-danger" onclick="return confirm('削除しますか？')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const ruleSelect = document.getElementById('ruleType');
+    const minOnDuty = document.getElementById('minOnDuty');
+    function updateMinOnDutyState() {
+      const isMin = ruleSelect.value === 'MIN_ON_DUTY';
+      minOnDuty.disabled = !isMin;
+    }
+    ruleSelect.addEventListener('change', updateMinOnDutyState);
+    updateMinOnDutyState();
+  </script>
+</main>
+</body>
+</html>

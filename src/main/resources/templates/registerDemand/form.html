@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+  <title>需要予測登録</title>
+  <style>
+    .time-input-table {
+      font-size: 0.95rem;
+    }
+    .time-input-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .time-input-table td {
+      vertical-align: middle;
+    }
+    .time-cell {
+      background: #f8f9fa;
+      font-weight: 500;
+      color: #495057;
+      width: 120px;
+    }
+    .demand-input {
+      width: 100px;
+      text-align: center;
+    }
+    .demand-input:focus {
+      border-color: #86b7fe;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .summary-stats {
+      background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .quick-fill-buttons {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .quick-fill-btn {
+      font-size: 0.8rem;
+      padding: 0.25rem 0.5rem;
+    }
+  </style>
+</head>
+<body>
+<div layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-bar-chart"></i> 需要予測登録</h1>
+    <p class="mb-0">時間帯別の必要レジスター台数を設定できます</p>
+  </div>
+
+  <!-- 検索条件カード -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-calendar-date"></i> 日付選択</h5>
+    </div>
+    <div class="card-body">
+      <form method="get" th:action="@{/register-demand}">
+        <div class="row align-items-end">
+          <div class="col-md-4">
+            <label for="date" class="form-label">
+              <i class="bi bi-calendar3"></i> 対象日
+            </label>
+            <input id="date" 
+                   name="date" 
+                   type="date"
+                   class="form-control"
+                   th:value="${#temporals.format(command?.targetDate, 'yyyy-MM-dd')}"
+                   required/>
+          </div>
+          <div class="col-md-4">
+            <label for="storeCode" class="form-label">
+              <i class="bi bi-shop"></i> 店舗
+            </label>
+            <select id="storeCode" name="storeCode" class="form-select">
+              <option th:each="s : ${stores}"
+                      th:value="${s.storeCode}"
+                      th:selected="${s.storeCode} == ${selectedStoreCode}"
+                      th:text="${s.storeCode} + ' - ' + ${s.storeName}">
+                STORE - NAME
+              </option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-primary" type="submit">
+              <i class="bi bi-search"></i> 検索
+            </button>
+            <button class="btn btn-outline-secondary ms-2" type="button" onclick="document.getElementById('date').valueAsDate = new Date();">
+              <i class="bi bi-calendar-check"></i> 今日
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 需要入力フォーム -->
+  <div th:if="${command != null}">
+    <div class="row">
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+              <i class="bi bi-clock"></i> 
+              時間帯別需要設定
+              <small class="text-muted">
+                (<span th:text="${#temporals.format(command.targetDate, 'yyyy年M月d日')}"></span>)
+              </small>
+            </h5>
+            <div class="quick-fill-buttons">
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setAllColumns(0)"><i class="bi bi-x-circle"></i> 全列0</button>
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setAllColumns(1)"><i class="bi bi-1-square"></i> 全列1</button>
+              <button type="button" class="btn btn-outline-primary quick-fill-btn" onclick="setWorkingHours()"><i class="bi bi-clock-history"></i> 営業時間</button>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <form th:action="@{/register-demand}" th:object="${command}" method="post">
+              <input type="hidden" th:field="*{storeCode}"/>
+              <input type="hidden" th:field="*{targetDate}"/>
+              <input type="hidden" id="demandsCsv" name="demandsCsv" value=""/>
+
+              <div class="table-responsive" style="overflow-x:auto;">
+                <table class="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th class="sticky-start bg-white" style="position: sticky; left: 0; z-index:2;">レジ\\時間</th>
+                      <th th:each="i: ${#numbers.sequence(0,slotCount-1)}"
+                          th:text="${(i * timeResolutionMinutes) / 60} + ':' + ${((i * timeResolutionMinutes) % 60)}"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr th:each="reg,ri: ${registers}">
+                      <th class="sticky-start bg-white" style="position: sticky; left: 0; z-index:1;" th:text="${reg.registerNo}"></th>
+                      <td th:each="i: ${#numbers.sequence(0,slotCount-1)}" class="text-center">
+                        <input type="checkbox" class="form-check-input slotCheck"
+                               th:data-index="${i}"
+                               th:data-register="${reg.registerNo}">
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="p-3 border-top bg-light d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                  <i class="bi bi-lightbulb"></i>
+                  セルをチェックすると該当時間帯に必要レジ数としてカウントされます
+                </div>
+                <button class="btn btn-success" type="submit" onclick="beforeSubmit()">
+                  <i class="bi bi-check-lg"></i> 需要予測を保存
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-bar-chart-line"></i> 需要サマリー</h6>
+          </div>
+          <div class="card-body">
+            <div class="summary-stats mb-3">
+              <div class="row text-center">
+                <div class="col-4">
+                  <div class="h4 mb-1 text-primary" id="totalDemand">0</div>
+                  <div class="small text-muted">総需要</div>
+                </div>
+                <div class="col-4">
+                  <div class="h4 mb-1 text-success" id="peakDemand">0</div>
+                  <div class="small text-muted">ピーク</div>
+                </div>
+                <div class="col-4">
+                  <div class="h4 mb-1 text-info" id="averageDemand">0.0</div>
+                  <div class="small text-muted">平均</div>
+                </div>
+              </div>
+            </div>
+            
+            <div id="demandChart" class="mb-3">
+              <!-- 簡易チャート表示エリア -->
+              <div class="small text-muted mb-2">時間帯別需要グラフ</div>
+              <div id="chartBars" class="d-flex align-items-end justify-content-between" style="height: 100px;">
+                <!-- JavaScriptで動的生成 -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-info-circle"></i> 入力ガイド</h6>
+          </div>
+          <div class="card-body">
+            <ul class="small list-unstyled">
+              <li class="mb-2">
+                <i class="bi bi-check-circle text-success"></i>
+                各時間帯に必要なレジスター台数を設定
+              </li>
+              <li class="mb-2">
+                <i class="bi bi-check-circle text-success"></i>
+                営業時間（8:00-22:00）は通常1台以上設定
+              </li>
+              <li class="mb-2">
+                <i class="bi bi-check-circle text-success"></i>
+                ピーク時間帯は需要を多めに設定
+              </li>
+              <li>
+                <i class="bi bi-check-circle text-success"></i>
+                設定後は必ず保存ボタンをクリック
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div th:if="${command == null}" class="card">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-calendar-plus display-1 text-muted"></i>
+      <h4 class="text-muted mt-3">日付を選択してください</h4>
+      <p class="text-muted">上記の日付選択フィールドから対象日を選んで「検索」ボタンをクリックしてください。</p>
+    </div>
+  </div>
+
+  <script th:inline="javascript">
+    const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
+    const SLOT_COUNT = /*[[${slotCount}]]*/ 96;
+    function computeQuarterDemands() {
+      const checks = document.querySelectorAll('.slotCheck');
+      const cells = [];
+      checks.forEach(chk => {
+        if (!chk.checked) return;
+        const idx = parseInt(chk.getAttribute('data-index'));
+        const reg = chk.getAttribute('data-register');
+        if (Number.isFinite(idx) && reg) {
+          cells.push(`${reg}:${idx}`);
+        }
+      });
+      return cells;
+    }
+
+    function beforeSubmit() {
+      const arr = computeQuarterDemands();
+      document.getElementById('demandsCsv').value = arr.join(',');
+    }
+
+    function setAllColumns(val) {
+      const checks = document.querySelectorAll('.slotCheck');
+      // First, clear all
+      checks.forEach(ch => ch.checked = false);
+      if (val <= 0) return;
+      // Check top N rows for each column
+      for (let i=0; i<SLOT_COUNT; i++) {
+        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
+        for (let r=0; r<Math.min(val, colChecks.length); r++) colChecks[r].checked = true;
+      }
+    }
+
+    function setWorkingHours() {
+      setAllColumns(0);
+      const perHour = 60/RES_MIN;
+      for (let i=8*perHour; i<22*perHour; i++) {
+        const colChecks = document.querySelectorAll('.slotCheck[data-index="'+i+'"]');
+        if (colChecks.length>0) colChecks[0].checked = true; // 1台
+      }
+    }
+
+    // 初期状態の適用: quarterDemandsに基づき上からN台オン
+    document.addEventListener('DOMContentLoaded', function() {
+      const registerCells = /*[[${registerDemandCells}]]*/ [];
+      registerCells.forEach(cell => {
+        const parts = String(cell).split(':');
+        if (parts.length !== 2) return;
+        const reg = parts[0];
+        const idx = parts[1];
+        const chk = document.querySelector('.slotCheck[data-register="'+reg+'"][data-index="'+idx+'"]');
+        if (chk) chk.checked = true;
+      });
+    });
+  </script>
+</div>
+</body>
+</html>

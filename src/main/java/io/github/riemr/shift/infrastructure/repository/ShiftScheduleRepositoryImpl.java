@@ -1,0 +1,352 @@
+package io.github.riemr.shift.infrastructure.repository;
+
+import io.github.riemr.shift.application.repository.ShiftScheduleRepository;
+import io.github.riemr.shift.infrastructure.persistence.entity.*;
+import io.github.riemr.shift.application.dto.DemandIntervalDto;
+import io.github.riemr.shift.application.dto.QuarterSlot;
+import io.github.riemr.shift.application.util.TimeIntervalQuarterUtils;
+import io.github.riemr.shift.infrastructure.mapper.*;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartmentSkill;
+import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeDepartment;
+import io.github.riemr.shift.optimization.entity.ShiftAssignmentPlanningEntity;
+import io.github.riemr.shift.optimization.solution.ShiftSchedule;
+import io.github.riemr.shift.optimization.entity.WorkKind;
+import io.github.riemr.shift.optimization.entity.RegisterDemandSlot;
+import io.github.riemr.shift.optimization.entity.WorkDemandSlot;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalTime;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Repository
+@RequiredArgsConstructor
+@Slf4j
+public class ShiftScheduleRepositoryImpl implements ShiftScheduleRepository {
+
+    // --- MyBatis mappers (既存) --------------------------------------------------
+    private final EmployeeMapper              employeeMapper;
+    private final EmployeeRegisterSkillMapper skillMapper;
+    private final RegisterMapper              registerMapper;
+    private final RegisterDemandIntervalMapper registerDemandIntervalMapper;
+    private final EmployeeRequestMapper       requestMapper;
+    private final ConstraintMasterMapper      constraintMasterMapper;
+    private final RegisterAssignmentMapper    assignmentMapper;
+    private final ShiftAssignmentMapper       shiftAssignmentMapper;
+    private final io.github.riemr.shift.infrastructure.mapper.WorkDemandIntervalMapper workDemandIntervalMapper;
+    private final EmployeeDepartmentMapper    employeeDepartmentMapper;
+    private final EmployeeDepartmentSkillMapper employeeDepartmentSkillMapper;
+    private final io.github.riemr.shift.application.service.AppSettingService appSettingService;
+    private final DepartmentMasterMapper departmentMasterMapper;
+    private final EmployeeWeeklyPreferenceMapper employeeWeeklyPreferenceMapper;
+    private final EmployeeMonthlySettingMapper employeeMonthlySettingMapper;
+    private final EmployeeShiftPatternMapper employeeShiftPatternMapper;
+
+    /*
+     * buildEmptyAssignments() で生成する一時レコード用の負 ID 採番器。
+     * 永続化時に全て INSERT するため、他と重複しなければ何でも良い。
+     */
+    private static final AtomicLong TEMP_ID_SEQ = new AtomicLong(-1L);
+
+    
+
+    // ============================================================================
+    // public API
+    // ============================================================================
+
+    @Override
+    public ShiftSchedule fetchShiftSchedule(LocalDate month, String storeCode, String departmentCode) {
+        // 呼び出し側は「サイクル開始日」を渡してくる前提
+        LocalDate cycleStart = month;
+        LocalDate cycleEnd   = cycleStart.plusMonths(1); // 半開区間 [start, end)
+
+        // 1. 必要なマスタ／トランザクションデータを取得
+        List<Employee> employees = (storeCode == null)
+                ? employeeMapper.selectAll()
+                : employeeMapper.selectByStoreCode(storeCode);
+
+        List<Register> registers = registerMapper.selectAll();
+
+        // Register demand: read interval rows for the cycle range [start, end), then split to quarters
+        int minutesPerSlot = appSettingService.getTimeResolutionMinutes();
+
+        List<DemandIntervalDto> intervalRows = registerDemandIntervalMapper.selectByDateRange(storeCode, cycleStart, cycleEnd);
+        if (intervalRows.isEmpty()) {
+            log.warn("No register demand intervals found for store={} range={}..{} (register assignments will be empty)",
+                    storeCode, cycleStart, cycleEnd);
+        }
+        validateRegisterDemandIntervals(intervalRows, minutesPerSlot, storeCode, cycleStart, cycleEnd);
+        List<QuarterSlot> quarterSlots = TimeIntervalQuarterUtils.splitAll(intervalRows, minutesPerSlot);
+        boolean hasPositiveRegisterDemand = quarterSlots.stream()
+                .anyMatch(q -> q.getDemand() != null && q.getDemand() > 0);
+        if (!hasPositiveRegisterDemand) {
+            log.warn("Register demand intervals exist but all demands are zero for store={} range={}..{}",
+                    storeCode, cycleStart, cycleEnd);
+        }
+        List<RegisterDemandSlot> demands = new ArrayList<>(quarterSlots.size());
+        for (QuarterSlot qs : quarterSlots) {
+            RegisterDemandSlot slot = new RegisterDemandSlot();
+            slot.setStoreCode(qs.getStoreCode());
+            slot.setDemandDate(qs.getDate());
+            slot.setSlotTime(qs.getStart());
+            slot.setRequiredUnits(qs.getDemand());
+            slot.setRegisterNo(qs.getRegisterNo());
+            demands.add(slot);
+        }
+
+        // 希望は日付範囲APIを利用
+        List<EmployeeRequest> requests = requestMapper.selectByDateRange(cycleStart, cycleEnd);
+
+        List<ConstraintMaster> settings = constraintMasterMapper.selectAll();
+        List<EmployeeDepartmentSkill> deptSkills = departmentCode != null
+                ? employeeDepartmentSkillMapper.selectByDepartment(departmentCode)
+                : java.util.Collections.emptyList();
+
+        // 従業員曜日別勤務設定を取得
+        List<EmployeeWeeklyPreference> weeklyPreferences = new ArrayList<>();
+        for (Employee emp : employees) {
+            weeklyPreferences.addAll(employeeWeeklyPreferenceMapper.selectByEmployee(emp.getEmployeeCode()));
+        }
+
+        // 従業員レジスキルを取得
+        List<EmployeeRegisterSkill> employeeRegisterSkills = skillMapper.selectByExample(null);
+
+        // 従業員の月次勤務時間設定（対象月）
+        java.util.Date monthStartDate = java.sql.Date.valueOf(cycleStart.withDayOfMonth(1));
+        List<EmployeeMonthlySetting> monthlySettings = employeeMonthlySettingMapper.selectByMonth(monthStartDate);
+        List<EmployeeShiftPattern> shiftPatterns = employeeShiftPatternMapper.selectAllActive();
+
+        // 出勤時間データを取得（制約用）
+        List<ShiftAssignment> shiftAssignments = 
+                shiftAssignmentMapper.selectByMonth(cycleStart, cycleEnd)
+                .stream()
+                .filter(s -> storeCode == null || storeCode.equals(s.getStoreCode()))
+                .toList();
+
+        // ウォームスタート用の前回結果は「前サイクル」範囲で取得
+        List<RegisterAssignment> previous = assignmentMapper.selectByMonth(
+                cycleStart.minusMonths(1),
+                cycleStart);
+
+        // 2. 未割当 Assignment 生成
+        List<ShiftAssignmentPlanningEntity> emptyAssignments = new ArrayList<>();
+        // 部門のレジフラグに応じてレジ需要を含めるか決定
+        boolean isRegisterDepartment = false;
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            // Treat department "520" as the Register department (legacy convention)
+            if ("520".equalsIgnoreCase(departmentCode)) {
+                isRegisterDepartment = true;
+            } else {
+                var dept = departmentMasterMapper.selectByCode(departmentCode);
+                isRegisterDepartment = (dept != null && Boolean.TRUE.equals(dept.getIsRegister()));
+            }
+        }
+
+        // Filter employees by department only when it's NOT a register department
+        if (departmentCode != null && !departmentCode.isBlank() && !isRegisterDepartment) {
+            var edList = employeeDepartmentMapper.selectByDepartment(departmentCode);
+            Set<String> allowed = edList.stream().map(EmployeeDepartment::getEmployeeCode).collect(Collectors.toSet());
+            employees = employees.stream().filter(e -> allowed.contains(e.getEmployeeCode())).toList();
+        }
+
+        // 後方互換: 部門未指定の場合はレジ需要を含める（従来の挙動）
+        if (departmentCode == null || departmentCode.isBlank()) {
+            isRegisterDepartment = true;
+        }
+
+        // レジ部門ならレジ需要も含める
+        if (isRegisterDepartment) {
+            emptyAssignments.addAll(buildEmptyAssignments(demands, registers, departmentCode, minutesPerSlot));
+        }
+
+        // 指定部門の非レジ作業需要を含める（レジ部門か否かに関わらず）
+        List<WorkDemandSlot> workDemands = List.of();
+        if (departmentCode != null && !departmentCode.isBlank()) {
+            var workIntervals = workDemandIntervalMapper.selectByMonth(storeCode, departmentCode, cycleStart, cycleEnd);
+            // Expand intervals to quarter rows
+            Map<LocalDate, List<DemandIntervalDto>> byDate = workIntervals.stream().collect(Collectors.groupingBy(DemandIntervalDto::getTargetDate));
+            List<WorkDemandSlot> tmp = new ArrayList<>();
+            for (var entry : byDate.entrySet()) {
+                for (DemandIntervalDto di : entry.getValue()) {
+                    LocalTime t = di.getFrom();
+                    while (t.isBefore(di.getTo())) {
+                        WorkDemandSlot slot = new WorkDemandSlot();
+                        slot.setStoreCode(di.getStoreCode());
+                        slot.setDepartmentCode(di.getDepartmentCode());
+                        slot.setDemandDate(di.getTargetDate());
+                        slot.setSlotTime(t);
+                        slot.setTaskCode(di.getTaskCode());
+                        slot.setRequiredUnits(di.getDemand());
+                        tmp.add(slot);
+                        t = t.plusMinutes(minutesPerSlot);
+                    }
+                }
+            }
+            workDemands = tmp;
+            emptyAssignments.addAll(buildEmptyWorkAssignments(workDemands, departmentCode, minutesPerSlot));
+        }
+
+        // 3. ドメインモデル組み立て
+        ShiftSchedule schedule = new ShiftSchedule();
+        schedule.setEmployeeList(employees);
+        schedule.setRegisterList(registers);
+        schedule.setDemandList(demands);
+        schedule.setEmployeeRequestList(requests);
+        schedule.setConstraintMasterList(settings);
+        schedule.setPreviousAssignmentList(previous);
+        schedule.setAssignmentList(emptyAssignments);
+        schedule.setMonth(cycleStart);
+        schedule.setStoreCode(storeCode);
+        schedule.setDepartmentCode(departmentCode);
+        schedule.setWorkDemandList(workDemands);
+        schedule.setEmployeeDepartmentSkillList(deptSkills);
+        schedule.setEmployeeWeeklyPreferenceList(weeklyPreferences);
+        schedule.setEmployeeRegisterSkillList(employeeRegisterSkills);
+        schedule.setEmployeeMonthlySettingList(monthlySettings);
+        schedule.setEmployeeShiftPatternList(shiftPatterns);
+        schedule.setShiftAssignmentList(shiftAssignments);
+        return schedule;
+    }
+
+    private void validateRegisterDemandIntervals(List<DemandIntervalDto> intervals,
+                                                 int minutesPerSlot,
+                                                 String storeCode,
+                                                 LocalDate cycleStart,
+                                                 LocalDate cycleEnd) {
+        for (DemandIntervalDto dto : intervals) {
+            if (dto.getFrom() == null || dto.getTo() == null) {
+                throw new IllegalArgumentException("register_demand_interval has null from/to for store=" + storeCode
+                        + " range=" + cycleStart + ".." + cycleEnd);
+            }
+            if (dto.getRegisterNo() == null) {
+                throw new IllegalArgumentException("register_demand_interval has null register_no for store=" + storeCode
+                        + " range=" + cycleStart + ".." + cycleEnd);
+            }
+            if (!TimeIntervalQuarterUtils.isAligned(dto.getFrom(), minutesPerSlot)
+                    || !TimeIntervalQuarterUtils.isAligned(dto.getTo(), minutesPerSlot)) {
+                throw new IllegalArgumentException("register_demand_interval time not aligned to "
+                        + minutesPerSlot + " minutes: store=" + storeCode
+                        + ", date=" + dto.getTargetDate()
+                        + ", from=" + dto.getFrom()
+                        + ", to=" + dto.getTo());
+            }
+            if (!dto.getTo().isAfter(dto.getFrom())) {
+                throw new IllegalArgumentException("register_demand_interval has invalid time range: store=" + storeCode
+                        + ", date=" + dto.getTargetDate()
+                        + ", from=" + dto.getFrom()
+                        + ", to=" + dto.getTo());
+            }
+        }
+    }
+
+    // ============================================================================
+    // 初期アサイン生成
+    // ============================================================================
+
+    /**
+     * {@link RegisterDemandSlot#getRequiredUnits()} で示された台数文だけ、
+     * 15 分スロットごとに {@link ShiftAssignmentPlanningEntity} を生成します。
+     * <p>
+     * <ul>
+     *     <li>Employee は <code>null</code> で初期化し、OptaPlanner が割り当て</li>
+     *     <li>registerNo は <b>レジ番号の若い順</b> で、<b>SEMI → NORMAL</b> の優先で設定</li>
+     * </ul>
+     */
+    private List<ShiftAssignmentPlanningEntity> buildEmptyAssignments(List<RegisterDemandSlot> demandList,
+                                                                     List<Register> registerList,
+                                                                     String departmentCode,
+                                                                     int minutesPerSlot) {
+        // 店舗毎のレジを [SEMI 優先] & [register_no 昇順] ソートで保持
+        Map<String, List<Register>> registerMap = registerList.stream()
+                .collect(Collectors.groupingBy(Register::getStoreCode, Collectors.collectingAndThen(Collectors.toList(), list -> {
+                    // 優先順: is_auto_open_target(=true) を最優先 → open_priority 昇順 → register_no 昇順
+                    Comparator<Register> byAutoOpen = Comparator.comparing(
+                            Register::getIsAutoOpenTarget,
+                            Comparator.nullsLast(Comparator.reverseOrder()) // true を先頭、null/false を後方
+                    );
+                    Comparator<Register> openThenNo = byAutoOpen
+                            .thenComparing(Register::getOpenPriority, Comparator.nullsLast(Comparator.naturalOrder()))
+                            .thenComparing(Register::getRegisterNo);
+                    return list.stream().sorted(openThenNo).toList();
+                })));
+
+        List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
+
+        for (RegisterDemandSlot d : demandList) {
+            LocalDate demandDate = d.getDemandDate();
+            LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
+            LocalDateTime end   = start.plusMinutes(minutesPerSlot);
+
+            List<Register> candidates = registerMap.getOrDefault(d.getStoreCode(), List.of());
+            if (candidates.isEmpty()) {
+                log.warn("No registers defined for store {} – assignments will have null registerNo", d.getStoreCode());
+            }
+
+            int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            for (int i = 0; i < required; i++) {
+                Integer registerNo = d.getRegisterNo();
+                if (registerNo == null) {
+                    // レジを必要台数分だけ順番に取得（足りない場合は null）
+                    registerNo = i < candidates.size() ? candidates.get(i).getRegisterNo() : null;
+                }
+
+                // ---- RegisterAssignment 組み立て ----
+                RegisterAssignment sa = new RegisterAssignment();
+                sa.setAssignmentId(TEMP_ID_SEQ.getAndDecrement());
+                sa.setStoreCode(d.getStoreCode());
+                sa.setEmployeeCode(null);           // 未割当
+                sa.setRegisterNo(registerNo);       // 今回の修正ポイント
+                sa.setStartAt(Date.from(start.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setEndAt(Date.from(end.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setCreatedBy("system");
+
+                ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
+                ent.setShiftId(sa.getAssignmentId());
+                ent.setDepartmentCode(departmentCode);
+                ent.setWorkKind(WorkKind.REGISTER_OP);
+                result.add(ent);
+            }
+        }
+        
+        return result;
+    }
+
+    private List<ShiftAssignmentPlanningEntity> buildEmptyWorkAssignments(
+            List<WorkDemandSlot> demandList,
+            String departmentCode,
+            int minutesPerSlot) {
+        List<ShiftAssignmentPlanningEntity> result = new ArrayList<>();
+        for (var d : demandList) {
+            LocalDate demandDate = d.getDemandDate();
+            LocalDateTime start = LocalDateTime.of(demandDate, d.getSlotTime());
+            LocalDateTime end = start.plusMinutes(minutesPerSlot);
+            int required = d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits());
+            for (int i = 0; i < required; i++) {
+                // Reuse RegisterAssignment as time container with null registerNo
+                RegisterAssignment sa = new RegisterAssignment();
+                sa.setAssignmentId(TEMP_ID_SEQ.getAndDecrement());
+                sa.setStoreCode(d.getStoreCode());
+                sa.setEmployeeCode(null);
+                sa.setRegisterNo(null);
+                sa.setStartAt(Date.from(start.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setEndAt(Date.from(end.atZone(ZoneId.systemDefault()).toInstant()));
+                sa.setCreatedBy("system");
+
+                ShiftAssignmentPlanningEntity ent = new ShiftAssignmentPlanningEntity(sa);
+                ent.setShiftId(sa.getAssignmentId());
+                ent.setDepartmentCode(departmentCode);
+                ent.setWorkKind(WorkKind.DEPARTMENT_TASK);
+                ent.setTaskCode(d.getTaskCode());
+                result.add(ent);
+            }
+        }
+        return result;
+    }
+}

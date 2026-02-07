@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<div th:fragment="taskSelection(selectedTaskCodeId, selectedDeptId, selectedDisplayId, treeContainerId, title)">
+  <div class="card">
+    <div class="card-header">
+      <h6 class="mb-0" th:text="${title} != null ? ${title} : '作業選択'">作業選択</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="p-2 border-bottom bg-white">
+        <input type="text" class="form-control form-control-sm" placeholder="作業コード/名称で検索"
+               th:attr="id=${(treeContainerId != null ? treeContainerId : 'taskTreeList') + '-search'}" />
+      </div>
+      <div id="selectedTaskInfo" class="p-2 bg-light border-bottom">
+        <small class="text-muted">選択済み作業:</small>
+        <div class="fw-semibold" th:attr="id=${selectedDisplayId != null ? selectedDisplayId : 'selectedTaskDisplay'}">未選択</div>
+      </div>
+      <div class="task-tree-container">
+        <div class="list-group list-group-flush task-tree"
+             th:attr="id=${treeContainerId != null ? treeContainerId : 'taskTreeList'}"></div>
+      </div>
+      <input type="hidden" th:attr="id=${selectedTaskCodeId != null ? selectedTaskCodeId : 'selectedTaskCode'}" />
+      <input type="hidden" th:attr="id=${selectedDeptId != null ? selectedDeptId : 'selectedDepartmentCode'}" />
+    </div>
+  </div>
+</div>

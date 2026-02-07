@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.StoreDepartmentMapper">
+  <resultMap id="StoreDepartmentMap" type="io.github.riemr.shift.infrastructure.persistence.entity.StoreDepartment">
+    <id     column="store_code"      property="storeCode"/>
+    <id     column="department_code" property="departmentCode"/>
+    <result column="display_order"   property="displayOrder"/>
+    <result column="is_active"       property="isActive"/>
+  </resultMap>
+
+  <resultMap id="DepartmentMasterMap" type="io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster">
+    <id     column="department_code" property="departmentCode"/>
+    <result column="department_name" property="departmentName"/>
+    <result column="dept_display_order"  property="displayOrder"/>
+    <result column="dept_is_active"      property="isActive"/>
+    <result column="dept_is_register"    property="isRegister"/>
+  </resultMap>
+
+  <select id="selectByStore" parameterType="string" resultMap="StoreDepartmentMap">
+    SELECT store_code, department_code, display_order, is_active
+    FROM store_department
+    WHERE store_code = #{storeCode}
+    ORDER BY COALESCE(display_order, 9999), department_code
+  </select>
+
+  <select id="findDepartmentsByStore" parameterType="string" resultMap="DepartmentMasterMap">
+    SELECT dm.department_code,
+           dm.department_name,
+           dm.display_order AS dept_display_order,
+           dm.is_active    AS dept_is_active,
+           dm.is_register  AS dept_is_register
+    FROM store_department sd
+    JOIN department_master dm ON dm.department_code = sd.department_code
+    WHERE sd.store_code = #{storeCode} AND sd.is_active = TRUE AND dm.is_active = TRUE
+    ORDER BY COALESCE(sd.display_order, dm.display_order), dm.department_code
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.StoreDepartment">
+    INSERT INTO store_department (store_code, department_code, display_order, is_active)
+    VALUES (#{storeCode}, #{departmentCode}, #{displayOrder}, COALESCE(#{isActive}, TRUE))
+    ON CONFLICT (store_code, department_code) DO NOTHING
+  </insert>
+</mapper>

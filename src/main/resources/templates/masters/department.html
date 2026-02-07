@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>部門マスタ</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div th:replace="~{fragments/master-layout :: master-list-modal('部門マスタ', 'bi bi-diagram-3', ~{::add-modal}, ~{::data-table}, ~{::edit-modal})}">
+    
+    <!-- Data Table -->
+    <div th:fragment="data-table" class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>コード</th>
+            <th>名称</th>
+            <th>表示順</th>
+            <th>有効</th>
+            <th>レジ部門</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="d : ${list}">
+            <td th:text="${d.departmentCode}"></td>
+            <td th:text="${d.departmentName}"></td>
+            <td th:text="${d.displayOrder}"></td>
+            <td>
+              <span class="badge" th:classappend="${d.isActive} ? 'bg-success' : 'bg-secondary'"
+                    th:text="${d.isActive} ? '有効' : '無効'"></span>
+            </td>
+            <td>
+              <span class="badge" th:classappend="${d.isRegister} ? 'bg-info' : 'bg-light'"
+                    th:text="${d.isRegister} ? 'レジ部門' : '一般部門'"></span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 edit-btn"
+                      th:data-department-code="${d.departmentCode}"
+                      th:data-department-name="${d.departmentName}"
+                      th:data-display-order="${d.displayOrder}"
+                      th:data-is-active="${d.isActive}"
+                      th:data-is-register="${d.isRegister}">編集</button>
+              <form th:action="@{'/masters/department/' + ${d.departmentCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('この部門を削除しますか？')">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn btn-sm btn-outline-danger">削除</button>
+              </form>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Add Modal -->
+    <div th:fragment="add-modal" class="modal fade" id="addModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">部門追加</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form th:action="@{/masters/department}" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">部門コード</label>
+                <input type="text" class="form-control" name="departmentCode" required maxlength="32">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">部門名</label>
+                <input type="text" class="form-control" name="departmentName" required maxlength="100">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">表示順</label>
+                <input type="number" class="form-control" name="displayOrder" min="1" max="999">
+              </div>
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="isActive" id="addIsActive" checked>
+                  <label class="form-check-label" for="addIsActive">有効</label>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="isRegister" id="addIsRegister">
+                  <label class="form-check-label" for="addIsRegister">レジ部門</label>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div th:fragment="edit-modal" class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">部門編集</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="editForm" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">部門コード</label>
+                <input type="text" class="form-control" id="editDepartmentCode" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">部門名</label>
+                <input type="text" class="form-control" name="departmentName" id="editDepartmentName" required maxlength="100">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">表示順</label>
+                <input type="number" class="form-control" name="displayOrder" id="editDisplayOrder" min="1" max="999">
+              </div>
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="isActive" id="editIsActive">
+                  <label class="form-check-label" for="editIsActive">有効</label>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="isRegister" id="editIsRegister">
+                  <label class="form-check-label" for="editIsRegister">レジ部門</label>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const departmentCode = this.getAttribute('data-department-code');
+          const departmentName = this.getAttribute('data-department-name');
+          const displayOrder = this.getAttribute('data-display-order');
+          const isActive = this.getAttribute('data-is-active') === 'true';
+          const isRegister = this.getAttribute('data-is-register') === 'true';
+          
+          document.getElementById('editDepartmentCode').value = departmentCode;
+          document.getElementById('editDepartmentName').value = departmentName;
+          document.getElementById('editDisplayOrder').value = displayOrder;
+          document.getElementById('editIsActive').checked = isActive;
+          document.getElementById('editIsRegister').checked = isRegister;
+          
+          document.getElementById('editForm').action = '/masters/department/' + departmentCode + '/update';
+          
+          new bootstrap.Modal(document.getElementById('editModal')).show();
+        });
+      });
+    });
+  </script>
+</main>
+</body>
+</html>

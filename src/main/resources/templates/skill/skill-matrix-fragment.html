@@ -1,0 +1,225 @@
+<!-- Reusable Skill Matrix Fragment (no html/body wrapper) -->
+<div th:fragment="matrix(id, title, headers, rows, levelMap, mode)" th:with="isTask=${mode}=='task'">
+    <div class="card mb-3">
+      <div class="card-header">
+        <h5 class="mb-2"><i class="bi bi-info-circle"></i> <span th:text="${title}"></span></h5>
+        <div class="small text-muted">
+          - (0): 自動割当不可 / × (1): 割当不可 / △ (2): 低 / ○ (3): 中 / ◎ (4): 高
+        </div>
+        <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
+          <div class="input-group input-group-sm" style="max-width: 320px;">
+            <span class="input-group-text">店舗</span>
+            <select th:attr="id=${id + '_store'}" class="form-select">
+              <option value="">すべて</option>
+              <option th:each="s : ${stores}" th:value="${s.storeCode}" th:text="${s.storeCode + ' - ' + s.storeName}"></option>
+            </select>
+          </div>
+          <div class="input-group input-group-sm" style="max-width: 360px;" th:if="${mode}=='task'">
+            <span class="input-group-text">部門</span>
+            <select th:attr="id=${id + '_dept'}" class="form-select">
+              <option value="">すべて</option>
+              <option th:each="d : ${departments}" th:value="${d.departmentCode}" th:text="${d.departmentCode + ' - ' + d.departmentName}"></option>
+            </select>
+          </div>
+          <div class="ms-auto small text-muted">
+            フィルタで表示を絞り込みできます
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-table"></i> <span th:text="${title}"></span></h5>
+      </div>
+      <div class="card-body p-0">
+        <form th:action="${mode}=='register' ? @{/skills} : @{/skills/tasks}" method="post">
+          <div class="table-container" style="max-height: 70vh; overflow: auto; border: 1px solid #dee2e6; border-radius: 8px;">
+            <table class="table skill-matrix-table mb-0" th:attr="id=${id}">
+              <thead>
+                <tr>
+                  <th class="employee-header" scope="col" style="min-width: 180px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; position:sticky; left:0; z-index:11;">
+                    <i class="bi bi-person"></i> 従業員 ＼ <span th:text="${mode}=='task' ? '作業' : 'レジスター'"></span>
+                  </th>
+                  <th th:each="h,iter : ${headers}" class="task-header" scope="col"
+                      th:attr="data-task=${isTask ? h.taskCode : h.registerNo}, data-dept=${isTask ? h.departmentCode : '520'}, data-store=${isTask ? '' : h.storeCode}, data-col=${iter.index}"
+                      style="min-width: 140px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color:#fff; position: sticky; top:0; z-index:10; text-align:center;">
+                    <span th:text="${isTask ? h.taskCode : h.registerNo}"></span>
+                    <br>
+                    <small th:text="${isTask ? (h.name != null ? h.name : h.taskCode) : (h.registerName != null ? h.registerName : 'No.' + h.registerNo)}" style="display:block; color:#e9f5ff;"></small>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr th:each="e : ${rows}" th:attr="data-emp=${e.employeeCode},data-store=${e.storeCode}">
+                  <th class="employee-header text-start" scope="row">
+                    <i class="bi bi-person-badge"></i>
+                    <span th:text="${e.employeeCode}"></span>
+                    <br><small class="fw-normal text-light" th:text="${e.employeeName}"></small>
+                  </th>
+                  <td th:each="h : ${headers}" class="skill-cell"
+                      th:attr="data-emp=${e.employeeCode}, data-task=${isTask ? h.taskCode : h.registerNo}">
+                    <select class="skill-select form-select form-select-sm"
+                            th:name="${isTask ? 'skill_' + e.employeeCode + '_' + h.taskCode : null}">
+                      <option th:each="lvl : ${#numbers.sequence(0,4)}"
+                              th:value="${lvl}"
+                              th:text="${lvl==0?'-':(lvl==1?'×':(lvl==2?'△':(lvl==3?'○':'◎')))}"
+                              th:selected="${levelMap[e.employeeCode] != null and levelMap[e.employeeCode][isTask ? h.taskCode : h.registerNo] != null and levelMap[e.employeeCode][isTask ? h.taskCode : h.registerNo] == lvl}"></option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- register mode uses hidden field aggregation -->
+          <div th:if="${mode}=='register'" id="hiddenArea" style="display:none;"></div>
+
+          <!-- 範囲選択パネル -->
+          <div class="range-selector-panel" th:attr="id=${id + '_panel'}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0"><i class="bi bi-grid-3x3-gap"></i> 範囲選択 - 一括設定</h6>
+              <button type="button" class="btn-close" th:attr="id=${id + '_close'}"></button>
+            </div>
+            <p class="text-muted small mb-2">選択した <span th:attr="id=${id + '_count'}">0</span> 個のセルに同じスキルレベルを設定します</p>
+            <div class="d-grid gap-2">
+              <button type="button" class="btn btn-outline-secondary bulk-action-btn" data-value="0">- (0)</button>
+              <button type="button" class="btn btn-outline-danger bulk-action-btn" data-value="1">× (1)</button>
+              <button type="button" class="btn btn-outline-warning bulk-action-btn" data-value="2">△ (2)</button>
+              <button type="button" class="btn btn-outline-success bulk-action-btn" data-value="3">○ (3)</button>
+              <button type="button" class="btn btn-outline-primary bulk-action-btn" data-value="4">◎ (4)</button>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+              <button type="button" class="btn btn-secondary btn-sm flex-fill" th:attr="id=${id + '_clear'}">選択解除</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" th:attr="id=${id + '_cancel'}">キャンセル</button>
+            </div>
+          </div>
+
+          <div class="p-3 border-top bg-light d-flex justify-content-end">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-floppy"></i> 保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Inline shared JS (no external file) -->
+    <script th:inline="javascript">
+      (function(){
+        const tableId = '[[${id}]]';
+        const table = document.getElementById(tableId);
+        if (!table) { return; }
+        const panel = document.getElementById(tableId + '_panel');
+        const countEl = document.getElementById(tableId + '_count');
+        const closeBtn = document.getElementById(tableId + '_close');
+        const clearBtn = document.getElementById(tableId + '_clear');
+        const cancelBtn = document.getElementById(tableId + '_cancel');
+        const storeSel = document.getElementById(tableId + '_store');
+        const deptSel = document.getElementById(tableId + '_dept');
+        let isSelecting = false, startCell = null, selected = new Set();
+
+        function getPos(cell){
+          const row = cell.closest('tr');
+          const tbody = cell.closest('tbody');
+          if(!row||!tbody) return null;
+          const r = Array.from(tbody.querySelectorAll('tr')).indexOf(row);
+          const c = Array.from(row.querySelectorAll('td.skill-cell')).indexOf(cell);
+          return {r,c};
+        }
+        function clearSelecting(){ table.querySelectorAll('td.skill-cell.selecting').forEach(c=>c.classList.remove('selecting')); }
+        function finalizeSelecting(){ table.querySelectorAll('td.skill-cell.selecting').forEach(c=>{c.classList.remove('selecting'); c.classList.add('selected');}); }
+        function showPanel(){ if(panel){ countEl.textContent = selected.size; panel.classList.add('show'); } }
+        function hidePanel(){ if(panel){ panel.classList.remove('show'); } }
+        function applyBulk(v){ selected.forEach(c=>{ const sel=c.querySelector('select'); if(sel){ sel.value=String(v);} }); hidePanel(); }
+
+        table.addEventListener('mousedown', (e)=>{
+          const cell = e.target.closest('td.skill-cell'); if(!cell) return;
+          isSelecting = true; startCell = cell; selected.clear();
+          table.querySelectorAll('td.skill-cell.selected, td.skill-cell.selecting').forEach(c=>c.classList.remove('selected','selecting'));
+          cell.classList.add('selecting'); selected.add(cell); e.preventDefault();
+        });
+        table.addEventListener('mouseover', (e)=>{
+          if(!isSelecting) return; const cell = e.target.closest('td.skill-cell'); if(!cell) return;
+          const s = getPos(startCell), cur = getPos(cell); if(!s||!cur) return; clearSelecting(); selected.clear();
+          const minR=Math.min(s.r,cur.r), maxR=Math.max(s.r,cur.r), minC=Math.min(s.c,cur.c), maxC=Math.max(s.c,cur.c);
+          const rows = table.querySelectorAll('tbody tr');
+          for(let r=minR;r<=maxR;r++){ const row=rows[r]; if(!row) continue; const cells=row.querySelectorAll('td.skill-cell');
+            for(let c=minC;c<=maxC;c++){ const cell2=cells[c]; if(!cell2) continue; cell2.classList.add('selecting'); selected.add(cell2); }
+          }
+        });
+        document.addEventListener('mouseup', ()=>{ if(!isSelecting) return; isSelecting=false; finalizeSelecting(); showPanel(); });
+        if(panel){
+          panel.querySelectorAll('.bulk-action-btn').forEach(btn=>btn.addEventListener('click',()=>applyBulk(btn.getAttribute('data-value'))));
+          if(clearBtn) clearBtn.addEventListener('click', ()=>{ table.querySelectorAll('td.skill-cell.selected').forEach(c=>c.classList.remove('selected')); selected.clear(); hidePanel(); });
+          if(cancelBtn) cancelBtn.addEventListener('click', hidePanel);
+          if(closeBtn) closeBtn.addEventListener('click', hidePanel);
+        }
+
+        // filters
+        function initFilters(){
+          const stores = new Set();
+          table.querySelectorAll('tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-store'); if(s) stores.add(s); });
+          Array.from(stores).sort().forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; storeSel.appendChild(opt); });
+          if(deptSel){
+            const depts = new Set();
+            table.querySelectorAll('thead th.task-header').forEach(th=>{ const d=th.getAttribute('data-dept'); if(d && d !== '520') depts.add(d); });
+            Array.from(depts).sort().forEach(d=>{ const opt=document.createElement('option'); opt.value=d; opt.textContent=d; deptSel.appendChild(opt); });
+          }
+        }
+        function applyFilters(){
+          const store = storeSel ? (storeSel.value || '') : '';
+          const dept = deptSel ? (deptSel.value || '') : '';
+          // rows
+          table.querySelectorAll('tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-store')||''; tr.style.display = (!store || store===s) ? '' : 'none'; });
+          // columns (tasks)
+          const headers = Array.from(table.querySelectorAll('thead th.task-header'));
+          headers.forEach((th, idx)=>{
+            const d = th.getAttribute('data-dept') || '';
+            const show = (!dept || dept===d);
+            th.style.display = show ? '' : 'none';
+            table.querySelectorAll('#'+tableId+' tbody tr').forEach(tr=>{
+              const tds = tr.querySelectorAll('td');
+              const td = tds[idx];
+              if (td) td.style.display = show ? '' : 'none';
+            });
+          });
+        }
+        initFilters();
+        if(storeSel) storeSel.addEventListener('change', applyFilters);
+        if(deptSel) deptSel.addEventListener('change', applyFilters);
+        applyFilters();
+
+        // register mode hidden input aggregator + change handler (no inline event attrs)
+        (function(){
+          const modeVal = '[[${mode}]]';
+          if (modeVal !== 'register') return;
+          const hiddenArea = document.getElementById('hiddenArea');
+          function updateCell(emp, key, val){
+            if (!hiddenArea) return;
+            const id = emp + '|' + key;
+            let input = document.getElementById(id);
+            if (!input) { input = document.createElement('input'); input.type='hidden'; input.name='cellList'; input.id=id; hiddenArea.appendChild(input); }
+            input.value = emp + '|' + key + '|' + val;
+          }
+          table.addEventListener('change', (e)=>{
+            const sel = e.target.closest('select');
+            if (!sel) return;
+            const td = sel.closest('td.skill-cell');
+            if (!td) return;
+            const emp = td.getAttribute('data-emp');
+            const key = td.getAttribute('data-task');
+            updateCell(emp, key, sel.value);
+          });
+        })();
+      })();
+    </script>
+
+    <style>
+      .skill-matrix-table { font-size: 0.9rem; }
+      .skill-matrix-table td { text-align: center; vertical-align: middle; padding: 6px; }
+      .skill-select { width: 100%; max-width: 80px; font-size: 0.85rem; }
+      .range-selector-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #0d6efd; border-radius: 8px; padding: 16px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 1500; display: none; min-width: 300px; }
+      .range-selector-panel.show { display: block; }
+      .skill-cell.selecting { background: rgba(13,110,253,0.1) !important; border: 2px solid #0d6efd !important; }
+      .skill-cell.selected { background: rgba(13,110,253,0.2) !important; border: 2px solid #0d6efd !important; }
+    </style>
+  </div>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <title>設定</title>
+  <meta charset="UTF-8" />
+  </head>
+<body>
+<div layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-gear"></i> 汎用設定</h1>
+    <p class="mb-0">シフトサイクルの開始日を設定します</p>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0">シフトサイクル開始日</h5></div>
+        <div class="card-body">
+          <div th:if="${success}" class="alert alert-success">[[${success}]]</div>
+          <div th:if="${error}" class="alert alert-danger">[[${error}]]</div>
+          <form method="post" th:action="@{/settings}">
+            <div class="mb-3">
+              <label class="form-label">開始日（1〜28）</label>
+              <input type="number" name="startDay" class="form-control" min="1" max="28" step="1" th:value="${startDay}" />
+              <div class="form-text">例: 16 → 毎月16日〜翌月15日</div>
+            </div>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> 保存</button>
+          </form>
+          <hr />
+          <div class="mt-3">
+            <div class="fw-semibold">現在の1カ月区間（設定に基づく）</div>
+            <div>
+              <span class="badge bg-secondary me-2">開始</span>
+              <span th:text="${#temporals.format(cycleStart, 'yyyy-MM-dd')}">2025-01-16</span>
+            </div>
+            <div class="mt-1">
+              <span class="badge bg-secondary me-2">終了</span>
+              <span th:text="${#temporals.format(cycleEnd.minusDays(1), 'yyyy-MM-dd')}">2025-02-15</span>
+              <span class="text-muted small">（半開区間）</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+        <div class="card-header"><h5 class="mb-0">シフト粒度（分）</h5></div>
+        <div class="card-body">
+          <form method="post" th:action="@{/settings/time-resolution}">
+            <div class="mb-2">スロット幅を選択してください（10分 または 15分）</div>
+            <div th:if="${timeResolutionLocked}" class="alert alert-warning py-2">
+              既存データ保護のため、運用開始後はシフト粒度を変更できません。
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="timeResolutionMinutes" id="res10" value="10"
+                     th:checked="${timeResolutionMinutes == 10}"
+                     th:disabled="${timeResolutionLocked}">
+              <label class="form-check-label" for="res10">10分</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="timeResolutionMinutes" id="res15" value="15"
+                     th:checked="${timeResolutionMinutes == 15}"
+                     th:disabled="${timeResolutionLocked}">
+              <label class="form-check-label" for="res15">15分</label>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-primary" type="submit" th:disabled="${timeResolutionLocked}">
+                <i class="bi bi-check-lg"></i> 保存
+              </button>
+            </div>
+            <div class="form-text mt-2">現在の設定: <span th:text="${timeResolutionMinutes}">15</span> 分</div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

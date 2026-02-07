@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.DepartmentMasterMapper">
+  <resultMap id="DepartmentMasterMap" type="io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster">
+    <id     column="department_code" property="departmentCode"/>
+    <result column="department_name" property="departmentName"/>
+    <result column="display_order"  property="displayOrder"/>
+    <result column="is_active"      property="isActive"/>
+    <result column="is_register"    property="isRegister"/>
+  </resultMap>
+
+  <select id="selectAll" resultMap="DepartmentMasterMap">
+    SELECT department_code,
+           department_name,
+           display_order,
+           is_active,
+           is_register
+    FROM department_master
+    ORDER BY COALESCE(display_order, 9999), department_code
+  </select>
+
+  <select id="selectByCode" parameterType="string" resultMap="DepartmentMasterMap">
+    SELECT department_code,
+           department_name,
+           display_order,
+           is_active,
+           is_register
+    FROM department_master
+    WHERE department_code = #{departmentCode}
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster">
+    INSERT INTO department_master (department_code, department_name, display_order, is_active, is_register)
+    VALUES (#{departmentCode}, #{departmentName}, #{displayOrder}, COALESCE(#{isActive}, TRUE), COALESCE(#{isRegister}, FALSE))
+    ON CONFLICT (department_code) DO NOTHING
+  </insert>
+  
+  <delete id="deleteByCode" parameterType="string">
+    DELETE FROM department_master WHERE department_code = #{departmentCode}
+  </delete>
+</mapper>

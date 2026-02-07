@@ -1,0 +1,98 @@
+/* Basic app styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Additional styles for better appearance */
+.table th {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+.btn {
+    border-radius: 6px;
+}
+
+/* Custom loading styles */
+.spinner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* Form improvements */
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Card improvements */
+.card {
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Shared task tree/grid layout */
+.grid-editor {
+    display: grid;
+    gap: 12px;
+    align-items: start;
+}
+
+.grid-pane {
+    min-width: 0;
+}
+
+.task-tree-container {
+    max-height: 100%;
+}
+
+.task-tree {
+    width: 100%;
+    max-height: 620px;
+    overflow: auto;
+}
+
+.task-tree .list-group-item.category {
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.task-tree .list-group-item.task {
+    padding-left: 28px;
+    cursor: pointer;
+}
+
+.task-tree .list-group-item.task.selected {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.chev {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #6c757d;
+    display: inline-block;
+    transform: rotate(-90deg);
+    transition: transform .15s;
+}
+
+.chev.open {
+    transform: rotate(0deg);
+}

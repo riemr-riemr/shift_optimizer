@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.RegisterMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    <id column="store_code" jdbcType="VARCHAR" property="storeCode" />
+    <id column="register_no" jdbcType="INTEGER" property="registerNo" />
+    <result column="register_name" jdbcType="VARCHAR" property="registerName" />
+    <result column="short_name" jdbcType="VARCHAR" property="shortName" />
+    <result column="open_priority" jdbcType="INTEGER" property="openPriority" />
+    <result column="register_type" jdbcType="VARCHAR" property="registerType" />
+    <result column="is_auto_open_target" jdbcType="BOOLEAN" property="isAutoOpenTarget" />
+    <result column="max_allowance" jdbcType="INTEGER" property="maxAllowance" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    store_code, register_no, register_name, short_name, open_priority, register_type, 
+    is_auto_open_target, max_allowance
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterKey" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from public.register
+    where store_code = #{storeCode,jdbcType=VARCHAR}
+      and register_no = #{registerNo,jdbcType=INTEGER}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.RegisterKey">
+    delete from public.register
+    where store_code = #{storeCode,jdbcType=VARCHAR}
+      and register_no = #{registerNo,jdbcType=INTEGER}
+  </delete>
+  <delete id="deleteAll">
+    delete from public.register
+  </delete>
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    insert into public.register (store_code, register_no, register_name, 
+      short_name, open_priority, register_type, 
+      is_auto_open_target, max_allowance)
+    values (#{storeCode,jdbcType=VARCHAR}, #{registerNo,jdbcType=INTEGER}, #{registerName,jdbcType=VARCHAR}, 
+      #{shortName,jdbcType=VARCHAR}, #{openPriority,jdbcType=INTEGER}, #{registerType,jdbcType=VARCHAR}, 
+      #{isAutoOpenTarget,jdbcType=BOOLEAN}, #{maxAllowance,jdbcType=INTEGER})
+  </insert>
+  <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    insert into public.register
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="storeCode != null">
+        store_code,
+      </if>
+      <if test="registerNo != null">
+        register_no,
+      </if>
+      <if test="registerName != null">
+        register_name,
+      </if>
+      <if test="shortName != null">
+        short_name,
+      </if>
+      <if test="openPriority != null">
+        open_priority,
+      </if>
+      <if test="registerType != null">
+        register_type,
+      </if>
+      <if test="isAutoOpenTarget != null">
+        is_auto_open_target,
+      </if>
+      <if test="maxAllowance != null">
+        max_allowance,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="storeCode != null">
+        #{storeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="registerNo != null">
+        #{registerNo,jdbcType=INTEGER},
+      </if>
+      <if test="registerName != null">
+        #{registerName,jdbcType=VARCHAR},
+      </if>
+      <if test="shortName != null">
+        #{shortName,jdbcType=VARCHAR},
+      </if>
+      <if test="openPriority != null">
+        #{openPriority,jdbcType=INTEGER},
+      </if>
+      <if test="registerType != null">
+        #{registerType,jdbcType=VARCHAR},
+      </if>
+      <if test="isAutoOpenTarget != null">
+        #{isAutoOpenTarget,jdbcType=BOOLEAN},
+      </if>
+      <if test="maxAllowance != null">
+        #{maxAllowance,jdbcType=INTEGER},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    update public.register
+    <set>
+      <if test="registerName != null">
+        register_name = #{registerName,jdbcType=VARCHAR},
+      </if>
+      <if test="shortName != null">
+        short_name = #{shortName,jdbcType=VARCHAR},
+      </if>
+      <if test="openPriority != null">
+        open_priority = #{openPriority,jdbcType=INTEGER},
+      </if>
+      <if test="registerType != null">
+        register_type = #{registerType,jdbcType=VARCHAR},
+      </if>
+      <if test="isAutoOpenTarget != null">
+        is_auto_open_target = #{isAutoOpenTarget,jdbcType=BOOLEAN},
+      </if>
+      <if test="maxAllowance != null">
+        max_allowance = #{maxAllowance,jdbcType=INTEGER},
+      </if>
+    </set>
+    where store_code = #{storeCode,jdbcType=VARCHAR}
+      and register_no = #{registerNo,jdbcType=INTEGER}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    update public.register
+    set register_name = #{registerName,jdbcType=VARCHAR},
+      short_name = #{shortName,jdbcType=VARCHAR},
+      open_priority = #{openPriority,jdbcType=INTEGER},
+      register_type = #{registerType,jdbcType=VARCHAR},
+      is_auto_open_target = #{isAutoOpenTarget,jdbcType=BOOLEAN},
+      max_allowance = #{maxAllowance,jdbcType=INTEGER}
+    where store_code = #{storeCode,jdbcType=VARCHAR}
+      and register_no = #{registerNo,jdbcType=INTEGER}
+  </update>
+  <select id="selectAll" resultMap="BaseResultMap">
+    SELECT
+    <include refid="Base_Column_List" />
+    FROM public.register
+  </select>
+
+  <select id="selectByStoreCode" resultMap="BaseResultMap">
+    SELECT
+    <include refid="Base_Column_List" />
+    FROM public.register
+    WHERE store_code = #{storeCode}
+    ORDER BY register_no
+  </select>
+
+  <!-- custom upsert -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Register">
+    INSERT INTO public.register (
+      store_code, register_no, register_name, short_name, open_priority, register_type, is_auto_open_target, max_allowance)
+    VALUES (
+      #{storeCode}, #{registerNo}, #{registerName}, #{shortName}, #{openPriority}, #{registerType}, #{isAutoOpenTarget}, #{maxAllowance})
+    ON CONFLICT (store_code, register_no) DO UPDATE SET
+      register_name       = EXCLUDED.register_name,
+      short_name          = EXCLUDED.short_name,
+      open_priority       = EXCLUDED.open_priority,
+      register_type       = EXCLUDED.register_type,
+      is_auto_open_target = EXCLUDED.is_auto_open_target,
+      max_allowance       = EXCLUDED.max_allowance
+  </insert>
+</mapper>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業担当一覧</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    .skill-matrix-table { font-size: 0.9rem; }
+    .skill-matrix-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: #fff;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      white-space: nowrap;
+    }
+    .employee-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      position: sticky;
+      left: 0;
+      z-index: 11;
+      min-width: 180px;
+    }
+    .skill-matrix-table td { text-align: center; vertical-align: middle; padding: 6px; }
+    .skill-select { width: 100%; max-width: 80px; font-size: 0.85rem; }
+    .table-container { max-height: 70vh; overflow: auto; border: 1px solid #dee2e6; border-radius: 8px; }
+    .task-header { min-width: 140px; }
+    .task-header small { display: block; font-weight: normal; color: #e9f5ff; }
+    .filters .form-select, .filters .form-control { min-width: 160px; }
+    /* Range selection panel */
+    .range-selector-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #0d6efd; border-radius: 8px; padding: 16px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 1500; display: none; min-width: 300px; }
+    .range-selector-panel.show { display: block; }
+    .skill-cell.selecting { background: rgba(13,110,253,0.1) !important; border: 2px solid #0d6efd !important; }
+    .skill-cell.selected { background: rgba(13,110,253,0.2) !important; border: 2px solid #0d6efd !important; }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-grid-3x3-gap"></i> 作業担当一覧</h1>
+    <p class="mb-0">従業員別の作業スキルレベルを設定できます</p>
+  </div>
+
+  <div th:replace="~{skill/skill-matrix-fragment :: matrix('taskMatrix', '作業担当一覧', ${tasks}, ${employees}, ${matrix}, 'task')}"></div>
+</main>
+</body>
+</html>

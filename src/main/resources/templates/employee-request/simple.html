@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+    <title>希望休入力 - Simple</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="content-header">
+        <h1>希望休入力 - デバッグ版</h1>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <p>年: <span th:text="${year}">2025</span></p>
+            <p>月: <span th:text="${month}">5</span></p>
+            <p>選択店舗: <span th:text="${selectedStoreCode}">569</span></p>
+            <p>総従業員数: <span th:text="${totalEmployees}">0</span></p>
+            <p>表示従業員数: <span th:text="${#lists.size(employees)}">0</span></p>
+            <p>月の日数: <span th:text="${daysInMonth}">31</span></p>
+            
+            <div th:if="${!#lists.isEmpty(employees)}">
+                <h3>従業員一覧</h3>
+                <ul>
+                    <li th:each="emp : ${employees}" th:text="${emp.employeeName + ' (' + emp.employeeCode + ')'}">従業員</li>
+                </ul>
+            </div>
+            
+            <div th:if="${#lists.isEmpty(employees)}">
+                <p class="text-muted">従業員がいません</p>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

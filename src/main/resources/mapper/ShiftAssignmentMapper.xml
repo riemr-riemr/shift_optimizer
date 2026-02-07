@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.ShiftAssignmentMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    <id column="shift_id" jdbcType="BIGINT" property="shiftId" />
+    <result column="store_code" jdbcType="VARCHAR" property="storeCode" />
+    <result column="employee_code" jdbcType="VARCHAR" property="employeeCode" />
+    <result column="start_at" jdbcType="TIMESTAMP" property="startAt" />
+    <result column="end_at" jdbcType="TIMESTAMP" property="endAt" />
+    <result column="created_by" jdbcType="VARCHAR" property="createdBy" />
+  </resultMap>
+  <sql id="Example_Where_Clause">
+    <where>
+      <foreach collection="oredCriteria" item="criteria" separator="or">
+        <if test="criteria.valid">
+          <trim prefix="(" prefixOverrides="and" suffix=")">
+            <foreach collection="criteria.criteria" item="criterion">
+              <choose>
+                <when test="criterion.noValue">
+                  and ${criterion.condition}
+                </when>
+                <when test="criterion.singleValue">
+                  and ${criterion.condition} #{criterion.value}
+                </when>
+                <when test="criterion.betweenValue">
+                  and ${criterion.condition} #{criterion.value} and #{criterion.secondValue}
+                </when>
+                <when test="criterion.listValue">
+                  and ${criterion.condition}
+                  <foreach close=")" collection="criterion.value" item="listItem" open="(" separator=",">
+                    #{listItem}
+                  </foreach>
+                </when>
+              </choose>
+            </foreach>
+          </trim>
+        </if>
+      </foreach>
+    </where>
+  </sql>
+  <sql id="Update_By_Example_Where_Clause">
+    <where>
+      <foreach collection="example.oredCriteria" item="criteria" separator="or">
+        <if test="criteria.valid">
+          <trim prefix="(" prefixOverrides="and" suffix=")">
+            <foreach collection="criteria.criteria" item="criterion">
+              <choose>
+                <when test="criterion.noValue">
+                  and ${criterion.condition}
+                </when>
+                <when test="criterion.singleValue">
+                  and ${criterion.condition} #{criterion.value}
+                </when>
+                <when test="criterion.betweenValue">
+                  and ${criterion.condition} #{criterion.value} and #{criterion.secondValue}
+                </when>
+                <when test="criterion.listValue">
+                  and ${criterion.condition}
+                  <foreach close=")" collection="criterion.value" item="listItem" open="(" separator=",">
+                    #{listItem}
+                  </foreach>
+                </when>
+              </choose>
+            </foreach>
+          </trim>
+        </if>
+      </foreach>
+    </where>
+  </sql>
+  <sql id="Base_Column_List">
+    shift_id, store_code, employee_code, start_at, end_at, created_by
+  </sql>
+  <select id="selectByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignmentExample" resultMap="BaseResultMap">
+    select
+    <if test="distinct">
+      distinct
+    </if>
+    <include refid="Base_Column_List" />
+    from public.shift_assignment
+    <if test="_parameter != null">
+      <include refid="Example_Where_Clause" />
+    </if>
+    <if test="orderByClause != null">
+      order by ${orderByClause}
+    </if>
+  </select>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from public.shift_assignment
+    where shift_id = #{shiftId,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from public.shift_assignment
+    where shift_id = #{shiftId,jdbcType=BIGINT}
+  </delete>
+  <delete id="deleteByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignmentExample">
+    delete from public.shift_assignment
+    <if test="_parameter != null">
+      <include refid="Example_Where_Clause" />
+    </if>
+  </delete>
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    insert into public.shift_assignment (store_code, employee_code, 
+      start_at, end_at, created_by
+      )
+    values (#{storeCode,jdbcType=VARCHAR}, #{employeeCode,jdbcType=VARCHAR}, 
+      #{startAt,jdbcType=TIMESTAMP}, #{endAt,jdbcType=TIMESTAMP}, #{createdBy,jdbcType=VARCHAR}
+      )
+  </insert>
+  <insert id="insertSelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    insert into public.shift_assignment
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="storeCode != null">
+        store_code,
+      </if>
+      <if test="employeeCode != null">
+        employee_code,
+      </if>
+      <if test="startAt != null">
+        start_at,
+      </if>
+      <if test="endAt != null">
+        end_at,
+      </if>
+      <if test="createdBy != null">
+        created_by,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="storeCode != null">
+        #{storeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="employeeCode != null">
+        #{employeeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="startAt != null">
+        #{startAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="endAt != null">
+        #{endAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="createdBy != null">
+        #{createdBy,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <select id="countByExample" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignmentExample" resultType="java.lang.Long">
+    select count(*) from public.shift_assignment
+    <if test="_parameter != null">
+      <include refid="Example_Where_Clause" />
+    </if>
+  </select>
+  <update id="updateByExampleSelective" parameterType="map">
+    update public.shift_assignment
+    <set>
+      <if test="row.storeCode != null">
+        store_code = #{row.storeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="row.employeeCode != null">
+        employee_code = #{row.employeeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="row.startAt != null">
+        start_at = #{row.startAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="row.endAt != null">
+        end_at = #{row.endAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="row.createdBy != null">
+        created_by = #{row.createdBy,jdbcType=VARCHAR},
+      </if>
+    </set>
+    <if test="example != null">
+      <include refid="Update_By_Example_Where_Clause" />
+    </if>
+  </update>
+  <update id="updateByExample" parameterType="map">
+    update public.shift_assignment
+    set store_code = #{row.storeCode,jdbcType=VARCHAR},
+      employee_code = #{row.employeeCode,jdbcType=VARCHAR},
+      start_at = #{row.startAt,jdbcType=TIMESTAMP},
+      end_at = #{row.endAt,jdbcType=TIMESTAMP},
+      created_by = #{row.createdBy,jdbcType=VARCHAR}
+    <if test="example != null">
+      <include refid="Update_By_Example_Where_Clause" />
+    </if>
+  </update>
+  <update id="updateByPrimaryKeySelective" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    update public.shift_assignment
+    <set>
+      <if test="storeCode != null">
+        store_code = #{storeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="employeeCode != null">
+        employee_code = #{employeeCode,jdbcType=VARCHAR},
+      </if>
+      <if test="startAt != null">
+        start_at = #{startAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="endAt != null">
+        end_at = #{endAt,jdbcType=TIMESTAMP},
+      </if>
+      <if test="createdBy != null">
+        created_by = #{createdBy,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where shift_id = #{shiftId,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    update public.shift_assignment
+    set store_code = #{storeCode,jdbcType=VARCHAR},
+      employee_code = #{employeeCode,jdbcType=VARCHAR},
+      start_at = #{startAt,jdbcType=TIMESTAMP},
+      end_at = #{endAt,jdbcType=TIMESTAMP},
+      created_by = #{createdBy,jdbcType=VARCHAR}
+    where shift_id = #{shiftId,jdbcType=BIGINT}
+  </update>
+
+  <!-- Custom methods -->
+  <delete id="deleteByProblemId" parameterType="java.lang.Long">
+    delete from public.shift_assignment
+    where EXTRACT(YEAR FROM start_at) * 100 + EXTRACT(MONTH FROM start_at) = #{problemId}
+  </delete>
+
+  <select id="selectByMonth" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from public.shift_assignment
+    where start_at >= #{from} and start_at &lt; #{to}
+    order by start_at
+  </select>
+
+  <select id="selectByDate" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from public.shift_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+    order by start_at
+  </select>
+
+  <update id="bulkUpdateEmployee">
+    <foreach collection="map.entrySet()" item="employeeCode" index="shiftId" separator=";">
+      update public.shift_assignment
+      set employee_code = #{employeeCode}
+      where shift_id = #{shiftId}
+    </foreach>
+  </update>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.ShiftAssignment">
+    insert into public.shift_assignment (store_code, employee_code, start_at, end_at, created_by)
+    values (#{storeCode,jdbcType=VARCHAR}, #{employeeCode,jdbcType=VARCHAR}, 
+            #{startAt,jdbcType=TIMESTAMP}, #{endAt,jdbcType=TIMESTAMP}, #{createdBy,jdbcType=VARCHAR})
+    on conflict (store_code, employee_code, start_at) do update set
+      end_at = excluded.end_at,
+      created_by = excluded.created_by
+  </insert>
+
+  <delete id="deleteByMonthAndStore">
+    delete from public.shift_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+      and store_code = #{storeCode}
+  </delete>
+
+  <delete id="deleteByMonthStoreAndCreatedBy">
+    delete from public.shift_assignment
+    where start_at &gt;= #{from}
+      and start_at &lt; #{to}
+      and store_code = #{storeCode}
+      and created_by = #{createdBy}
+  </delete>
+
+  <delete id="deleteByEmployeeAndDateRange">
+    delete from public.shift_assignment
+    where store_code = #{storeCode}
+      and employee_code = #{employeeCode}
+      and start_at &gt;= #{from}
+      and start_at &lt; #{to}
+  </delete>
+
+  <!-- Count overlaps for an employee in [startAt, endAt) (register assignments) -->
+  <select id="countOverlaps" resultType="long">
+    select count(*)
+    from public.shift_assignment a
+    where a.employee_code = #{employeeCode}
+      and a.end_at &gt; #{startAt}
+      and a.start_at &lt; #{endAt}
+  </select>
+
+  <select id="selectAll" resultMap="BaseResultMap">
+    SELECT
+    <include refid="Base_Column_List" />
+    FROM public.shift_assignment
+    ORDER BY start_at
+  </select>
+</mapper>

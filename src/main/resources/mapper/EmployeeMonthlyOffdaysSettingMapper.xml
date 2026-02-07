@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper">
+  <resultMap id="EmployeeMonthlyOffdaysSettingMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting">
+    <id     column="employee_code" property="employeeCode"/>
+    <id     column="month_start"   property="monthStart"/>
+    <result column="min_off_days"  property="minOffDays"/>
+    <result column="max_off_days"  property="maxOffDays"/>
+  </resultMap>
+
+  <select id="selectByEmployee" parameterType="string" resultMap="EmployeeMonthlyOffdaysSettingMap">
+    SELECT employee_code, month_start, min_off_days, max_off_days
+    FROM employee_monthly_offdays_setting
+    WHERE employee_code = #{employeeCode}
+    ORDER BY month_start
+  </select>
+
+  <select id="selectByMonth" parameterType="date" resultMap="EmployeeMonthlyOffdaysSettingMap">
+    SELECT employee_code, month_start, min_off_days, max_off_days
+    FROM employee_monthly_offdays_setting
+    WHERE month_start = #{monthStart}
+  </select>
+
+  <select id="selectByEmployeeAndMonth" resultMap="EmployeeMonthlyOffdaysSettingMap">
+    SELECT employee_code, month_start, min_off_days, max_off_days
+    FROM employee_monthly_offdays_setting
+    WHERE employee_code = #{employeeCode}
+      AND month_start = #{monthStart}
+  </select>
+
+  <delete id="deleteByEmployee" parameterType="string">
+    DELETE FROM employee_monthly_offdays_setting WHERE employee_code = #{employeeCode}
+  </delete>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeMonthlyOffdaysSetting">
+    INSERT INTO employee_monthly_offdays_setting (employee_code, month_start, min_off_days, max_off_days)
+    VALUES (#{employeeCode}, #{monthStart}, #{minOffDays}, #{maxOffDays})
+    ON CONFLICT (employee_code, month_start) DO UPDATE SET
+      min_off_days = EXCLUDED.min_off_days,
+      max_off_days = EXCLUDED.max_off_days
+  </insert>
+</mapper>

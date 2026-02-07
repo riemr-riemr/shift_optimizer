@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE generatorConfiguration PUBLIC
+  "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+  "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+
+<generatorConfiguration>
+    <context id="pg-context"
+        targetRuntime="MyBatis3">
+
+    <property name="javaFileEncoding" value="UTF-8"/>
+
+    <plugin type="org.mybatis.generator.plugins.SerializablePlugin"/>
+    <!-- <plugin type="org.mybatis.generator.plugins.LombokPlugin"/> -->
+
+    <jdbcConnection driverClass="org.postgresql.Driver"
+                    connectionURL="jdbc:postgresql://localhost:5432/shiftdb"
+                    userId="shiftuser"
+                    password="shiftpass">
+      <property name="nullCatalogMeansCurrent" value="true"/>
+    </jdbcConnection>
+
+    <javaTypeResolver>
+      <property name="forceBigDecimals" value="false"/>
+    </javaTypeResolver>
+
+    <javaModelGenerator targetProject="src/main/java"
+                        targetPackage="io.github.riemr.shift.domain">
+      <property name="trimStrings" value="true"/>
+    </javaModelGenerator>
+
+    <sqlMapGenerator targetProject="src/main/resources"
+                     targetPackage="mapper"/>
+
+    <javaClientGenerator type="XMLMAPPER"
+                         targetProject="src/main/java"
+                         targetPackage="io.github.riemr.shift.infrastructure.mapper"/>
+
+    <!-- Table mappings -->
+    <table schema="public" tableName="store" domainObjectName="Store"/>
+    <table schema="public" tableName="register_type" domainObjectName="RegisterType"/>
+    <table schema="public" tableName="register" domainObjectName="Register"/>
+    <table schema="public" tableName="employee" domainObjectName="Employee"/>
+    <table schema="public" tableName="employee_register_skill" domainObjectName="EmployeeRegisterSkill"/>
+    <table schema="public" tableName="shift_assignment" domainObjectName="ShiftAssignment">
+      <generatedKey column="shift_id" sqlStatement="JDBC" identity="true"/>
+    </table>
+    <table schema="public" tableName="employee_request" domainObjectName="EmployeeRequest">
+      <generatedKey column="request_id" sqlStatement="JDBC" identity="true"/>
+    </table>
+    <table schema="public" tableName="constraint_master" domainObjectName="ConstraintMaster"/>
+    <table schema="public" tableName="constraint_setting" domainObjectName="ConstraintSetting">
+      <generatedKey column="setting_id" sqlStatement="JDBC" identity="true"/>
+    </table>
+  </context>
+</generatorConfiguration>

@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>作業計画</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>作業計画</span>
+    </div>
+    <div class="card-body">
+      <form class="row g-2 mb-3" id="planForm">
+        <!-- 1. 店舗選択 -->
+        <div class="col-auto" style="min-width: 180px;">
+          <select class="form-select form-select-sm" name="store" id="storeSelect" required>
+            <option value="" th:selected="${storeCode == null or storeCode == ''}">店舗を選択</option>
+            <option th:each="s : ${stores}"
+                    th:value="${s.storeCode}"
+                    th:selected="${storeCode == s.storeCode}"
+                    th:text="${s.storeCode} + ' - ' + ${s.storeName}"></option>
+          </select>
+        </div>
+        
+        <!-- 2. 部門選択 -->
+        <div class="col-auto" style="min-width: 220px;">
+          <select class="form-select form-select-sm" name="dept" id="deptSelect" required>
+            <option value="" th:selected="${dept == null or dept == ''}">部門を選択</option>
+            <option th:each="d : ${departments}"
+                    th:value="${d.departmentCode}"
+                    th:selected="${dept == d.departmentCode}"
+                    th:text="${d.departmentCode} + ' - ' + ${d.departmentName}"></option>
+          </select>
+        </div>
+        
+        <!-- 3. 曜日選択のみ -->
+        <input type="hidden" name="mode" value="weekly" />
+        
+        <!-- 4. 曜日選択 -->
+        <div class="col-auto">
+          <select class="form-select form-select-sm" name="day">
+            <option th:value="1" th:selected="${day==1}">月</option>
+            <option th:value="2" th:selected="${day==2}">火</option>
+            <option th:value="3" th:selected="${day==3}">水</option>
+            <option th:value="4" th:selected="${day==4}">木</option>
+            <option th:value="5" th:selected="${day==5}">金</option>
+            <option th:value="6" th:selected="${day==6}">土</option>
+            <option th:value="7" th:selected="${day==7}">日</option>
+          </select>
+        </div>
+        
+        <!-- 特異日UIは廃止 -->
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">表示</button></div>
+      </form>
+
+      <!-- 追加UI -->
+      <div class="mb-3 d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#planCopyModal">計画をコピー</button>
+      </div>
+
+      <!-- 適用処理は月次シフト最適化時に実行されます -->
+
+
+
+      <!-- グリッドUI: [[${timeResolutionMinutes}]]分×15行の簡易エディタ -->
+      <div class="mt-4" th:if="${storeCode} != null">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-bold">グリッド編集（1セル=[[${timeResolutionMinutes}]]分/1人）</div>
+          <div class="d-flex align-items-center gap-2">
+            <div class="small text-muted">横軸: 時間 / 縦軸: 15レーン</div>
+          </div>
+        </div>
+        <!-- 選択表示は左側の共通コンポーネント内に集約 -->
+
+        <style>
+          .time-grid-wrapper { overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px; background: #fff; }
+          .time-grid { display: grid; grid-auto-rows: 28px; position: relative; }
+          .time-grid .cell { border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f7f7f7; cursor: pointer; }
+          .time-grid .cell:hover { background: #f1f5ff; }
+          /* Single object style for plans */
+          .plan-block { position: absolute; border: 1px solid #333; box-shadow: 0 1px 2px rgba(0,0,0,0.2); border-radius: 3px; overflow: hidden; z-index: 4; cursor: pointer; }
+          .plan-block .resize-handle { position: absolute; right: 2px; bottom: 2px; width: 10px; height: 10px; background: rgba(0,0,0,0.35); border-radius: 2px; cursor: se-resize; }
+          .plan-block .task-label { font-size: 10px; color: #fff; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 16px 2px 4px; text-shadow: 1px 1px 1px rgba(0,0,0,0.5); }
+          /* Flexible window overlay */
+          .plan-window { position: absolute; border: 1px dashed rgba(0,0,0,0.2); border-radius: 3px; z-index: 3; }
+          .plan-window.task-cell-reg { background: rgba(255, 107, 107, 0.25); }
+          .plan-window.task-cell-stock { background: rgba(78, 205, 196, 0.25); }
+          .plan-window.task-cell-clean { background: rgba(69, 183, 209, 0.25); }
+          .plan-window.task-cell-default { background: rgba(149, 165, 166, 0.25); }
+          .time-grid .cell.selecting { background: #ffe599; }
+          .time-grid .cell.selected-range { background: #b6e0fe; }
+          .task-cell-reg { background: #ff6b6b; }
+          .task-cell-stock { background: #4ecdc4; }
+          .task-cell-clean { background: #45b7d1; }
+          .task-cell-default { background: #95a5a6; }
+          .time-grid .row-label { position: sticky; left: 0; background: #f8f9fa; border-right: 1px solid #dee2e6; z-index: 2; display:flex; align-items:center; justify-content:center; font-size: 12px; color:#6c757d; }
+          .time-grid .header { position: sticky; top: 0; background: #f8f9fa; z-index: 3; border-bottom: 1px solid #dee2e6; font-size: 12px; color:#6c757d; display:flex; align-items:center; justify-content:center; }
+          .time-grid .header-hour { border-right: 1px solid #eee; }
+          /* Task tree (always visible) */
+          .grid-editor { display: grid; grid-template-columns: 280px 1fr; gap: 12px; align-items: start; }
+          .task-tree { width: 100%; max-height: 620px; overflow:auto; }
+          .grid-pane { min-width: 0; }
+          .task-tree .list-group-item.category { font-weight: 600; cursor: pointer; display:flex; align-items:center; gap:6px; }
+          .task-tree .list-group-item.task { padding-left: 28px; cursor: pointer; }
+          .task-tree .list-group-item.task.selected { background: #0d6efd; color: #fff; }
+          .chev { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #6c757d; display:inline-block; transform: rotate(-90deg); transition: transform .15s; }
+          .chev.open { transform: rotate(0deg); }
+        </style>
+        <div class="grid-editor mt-2">
+          <div th:replace="~{fragments/task-selection :: taskSelection('gridTask','gridDept','selectedTaskLabel','taskTreeList','作業選択')}"></div>
+          <div class="grid-pane flex-grow-1">
+            <div class="time-grid-wrapper">
+              <div id="timeGrid" class="time-grid"></div>
+            </div>
+            <div id="gridMessage" class="alert alert-danger py-1 px-2 small d-none mt-2" role="alert"></div>
+            <div class="d-flex justify-content-end mt-2">
+              <button id="gridSaveBtn" type="button" class="btn btn-sm btn-success">保存</button>
+            </div>
+            <div class="form-text mt-1">ドラッグで範囲選択して登録します（1セル=[[${timeResolutionMinutes}]]分）。作業・部門を選択のうえ操作してください。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右クリックメニュー -->
+      <div id="planCtxMenu" class="card shadow" style="position:absolute; display:none; z-index:2000; min-width: 160px;">
+        <div class="list-group list-group-flush">
+          <button type="button" class="list-group-item list-group-item-action" id="ctxEditBtn">編集</button>
+          <button type="button" class="list-group-item list-group-item-action text-danger" id="ctxDeleteBtn">削除</button>
+        </div>
+      </div>
+
+      <!-- 編集モーダル -->
+      <div class="modal fade" id="planEditModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">計画の編集</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">スケジュールタイプ</label>
+                  <select class="form-select" id="editScheduleType">
+                    <option value="FIXED">固定</option>
+                    <option value="FLEXIBLE">可変</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">人数</label>
+                  <input type="number" min="1" class="form-control" id="editStaff" value="1">
+                </div>
+
+                <div class="col-6 fixed-group">
+                  <label class="form-label">開始</label>
+                  <input type="time" class="form-control" id="editStart" th:attr="step=${timeResolutionMinutes*60}">
+                </div>
+                <div class="col-6 fixed-group">
+                  <label class="form-label">終了</label>
+                  <input type="time" class="form-control" id="editEnd" th:attr="step=${timeResolutionMinutes*60}">
+                </div>
+
+                <div class="col-4 flexible-group" style="display:none;">
+                  <label class="form-label">窓開始</label>
+                  <input type="time" class="form-control" id="editWinStart" th:attr="step=${timeResolutionMinutes*60}">
+                </div>
+                <div class="col-4 flexible-group" style="display:none;">
+                  <label class="form-label">窓終了</label>
+                  <input type="time" class="form-control" id="editWinEnd" th:attr="step=${timeResolutionMinutes*60}">
+                </div>
+                <div class="col-4 flexible-group" style="display:none;">
+                  <label class="form-label">所要(分)</label>
+                  <input type="number" min="0" class="form-control" id="editDuration" th:attr="step=${timeResolutionMinutes}">
+                </div>
+
+                <div class="col-6 d-flex align-items-end">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="editActive" checked>
+                    <label class="form-check-label" for="editActive">有効</label>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">備考</label>
+                  <input type="text" class="form-control" id="editNote">
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-danger me-auto" id="editDeleteBtn">削除</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+              <button type="button" class="btn btn-primary" id="editSaveBtn">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 特異日追加モーダルは廃止 -->
+    </div>
+  </div>
+
+  <!-- 計画コピー モーダル -->
+  <div class="modal fade" id="planCopyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">表示中の計画をコピー</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form th:action="@{/tasks/plan/copy}" method="post">
+          <input type="hidden" name="store" th:value="${storeCode}">
+          <input type="hidden" name="dept" th:value="${dept}">
+          <input type="hidden" name="mode" value="weekly">
+          <input type="hidden" name="day" th:value="${day}">
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-12"><div class="form-text">表示中の曜日計画を他の曜日へコピーします。</div></div>
+              <div class="col-12">
+                <label class="form-label">曜日へコピー（複数選択可）</label>
+                <div class="d-flex flex-wrap gap-3">
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="1" id="dow1"><label class="form-check-label" for="dow1">月</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="2" id="dow2"><label class="form-check-label" for="dow2">火</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="3" id="dow3"><label class="form-check-label" for="dow3">水</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="4" id="dow4"><label class="form-check-label" for="dow4">木</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="5" id="dow5"><label class="form-check-label" for="dow5">金</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="6" id="dow6"><label class="form-check-label" for="dow6">土</label></div>
+                  <div class="form-check"><input class="form-check-input" type="checkbox" name="targetDow" value="7" id="dow7"><label class="form-check-label" for="dow7">日</label></div>
+                </div>
+              </div>
+              <!-- 特異日コピーは廃止 -->
+              <div class="col-12">
+                <div class="form-text text-danger">対象の曜日/日付に既存の計画がある場合は全て置き換え（削除後にコピー）されます。</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+            <button type="submit" class="btn btn-primary">コピー実行</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 共通タスクツリー -->
+  <script th:src="@{/js/grid-time-utils.js}"></script>
+  <script th:src="@{/js/task-tree.js}"></script>
+  <script th:inline="javascript">
+    document.addEventListener('DOMContentLoaded', function() {
+      const planForm = document.getElementById('planForm');
+      const deptSelect = document.getElementById('deptSelect');
+
+      if (deptSelect) {
+        deptSelect.addEventListener('change', function () {
+          planForm.submit();
+        });
+      }
+
+      // === Grid builder ===
+      const storeCode = /*[[${storeCode}]]*/ '';
+      const mode = 'weekly';
+      const RES_MIN = /*[[${timeResolutionMinutes}]]*/ 15;
+      const selectedDow = /*[[${day}]]*/ 1;
+      const selectedDate = null;
+      const selectedDept = /*[[${dept}]]*/ '';
+      const gridPlans = /*[[${gridPlans}]]*/ [];
+      const masters = /*[[${masters}]]*/ [];
+      const categories = /*[[${categories}]]*/ [];
+      const grid = document.getElementById('timeGrid');
+      const planMap = {};
+      const pendingCreates = [];
+      const pendingUpdates = [];
+      const pendingDeletes = [];
+      let tempIdSeq = 1;
+      // Feature flags
+      const ENABLE_BLOCK_DRAG = true; // enable left-click drag-and-drop move; right-click opens edit dialog
+      // Global resize state so global handlers can access it
+      let resizeState = {
+        active: false,
+        row: null,
+        planId: null,
+        startCol: null,
+        endCol: null,
+        edge: null, // 'start' | 'end'
+        taskCode: null,
+        staff: 1,
+        colorClass: 'task-cell-default',
+        prev: null,
+        conflicted: false
+      };
+      // Global move state for dragging entire blocks
+      let moveState = {
+        active: false,
+        planId: null,
+        baseRow: null,
+        startCol: null,
+        endCol: null,
+        staff: 1,
+        taskCode: null,
+        colorClass: 'task-cell-default',
+        offsetCols: 0,
+        offsetRow: 0,
+        prev: null,
+        conflicted: false
+      };
+      if (grid && storeCode) {
+        const cols = Math.floor(1440 / RES_MIN); // 24h * (60 / RES_MIN)
+        const rows = 15; // lanes
+        // Build template columns: 1 sticky label + slots
+        grid.style.gridTemplateColumns = `60px repeat(${cols}, 50px)`;
+
+        // Common metrics for pixel positioning
+        const SLOT_PX = 50;   // per slot
+        const LABEL_PX = 60;  // left sticky label width
+        const ROW_PX = 28;    // row height
+        const HEADER_PX = 28; // header row height
+
+        // Header row
+        const headerLabel = document.createElement('div');
+        headerLabel.className = 'header';
+        headerLabel.textContent = '';
+        grid.appendChild(headerLabel);
+        for (let h = 0; h < 24; h++) {
+          const hourCell = document.createElement('div');
+          hourCell.className = 'header header-hour';
+          hourCell.style.gridColumn = `span ${60/RES_MIN}`;
+          hourCell.textContent = `${String(h).padStart(2,'0')}:00`;
+          grid.appendChild(hourCell);
+        }
+
+        // Drag state
+        const dragState = {
+          active: false,
+          row: null,
+          startCol: null,
+          endCol: null,
+          highlighted: []
+        };
+
+        // (moved) resizeState is defined in outer scope for global handlers
+
+        function clearHighlight() {
+          for (const el of dragState.highlighted) el.classList.remove('selecting');
+          dragState.highlighted = [];
+        }
+        function highlightRange(rowIndex, c1, c2) {
+          clearHighlight();
+          const from = Math.min(c1, c2);
+          const to = Math.max(c1, c2);
+            const rowStartIndex = (1 + rowIndex + 1) * (cols + 1); // Not used; we'll query by dataset
+          const cells = grid.querySelectorAll(`.cell[data-row="${rowIndex}"]`);
+          for (let i = from; i <= to; i++) {
+            const el = Array.from(cells).find(x => Number(x.dataset.col) === i);
+            if (el) {
+              el.classList.add('selecting');
+              dragState.highlighted.push(el);
+            }
+          }
+        }
+
+        // Utility: find contiguous block bounds for a given cell
+        function getBlockBounds(rowIndex, colIndex, pid) {
+          let start = colIndex;
+          let end = colIndex + 1;
+          for (let c = colIndex - 1; c >= 0; c--) {
+            const el = document.querySelector(`.cell[data-row="${rowIndex}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            start = c;
+          }
+          for (let c = colIndex + 1; c < cols; c++) {
+            const el = document.querySelector(`.cell[data-row="${rowIndex}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            end = c + 1;
+          }
+          return { start, end };
+        }
+
+        // Utility: create/update a single block element spanning time slots and lanes
+        function createOrUpdateBlock(rowIndex, pid, fromCol, toColExclusive, taskCode, staff, colorClass, labelStart, labelEnd) {
+          let block = document.getElementById(`plan-block-${pid}`);
+          const left = LABEL_PX + fromCol * SLOT_PX;
+          const top = HEADER_PX + rowIndex * ROW_PX;
+          const width = Math.max(1, (toColExclusive - fromCol)) * SLOT_PX;
+          const height = Math.max(1, staff) * ROW_PX;
+          const taskName = getTaskName(taskCode);
+          const timeLabel = (labelStart && labelEnd) ? `${labelStart} - ${labelEnd}` : '';
+          if (!block) {
+            block = document.createElement('div');
+            block.id = `plan-block-${pid}`;
+            block.className = `plan-block ${colorClass}`;
+            grid.appendChild(block);
+          } else {
+            // Update color class keeping base
+            block.className = `plan-block ${colorClass}`;
+          }
+          block.style.left = `${left}px`;
+          block.style.top = `${top}px`;
+          block.style.width = `${width}px`;
+          block.style.height = `${height}px`;
+          block.dataset.planId = String(pid);
+          block.dataset.taskCode = taskCode;
+          block.dataset.staff = String(staff);
+          block.dataset.row = String(rowIndex);
+          block.dataset.startCol = String(fromCol);
+          block.dataset.endCol = String(toColExclusive);
+          block.innerHTML = `<div class="task-label" title="${taskName} ${timeLabel ? '('+timeLabel+')' : ''}">${taskName}</div><div class="resize-handle"></div>`;
+          
+          // Apply task or category color
+          const taskColor = getTaskDisplayColor(taskCode);
+          if (taskColor) {
+            block.style.backgroundColor = taskColor;
+            block.style.borderLeft = `4px solid ${taskColor}`;
+            
+            // Make the color slightly darker for better contrast
+            const darkerColor = taskColor + 'CC'; // Add alpha for slightly more opaque
+            block.style.background = `linear-gradient(135deg, ${taskColor}E6, ${darkerColor})`;
+          }
+        }
+
+        // Create/update a semi-transparent flexible window overlay
+        function createOrUpdateWindow(rowIndex, pid, fromCol, toColExclusive, staff, colorClass, taskCode) {
+          if (!(fromCol >= 0) || !(toColExclusive > fromCol)) return;
+          let overlay = document.getElementById(`plan-window-${pid}`);
+          const left = LABEL_PX + fromCol * SLOT_PX;
+          const top = HEADER_PX + rowIndex * ROW_PX;
+          const width = Math.max(1, (toColExclusive - fromCol)) * SLOT_PX;
+          const height = Math.max(1, staff) * ROW_PX;
+          if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = `plan-window-${pid}`;
+            overlay.className = `plan-window ${colorClass}`;
+            grid.appendChild(overlay);
+          } else {
+            overlay.className = `plan-window ${colorClass}`;
+          }
+          overlay.style.left = `${left}px`;
+          overlay.style.top = `${top}px`;
+          overlay.style.width = `${width}px`;
+          overlay.style.height = `${height}px`;
+          overlay.dataset.planId = String(pid);
+          
+          // Apply category style if taskCode is provided
+          if (taskCode) {
+            applyTaskCategoryStyle(overlay, taskCode);
+          }
+          overlay.dataset.row = String(rowIndex);
+          overlay.dataset.startCol = String(fromCol);
+          overlay.dataset.endCol = String(toColExclusive);
+        }
+
+        // Ensure only one handle exists inside the block
+        function setSingleHandle(pid, endColExclusive) {
+          const block = document.getElementById(`plan-block-${pid}`);
+          if (!block) return;
+          // Ensure handle exists
+          let handle = block.querySelector('.resize-handle');
+          if (!handle) {
+            handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            block.appendChild(handle);
+          }
+        }
+
+        // Utility: get all row indices currently occupied by a plan id (from block)
+        function getRowsForPlan(pid) {
+          const block = document.getElementById(`plan-block-${pid}`);
+          if (!block) return [];
+          const base = Number(block.dataset.row || '0');
+          const staff = Number(block.dataset.staff || '1');
+          const rows = [];
+          for (let r = 0; r < staff; r++) rows.push(base + r);
+          return rows;
+        }
+
+        // Conflict detection using existing blocks
+        function hasConflict(rowIndex, fromCol, toColExclusive, ignorePlanId) {
+          const staff = 1; // single lane by default in this context
+          return hasBlockConflict(rowIndex, staff, fromCol, toColExclusive, ignorePlanId);
+        }
+        function hasBlockConflict(baseRow, staff, fromCol, toColExclusive, ignorePlanId) {
+          const blocks = Array.from(document.querySelectorAll('.plan-block'));
+          const myRows = new Set();
+          for (let r = 0; r < staff; r++) myRows.add(baseRow + r);
+          for (const b of blocks) {
+            const pid = b.dataset.planId;
+            if (ignorePlanId && pid === String(ignorePlanId)) continue;
+            const bRow = Number(b.dataset.row || '0');
+            const bStaff = Number(b.dataset.staff || '1');
+            const bStart = Number(b.dataset.startCol || '0');
+            const bEnd = Number(b.dataset.endCol || '0');
+            for (let r = 0; r < bStaff; r++) {
+              const rr = bRow + r;
+              if (myRows.has(rr)) {
+                // Overlap in time?
+                if (fromCol < bEnd && toColExclusive > bStart) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        }
+
+        function finalizeRange() {
+          if (!dragState.active || dragState.row == null || dragState.startCol == null || dragState.endCol == null) { dragState.active = false; clearHighlight(); return; }
+          const dept = selectedDept;
+          const task = document.getElementById('gridTask').value;
+          const dowEl = document.getElementById('gridDow');
+          const dateEl = document.getElementById('gridDate');
+          if (!dept) { alert('部門を選択してください'); dragState.active = false; clearHighlight(); return; }
+          if (!task) { alert('作業マスタを選択してください'); dragState.active = false; clearHighlight(); return; }
+          const fromCol = Math.min(dragState.startCol, dragState.endCol);
+          const toColExclusive = Math.max(dragState.startCol, dragState.endCol) + 1;
+          const { start, end } = timesFromRange(fromCol, toColExclusive);
+          // Conflict check: don't register over existing blocks
+          if (hasConflict(dragState.row, fromCol, toColExclusive)) {
+            // silently ignore overlapping registration
+            dragState.active = false;
+            clearHighlight();
+            return;
+          }
+          // Stage pending create and paint locally
+          const tempId = `new-${tempIdSeq++}`;
+          const pending = { tempId, mode, storeCode, departmentCode: dept, taskCode: task, scheduleType: 'FIXED', fixedStartTime: start, fixedEndTime: end, requiredStaffCount: 1, lane: (dragState.row + 1) };
+          if (mode === 'weekly') {
+            const dow = dowEl ? Number(dowEl.value || selectedDow || 1) : (selectedDow || 1);
+            pending.dayOfWeek = dow;
+          } else {
+            const d = (dateEl && dateEl.value) ? dateEl.value : (selectedDate ? formatDate(selectedDate) : '');
+            if (!d) { alert('特異日を選択してください'); dragState.active = false; clearHighlight(); return; }
+            // specialDate support removed
+          }
+          pendingCreates.push(pending);
+          // Draw single plan block
+          const taskColorClass = getTaskColorClass(task);
+          createOrUpdateBlock(dragState.row, tempId, fromCol, toColExclusive, task, 1, taskColorClass, start, end);
+          setSingleHandle(tempId, toColExclusive);
+          dragState.active = false;
+          clearHighlight();
+        }
+
+        document.addEventListener('mouseup', () => {
+          if (resizeState.active) {
+            // If conflicted during resize, revert to previous state and alert
+            if (resizeState.conflicted && resizeState.prev) {
+              const pid = resizeState.planId;
+              const prev = resizeState.prev;
+              const plan = planMap[pid] || {};
+              const timesPrev = timesFromRange(prev.startCol, prev.endCol);
+              createOrUpdateBlock(prev.baseRow, pid, prev.startCol, prev.endCol, resizeState.taskCode, prev.staff, resizeState.colorClass, timesPrev.start, timesPrev.end);
+              if (plan.scheduleType === 'FLEXIBLE') {
+                const ws = timeToSlot(plan.windowStartTime);
+                const we = timeToSlot(plan.windowEndTime);
+                if (ws >= 0 && we > ws) {
+                  createOrUpdateWindow(prev.baseRow, pid, ws, we, prev.staff, resizeState.colorClass, resizeState.taskCode);
+                }
+              }
+              try { setSingleHandle(pid, prev.endCol); } catch {}
+              try { const blk = document.getElementById(`plan-block-${pid}`); if (blk) blk.style.pointerEvents = ''; } catch {}
+              showInlineWarning('他の作業と重なっています。元の位置に戻します。');
+              // Reset
+              resizeState.active = false;
+              resizeState.row = null; resizeState.planId = null;
+              resizeState.startCol = null; resizeState.endCol = null; resizeState.edge = null;
+              resizeState.prev = null; resizeState.conflicted = false;
+              return;
+            }
+            // Finalize visual resize: stage update
+            const row = resizeState.row;
+            const pid = resizeState.planId;
+            const times = timesFromRange(resizeState.startCol, resizeState.endCol);
+            // If this was a new staged plan
+            if (String(pid).startsWith('new-')) {
+              const idx = pendingCreates.findIndex(x => x.tempId === pid);
+              if (idx >= 0) {
+                const c = pendingCreates[idx];
+                c.scheduleType = 'FIXED';
+                c.fixedStartTime = times.start;
+                c.fixedEndTime = times.end;
+                c.lane = row + 1;
+                c.requiredStaffCount = resizeState.staff;
+                pendingCreates[idx] = c;
+              }
+            } else {
+              // Stage an update for existing plan (FIXED or FLEXIBLE duration)
+              const plan = planMap[pid] || {};
+              if (plan.scheduleType === 'FLEXIBLE') {
+                const durationMin = (resizeState.endCol - resizeState.startCol) * RES_MIN;
+                pendingUpdates.push({ planId: pid, scheduleType: 'FLEXIBLE', requiredDurationMinutes: durationMin, requiredStaffCount: resizeState.staff, lane: row + 1, active: true });
+              } else {
+                pendingUpdates.push({ planId: pid, scheduleType: 'FIXED', fixedStartTime: times.start, fixedEndTime: times.end, requiredStaffCount: resizeState.staff, lane: row + 1, active: true });
+              }
+            }
+            // Update planMap projected values
+            const p = planMap[pid] || {};
+            if (p.scheduleType === 'FLEXIBLE') {
+              p.requiredDurationMinutes = (resizeState.endCol - resizeState.startCol) * RES_MIN;
+            } else {
+              p.scheduleType = 'FIXED';
+              p.fixedStartTime = times.start; p.fixedEndTime = times.end;
+            }
+            p.requiredStaffCount = resizeState.staff; p.lane = row + 1;
+            planMap[pid] = p;
+            // Restore the single bottom-right resize handle for this plan after finalize
+            try { setSingleHandle(pid, resizeState.endCol); } catch (e) {}
+            // If FLEXIBLE, also update the window overlay height to match staff
+            try {
+              const plan = planMap[pid] || {};
+              if (plan.scheduleType === 'FLEXIBLE') {
+                const winStart = timeToSlot(plan.windowStartTime);
+                const winEnd = timeToSlot(plan.windowEndTime);
+                if (winStart >= 0 && winEnd > winStart) {
+                  createOrUpdateWindow(row, pid, winStart, winEnd, resizeState.staff, getTaskColorClass(resizeState.taskCode), resizeState.taskCode);
+                }
+              }
+            } catch (e) {}
+            // Re-enable pointer events on the resized block
+            try { const blk = document.getElementById(`plan-block-${pid}`); if (blk) blk.style.pointerEvents = ''; } catch {}
+
+            // Reset
+            resizeState.active = false;
+            resizeState.row = null; resizeState.planId = null;
+            resizeState.startCol = null; resizeState.endCol = null; resizeState.edge = null;
+            resizeState.prev = null; resizeState.conflicted = false;
+            return;
+          }
+          if (ENABLE_BLOCK_DRAG && moveState.active) {
+            // If conflicted during move, revert to previous state and alert
+            if (moveState.conflicted && moveState.prev) {
+              const pid = moveState.planId;
+              const prev = moveState.prev;
+              const plan = planMap[pid] || {};
+              const timesPrev = timesFromRange(prev.startCol, prev.endCol);
+              createOrUpdateBlock(prev.baseRow, pid, prev.startCol, prev.endCol, moveState.taskCode, prev.staff, moveState.colorClass, timesPrev.start, timesPrev.end);
+              if (plan.scheduleType === 'FLEXIBLE') {
+                const ws = timeToSlot(plan.windowStartTime);
+                const we = timeToSlot(plan.windowEndTime);
+                if (ws >= 0 && we > ws) {
+                  createOrUpdateWindow(prev.baseRow, pid, ws, we, prev.staff, moveState.colorClass, moveState.taskCode);
+                }
+              }
+              try { setSingleHandle(pid, prev.endCol); } catch {}
+              try { const blk = document.getElementById(`plan-block-${pid}`); if (blk) blk.style.pointerEvents = ''; } catch {}
+              showInlineWarning('他の作業と重なっています。元の位置に戻します。');
+              moveState.active = false;
+              moveState.planId = null; moveState.baseRow = null;
+              moveState.startCol = null; moveState.endCol = null;
+              moveState.offsetCols = 0; moveState.offsetRow = 0;
+              moveState.prev = null; moveState.conflicted = false;
+              return;
+            }
+            const pid = moveState.planId;
+            const row = moveState.baseRow;
+            const plan = planMap[pid] || {};
+            const times = timesFromRange(moveState.startCol, moveState.endCol);
+            if (!String(pid).startsWith('new-')) {
+              if (plan.scheduleType === 'FLEXIBLE') {
+                // Persist lane/staff only for move; duration unchanged
+                pendingUpdates.push({ planId: pid, scheduleType: 'FLEXIBLE', requiredDurationMinutes: plan.requiredDurationMinutes, requiredStaffCount: moveState.staff, lane: row + 1, active: true });
+              } else {
+                pendingUpdates.push({ planId: pid, scheduleType: 'FIXED', fixedStartTime: times.start, fixedEndTime: times.end, requiredStaffCount: moveState.staff, lane: row + 1, active: true });
+              }
+            } else {
+              const idx = pendingCreates.findIndex(x => x.tempId === pid);
+              if (idx >= 0) {
+                const c = pendingCreates[idx];
+                c.lane = row + 1;
+                if (c.scheduleType === 'FIXED') { c.fixedStartTime = times.start; c.fixedEndTime = times.end; }
+                pendingCreates[idx] = c;
+              }
+            }
+            // Update planMap
+            const p = planMap[pid] || {};
+            if (p.scheduleType === 'FIXED') { p.fixedStartTime = times.start; p.fixedEndTime = times.end; }
+            p.requiredStaffCount = moveState.staff; p.lane = row + 1;
+            planMap[pid] = p;
+            // Re-enable pointer events
+            try { const blk = document.getElementById(`plan-block-${pid}`); if (blk) blk.style.pointerEvents = ''; } catch {}
+            // Reset
+            moveState.active = false;
+            moveState.planId = null; moveState.baseRow = null;
+            moveState.startCol = null; moveState.endCol = null;
+            moveState.offsetCols = 0; moveState.offsetRow = 0;
+            moveState.prev = null; moveState.conflicted = false;
+            return;
+          }
+          finalizeRange();
+        });
+
+      // Helper: open edit modal for a given filled cell
+        function openEditForCell(cell) {
+          currentCtxCell = cell;
+          const pid = cell.dataset.planId;
+          const row = Number(cell.dataset.row);
+          // Determine contiguous block of the same plan in the row
+          const col = Number(cell.dataset.col);
+          let start = col;
+          let end = col + 1;
+          for (let c = col - 1; c >= 0; c--) {
+            const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            start = c;
+          }
+          for (let c = col + 1; c < cols; c++) {
+            const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            end = c + 1;
+          }
+          const range = timesFromRange(start, end);
+          // Prefill schedule type & fields
+          const plan = planMap[pid] || {};
+          const scheduleType = plan.scheduleType || 'FIXED';
+          const scheduleTypeEl = document.getElementById('editScheduleType');
+          if (scheduleTypeEl) scheduleTypeEl.value = scheduleType;
+          toggleScheduleGroups(scheduleType);
+          if (scheduleType === 'FIXED') {
+            document.getElementById('editStart').value = range.start;
+            document.getElementById('editEnd').value = range.end;
+          } else {
+            document.getElementById('editWinStart').value = plan.windowStartTime || '';
+            document.getElementById('editWinEnd').value = plan.windowEndTime || '';
+            document.getElementById('editDuration').value = plan.requiredDurationMinutes || '';
+          }
+          const staff = cell.dataset.staff ? Number(cell.dataset.staff) : (plan.requiredStaffCount || 1);
+          document.getElementById('editStaff').value = String(staff);
+          const active = cell.dataset.active ? (cell.dataset.active === 'true') : true;
+          document.getElementById('editActive').checked = active;
+          document.getElementById('editNote').value = plan.note || '';
+          try {
+            editModal = editModal || new bootstrap.Modal(editModalEl);
+            editModal.show();
+          } catch (e) {
+            console.warn('Bootstrap modal not available', e);
+          }
+        }
+
+        // Body rows
+        for (let r = 0; r < rows; r++) {
+          const label = document.createElement('div');
+          label.className = 'row-label';
+          label.textContent = `Lane ${r+1}`;
+          grid.appendChild(label);
+          for (let c = 0; c < cols; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.row = String(r);
+            cell.dataset.col = String(c);
+            cell.title = timeLabelFromSlot(c);
+            cell.addEventListener('mousedown', (ev) => {
+              // Left click
+              if (ev.button === 0) {
+                // If user grabbed the resize handle, don't trigger modal/drag-add here
+                if (ev.target && ev.target.closest && ev.target.closest('.resize-handle')) {
+                  // Let the global handle listener take over
+                  return;
+                }
+                // If cell already filled, open modal (resize is handled by handle)
+                if (cell.classList.contains('filled')) {
+                  openEditForCell(cell);
+                  ev.preventDefault();
+                  return;
+                }
+                // Start drag-add on empty cells only
+                const dept = selectedDept;
+                const task = document.getElementById('gridTask').value;
+                if (!dept || !task) {
+                  alert(!dept ? '部門を選択してください' : '作業マスタを選択してください');
+                  return;
+                }
+                dragState.active = true;
+                dragState.row = Number(cell.dataset.row);
+                dragState.startCol = Number(cell.dataset.col);
+                dragState.endCol = Number(cell.dataset.col);
+                highlightRange(dragState.row, dragState.startCol, dragState.endCol);
+                ev.preventDefault();
+                return;
+              }
+              // Right button is handled by contextmenu listener below
+            });
+            cell.addEventListener('mouseenter', () => {
+              const row = Number(cell.dataset.row);
+              // Move in-progress (disabled unless ENABLE_BLOCK_DRAG)
+              if (ENABLE_BLOCK_DRAG && moveState.active) {
+                const plan = planMap[moveState.planId] || {};
+                const isFlexible = (plan.scheduleType === 'FLEXIBLE');
+                const widthSlots = moveState.endCol - moveState.startCol;
+                // Initialize offsets on first hover
+                if (moveState.offsetCols === 0 && moveState.offsetRow === 0) {
+                  moveState.offsetCols = Number(cell.dataset.col) - moveState.startCol;
+                  moveState.offsetRow = Number(cell.dataset.row) - moveState.baseRow;
+                }
+                let targetBaseRow = Number(cell.dataset.row) - moveState.offsetRow;
+                let targetStart = Number(cell.dataset.col) - moveState.offsetCols;
+                if (isNaN(targetBaseRow)) targetBaseRow = moveState.baseRow;
+                if (isNaN(targetStart)) targetStart = moveState.startCol;
+                // clamp rows by staff
+                targetBaseRow = Math.max(0, Math.min(15 - moveState.staff, targetBaseRow));
+                // clamp columns
+                const cols = Math.floor(1440 / RES_MIN);
+                targetStart = Math.max(0, Math.min(cols - widthSlots, targetStart));
+                let targetEnd = targetStart + widthSlots;
+                if (isFlexible) {
+                  const winStart = timeToSlot(plan.windowStartTime);
+                  const winEnd = timeToSlot(plan.windowEndTime);
+                  if (winStart >= 0 && winEnd > winStart) {
+                    if (targetStart < winStart) { targetStart = winStart; targetEnd = targetStart + widthSlots; }
+                    if (targetEnd > winEnd) { targetEnd = winEnd; targetStart = targetEnd - widthSlots; }
+                  }
+                }
+                // conflict check
+                if (!hasBlockConflict(targetBaseRow, moveState.staff, targetStart, targetEnd, moveState.planId)) {
+                  const times = timesFromRange(targetStart, targetEnd);
+                  createOrUpdateBlock(targetBaseRow, moveState.planId, targetStart, targetEnd, moveState.taskCode, moveState.staff, moveState.colorClass, times.start, times.end);
+                  if (isFlexible) {
+                    const winStart = timeToSlot(plan.windowStartTime);
+                    const winEnd = timeToSlot(plan.windowEndTime);
+                    if (winStart >= 0 && winEnd > winStart) {
+                      createOrUpdateWindow(targetBaseRow, moveState.planId, winStart, winEnd, moveState.staff, moveState.colorClass, moveState.taskCode);
+                    }
+                  }
+                  try { setSingleHandle(moveState.planId, targetEnd); } catch {}
+                  moveState.baseRow = targetBaseRow;
+                  moveState.startCol = targetStart;
+                  moveState.endCol = targetEnd;
+                  moveState.conflicted = false;
+                } else {
+                  moveState.conflicted = true;
+                }
+                return;
+              }
+              // Resize in-progress
+              if (resizeState.active) {
+                const col = Number(cell.dataset.col);
+                let newStart = resizeState.startCol;
+                let newEnd = resizeState.endCol;
+                // Determine base row and current/new staff across lanes
+                const rowsForPlan = getRowsForPlan(resizeState.planId);
+                const baseRow = rowsForPlan.length > 0 ? Math.min(...rowsForPlan) : resizeState.row;
+                let newStaff = resizeState.staff;
+                if (row >= baseRow) {
+                  newStaff = Math.min(row - baseRow + 1, 15 - baseRow);
+                  if (newStaff < 1) newStaff = 1;
+                }
+                const plan = planMap[resizeState.planId] || {};
+                const isFlexible = (plan.scheduleType === 'FLEXIBLE');
+                const winStartSlot = isFlexible ? timeToSlot(plan.windowStartTime) : null;
+                const winEndSlot = isFlexible ? timeToSlot(plan.windowEndTime) : null;
+                if (resizeState.edge === 'start') {
+                  // Propose newStart, ensure at least 1 slot
+                  newStart = Math.min(col, resizeState.endCol - 1);
+                  // If proposed overlaps, flag and bail (revert on mouseup)
+                  const conflictStart = hasBlockConflict(baseRow, newStaff, newStart, resizeState.endCol, resizeState.planId);
+                  if (conflictStart) { resizeState.conflicted = true; return; }
+                  // Clamp against conflicts across all lanes using block-level check
+                  while (hasBlockConflict(baseRow, newStaff, newStart, resizeState.endCol, resizeState.planId)) {
+                    newStart++;
+                    if (newStart >= resizeState.endCol) { newStart = resizeState.endCol - 1; break; }
+                  }
+                  // For FLEXIBLE, ensure start stays within window start
+                  if (isFlexible && winStartSlot !== null) {
+                    if (newStart < winStartSlot) newStart = winStartSlot;
+                  }
+                } else if (resizeState.edge === 'end') {
+                  newEnd = Math.max(col + 1, resizeState.startCol + 1);
+                  // If proposed overlaps, flag and bail (revert on mouseup)
+                  const conflictEnd = hasBlockConflict(baseRow, newStaff, resizeState.startCol, newEnd, resizeState.planId);
+                  if (conflictEnd) { resizeState.conflicted = true; return; }
+                  while (hasBlockConflict(baseRow, newStaff, resizeState.startCol, newEnd, resizeState.planId)) {
+                    newEnd--;
+                    if (newEnd <= resizeState.startCol) { newEnd = resizeState.startCol + 1; break; }
+                  }
+                  // Ensure non-empty
+                  if (newEnd <= resizeState.startCol) newEnd = resizeState.startCol + 1;
+                  // For FLEXIBLE, ensure end stays within window end
+                  if (isFlexible && winEndSlot !== null) {
+                    if (newEnd > winEndSlot) newEnd = winEndSlot;
+                  }
+                }
+                // Repaint only if changed
+                if (newStart !== resizeState.startCol || newEnd !== resizeState.endCol || newStaff !== resizeState.staff) {
+                  const times = timesFromRange(newStart, newEnd);
+                  // Update duration block
+                  createOrUpdateBlock(baseRow, resizeState.planId, newStart, newEnd, resizeState.taskCode, newStaff, resizeState.colorClass, times.start, times.end);
+                  // If FLEXIBLE, also update window overlay height and bounds
+                  if (isFlexible && winStartSlot !== null && winEndSlot !== null && winEndSlot > winStartSlot) {
+                    createOrUpdateWindow(baseRow, resizeState.planId, winStartSlot, winEndSlot, newStaff, resizeState.colorClass, resizeState.taskCode);
+                  }
+                  // Restore the single bottom-right handle for this plan during live resize
+                  try { setSingleHandle(resizeState.planId, newEnd); } catch (e) {}
+                  resizeState.startCol = newStart;
+                  resizeState.endCol = newEnd;
+                  resizeState.staff = newStaff;
+                }
+                return;
+              }
+              // Drag-add in-progress
+              if (!dragState.active) return;
+              if (row !== dragState.row) return; // restrict to same row selection
+              dragState.endCol = Number(cell.dataset.col);
+              highlightRange(dragState.row, dragState.startCol, dragState.endCol);
+            });
+            // Disable right-click per cell
+            cell.addEventListener('contextmenu', (ev) => { ev.preventDefault(); return; });
+            grid.appendChild(cell);
+          }
+        }
+
+        // Load and display existing plans
+        loadExistingPlans();
+      }
+
+      function loadExistingPlans() {
+        if (!gridPlans || gridPlans.length === 0) {
+          return;
+        }
+
+        // Create a map of task codes to names
+        const taskNameMap = {};
+        if (masters) {
+          masters.forEach(m => {
+            taskNameMap[m.taskCode] = m.name || m.taskCode;
+          });
+        }
+
+        gridPlans.forEach((plan, index) => {
+          if (plan && plan.planId) {
+            planMap[String(plan.planId)] = plan;
+          }
+          const baseRow = (plan.lane && plan.lane >= 1 && plan.lane <= 15) ? (plan.lane - 1) : (index % 15);
+          const staffCnt = Math.max(1, Number(plan.requiredStaffCount || 1));
+          const taskColorClass = getTaskColorClass(plan.taskCode);
+          const scheduleType = plan.scheduleType || 'FIXED';
+          if (scheduleType === 'FIXED') {
+            if (!plan.fixedStartTime || !plan.fixedEndTime) return;
+            const startSlot = timeToSlot(plan.fixedStartTime);
+            const endSlot = timeToSlot(plan.fixedEndTime);
+            if (startSlot >= 0 && endSlot > startSlot) {
+              const range = timesFromRange(startSlot, endSlot);
+              createOrUpdateBlock(baseRow, plan.planId, startSlot, endSlot, plan.taskCode, staffCnt, taskColorClass, range.start, range.end);
+              setSingleHandle(plan.planId, endSlot);
+              // remove any window overlay if present
+              const oldWin = document.getElementById(`plan-window-${plan.planId}`);
+              if (oldWin) oldWin.remove();
+            }
+          } else {
+            // FLEXIBLE: show window as semi-transparent overlay; bar length = requiredDurationMinutes
+            const winStartSlot = timeToSlot(plan.windowStartTime);
+            const winEndSlot = timeToSlot(plan.windowEndTime);
+            const durationMin = Number(plan.requiredDurationMinutes || 0);
+            const durationSlots = Math.max(1, Math.ceil(durationMin / RES_MIN));
+            if (winStartSlot >= 0 && winEndSlot > winStartSlot) {
+              createOrUpdateWindow(baseRow, plan.planId, winStartSlot, winEndSlot, staffCnt, taskColorClass, plan.taskCode);
+              const blockStart = winStartSlot;
+              const blockEnd = Math.min(winStartSlot + durationSlots, winEndSlot);
+              createOrUpdateBlock(baseRow, plan.planId, blockStart, blockEnd, plan.taskCode, staffCnt, taskColorClass, null, null);
+              // Add handle for FLEXIBLE to adjust duration length
+              setSingleHandle(plan.planId, blockEnd);
+            }
+          }
+        });
+      }
+
+      // 共通タスクツリーを初期化
+      const taskTree = new TaskTree({
+        container: document.getElementById('taskTreeList'),
+        masters,
+        categories,
+        onTaskSelect: (code, data) => {
+          const hid = document.getElementById('gridTask');
+          if (hid) hid.value = code || '';
+          const lbl = document.getElementById('selectedTaskLabel');
+          if (lbl) lbl.textContent = data ? `${data.name}` : '未選択';
+        }
+      });
+      taskTree.render();
+      // attach search and keyboard navigation
+      const searchEl = document.getElementById('taskTreeList-search');
+      if (searchEl) taskTree.attachSearch(searchEl);
+      taskTree.enableKeyboardNavigation();
+
+      // Rebuild traditional selects to use optgroup hierarchy
+      function rebuildTaskSelects() {
+        const cats = taskTree.buildCategoryMap(masters);
+        document.querySelectorAll('select.task-select').forEach(sel => {
+          const current = sel.value;
+          sel.innerHTML = '';
+          const def = document.createElement('option'); def.value=''; def.textContent='選択してください'; sel.appendChild(def);
+          cats.forEach(cat => {
+            const og = document.createElement('optgroup'); og.label = cat.name;
+            cat.tasks.forEach(t => {
+              const opt = document.createElement('option'); opt.value = t.taskCode; opt.textContent = `${t.name}`;
+              og.appendChild(opt);
+            });
+            sel.appendChild(og);
+          });
+          if (current) sel.value = current;
+        });
+      }
+      rebuildTaskSelects();
+
+      // Context menu handlers and modal editing for grid blocks
+      const ctxMenu = document.getElementById('planCtxMenu');
+      const ctxEditBtn = document.getElementById('ctxEditBtn');
+      const ctxDeleteBtn = document.getElementById('ctxDeleteBtn');
+      const editModalEl = document.getElementById('planEditModal');
+      let editModal = null;
+      let currentCtxCell = null; // may hold a cell or a plan-block element
+
+      function closeContextMenu() {
+        if (ctxMenu) ctxMenu.style.display = 'none';
+      }
+      function openContextMenu(x, y, cell) {
+        currentCtxCell = cell;
+        if (!ctxMenu) return;
+        ctxMenu.style.left = `${x}px`;
+        ctxMenu.style.top = `${y}px`;
+        ctxMenu.style.display = 'block';
+      }
+
+      document.addEventListener('click', (e) => {
+        if (ctxMenu && ctxMenu.style.display === 'block') {
+          const inside = e.target === ctxMenu || ctxMenu.contains(e.target);
+          if (!inside) closeContextMenu();
+        }
+      });
+
+      // Right-click on a plan block opens the edit dialog
+      document.addEventListener('contextmenu', (ev) => {
+        const block = ev.target.closest && ev.target.closest('.plan-block');
+        if (!block) return;
+        ev.preventDefault();
+        currentCtxCell = block;
+        // Inline open logic
+        const pid = block.dataset.planId;
+        const plan = planMap[pid] || {};
+        const scheduleType = plan.scheduleType || 'FIXED';
+        const scheduleTypeEl = document.getElementById('editScheduleType');
+        scheduleTypeEl.value = scheduleType;
+        toggleScheduleGroups(scheduleType);
+        const start = Number(block.dataset.startCol || '0');
+        const end = Number(block.dataset.endCol || '0');
+        if (scheduleType === 'FIXED') {
+          const range = timesFromRange(start, end);
+          document.getElementById('editStart').value = range.start;
+          document.getElementById('editEnd').value = range.end;
+        } else {
+          document.getElementById('editWinStart').value = plan.windowStartTime || '';
+          document.getElementById('editWinEnd').value = plan.windowEndTime || '';
+          document.getElementById('editDuration').value = plan.requiredDurationMinutes || '';
+        }
+        const staff = block.dataset.staff ? Number(block.dataset.staff) : (plan.requiredStaffCount || 1);
+        document.getElementById('editStaff').value = String(staff);
+        const active = block.dataset.active ? (block.dataset.active === 'true') : true;
+        document.getElementById('editActive').checked = active;
+        document.getElementById('editNote').value = plan.note || '';
+        try {
+          editModal = editModal || new bootstrap.Modal(editModalEl);
+          editModal.show();
+        } catch (e) {
+          console.warn('Bootstrap modal not available', e);
+        }
+      });
+
+      // Disable left-click edit when drag is enabled; keep for non-drag mode
+      document.addEventListener('click', (ev) => {
+        if (ENABLE_BLOCK_DRAG) return; // left-click used for drag, not modal
+        const handle = ev.target.closest && ev.target.closest('.resize-handle');
+        if (handle) return;
+        const block = ev.target.closest && ev.target.closest('.plan-block');
+        if (!block) return;
+        currentCtxCell = block;
+        if (ctxEditBtn) { try { ctxEditBtn.click(); return; } catch {} }
+      });
+
+      if (ctxEditBtn) {
+        ctxEditBtn.addEventListener('click', () => {
+          if (!currentCtxCell) return;
+          const pid = currentCtxCell.dataset.planId;
+          const plan = planMap[pid] || {};
+          const scheduleType = plan.scheduleType || 'FIXED';
+          const scheduleTypeEl = document.getElementById('editScheduleType');
+          scheduleTypeEl.value = scheduleType;
+          toggleScheduleGroups(scheduleType);
+          let start, end, row;
+          if (currentCtxCell.classList && currentCtxCell.classList.contains('plan-block')) {
+            start = Number(currentCtxCell.dataset.startCol);
+            end = Number(currentCtxCell.dataset.endCol);
+            row = Number(currentCtxCell.dataset.row);
+          } else {
+            // Fallback for cell-based context
+            row = Number(currentCtxCell.dataset.row);
+            let col = Number(currentCtxCell.dataset.col);
+            let s = col, e = col + 1;
+            for (let c = col - 1; c >= 0; c--) {
+              const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+              if (!cell || cell.dataset.planId !== pid) break;
+              s = c;
+            }
+            for (let c = col + 1; c < cols; c++) {
+              const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+              if (!cell || cell.dataset.planId !== pid) break;
+              e = c + 1;
+            }
+            start = s; end = e;
+          }
+          if (scheduleType === 'FIXED') {
+            const range = timesFromRange(start, end);
+            document.getElementById('editStart').value = range.start;
+            document.getElementById('editEnd').value = range.end;
+          } else {
+            document.getElementById('editWinStart').value = plan.windowStartTime || '';
+            document.getElementById('editWinEnd').value = plan.windowEndTime || '';
+            document.getElementById('editDuration').value = plan.requiredDurationMinutes || '';
+          }
+          const staff = currentCtxCell.dataset.staff ? Number(currentCtxCell.dataset.staff) : (plan.requiredStaffCount || 1);
+          document.getElementById('editStaff').value = String(staff);
+          const active = currentCtxCell.dataset.active ? (currentCtxCell.dataset.active === 'true') : true;
+          document.getElementById('editActive').checked = active;
+          document.getElementById('editNote').value = plan.note || '';
+          closeContextMenu();
+          try {
+            editModal = editModal || new bootstrap.Modal(editModalEl);
+            editModal.show();
+          } catch (e) {
+            console.warn('Bootstrap modal not available', e);
+          }
+        });
+      }
+
+      const scheduleTypeEl = document.getElementById('editScheduleType');
+      function toggleScheduleGroups(type) {
+        document.querySelectorAll('.fixed-group').forEach(el => el.style.display = (type === 'FIXED') ? '' : 'none');
+        document.querySelectorAll('.flexible-group').forEach(el => el.style.display = (type === 'FLEXIBLE') ? '' : 'none');
+      }
+      if (scheduleTypeEl) {
+        scheduleTypeEl.addEventListener('change', (e) => {
+          const newType = e.target.value;
+          // When switching from FIXED to FLEXIBLE in edit dialog, carry over start/end
+          if (newType === 'FLEXIBLE') {
+            const start = (document.getElementById('editStart')?.value || '').trim();
+            const end = (document.getElementById('editEnd')?.value || '').trim();
+            if (start && end) {
+              const winStartEl = document.getElementById('editWinStart');
+              const winEndEl = document.getElementById('editWinEnd');
+              const durationEl = document.getElementById('editDuration');
+              if (winStartEl) winStartEl.value = start;
+              if (winEndEl) winEndEl.value = end;
+              const ss = timeToSlot(start);
+              const es = timeToSlot(end);
+              if (durationEl && ss >= 0 && es > ss) {
+                durationEl.value = String((es - ss) * 15);
+              }
+            }
+          }
+          toggleScheduleGroups(newType);
+        });
+      }
+
+      // Start resize when dragging the bottom-right handle (supports plan-block)
+      document.addEventListener('mousedown', (ev) => {
+        const target = ev.target;
+        if (!(target instanceof Element)) return;
+        if (target.classList.contains('resize-handle')) {
+          const parent = target.parentElement;
+          if (!parent) return;
+          // If resizing a plan-block
+          if (parent.classList.contains('plan-block')) {
+            const pid = parent.dataset.planId;
+            const row = Number(parent.dataset.row);
+            const plan = planMap[pid] || {};
+            // Allow handle resize for FIXED and FLEXIBLE (duration) plans
+            const start = Number(parent.dataset.startCol);
+            const end = Number(parent.dataset.endCol);
+            resizeState.active = true;
+            resizeState.row = row;
+            resizeState.planId = pid;
+            resizeState.startCol = start;
+            resizeState.endCol = end;
+            resizeState.edge = 'end';
+            resizeState.taskCode = parent.dataset.taskCode || '';
+            resizeState.staff = parent.dataset.staff ? Number(parent.dataset.staff) : (plan.requiredStaffCount || 1);
+            resizeState.colorClass = getTaskColorClass(resizeState.taskCode);
+            resizeState.prev = { baseRow: row, startCol: start, endCol: end, staff: resizeState.staff };
+            resizeState.conflicted = false;
+            // Allow underlying cells to receive mouseenter during drag
+            try { parent.style.pointerEvents = 'none'; } catch {}
+            ev.preventDefault();
+            ev.stopPropagation();
+            return;
+          }
+          // Backward compatibility: if handle inside a cell (shouldn't happen after block migration)
+          const cell = parent;
+          const pid = cell.dataset.planId;
+          const row = Number(cell.dataset.row);
+          const plan = planMap[pid] || {};
+          // Allow for FIXED and FLEXIBLE
+          const col = Number(cell.dataset.col);
+          // Compute contiguous block bounds for this plan id on this row
+          let start = col;
+          let end = col + 1;
+          for (let c = col - 1; c >= 0; c--) {
+            const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            start = c;
+          }
+          for (let c = col + 1; c < cols; c++) {
+            const el = document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+            if (!el || el.dataset.planId !== pid) break;
+            end = c + 1;
+          }
+          resizeState.active = true;
+          resizeState.row = row;
+          resizeState.planId = pid;
+          resizeState.startCol = start;
+          resizeState.endCol = end;
+          resizeState.edge = 'end';
+          resizeState.taskCode = cell.dataset.taskCode || '';
+          resizeState.staff = cell.dataset.staff ? Number(cell.dataset.staff) : (plan.requiredStaffCount || 1);
+          resizeState.colorClass = getTaskColorClass(resizeState.taskCode);
+          resizeState.prev = { baseRow: row, startCol: start, endCol: end, staff: resizeState.staff };
+          resizeState.conflicted = false;
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        // Start move when dragging a plan-block (not the resize handle)
+        const block = target.closest && target.closest('.plan-block');
+        if (ENABLE_BLOCK_DRAG && block && !target.classList.contains('resize-handle')) {
+          const pid = block.dataset.planId;
+          const plan = planMap[pid] || {};
+          moveState.active = true;
+          moveState.planId = pid;
+          moveState.baseRow = Number(block.dataset.row || '0');
+          moveState.startCol = Number(block.dataset.startCol || '0');
+          moveState.endCol = Number(block.dataset.endCol || '0');
+          moveState.staff = block.dataset.staff ? Number(block.dataset.staff) : (plan.requiredStaffCount || 1);
+          moveState.taskCode = block.dataset.taskCode || '';
+          moveState.colorClass = getTaskColorClass(moveState.taskCode);
+          moveState.offsetCols = 0; moveState.offsetRow = 0;
+          moveState.prev = { baseRow: moveState.baseRow, startCol: moveState.startCol, endCol: moveState.endCol, staff: moveState.staff };
+          moveState.conflicted = false;
+          try { block.style.pointerEvents = 'none'; } catch {}
+          ev.preventDefault();
+          ev.stopPropagation();
+          return;
+        }
+      });
+
+      if (ctxDeleteBtn) {
+        ctxDeleteBtn.addEventListener('click', () => {
+          if (!currentCtxCell) return;
+          const pid = currentCtxCell.dataset.planId;
+          closeContextMenu();
+          if (!pid) return;
+          // If this is a staged new item, remove from pendingCreates instead of server delete
+          if (String(pid).startsWith('new-')) {
+            const idx = pendingCreates.findIndex(x => x.tempId === pid);
+            if (idx >= 0) pendingCreates.splice(idx, 1);
+          } else {
+            // Stage pending delete
+            if (!pendingDeletes.includes(pid)) pendingDeletes.push(pid);
+          }
+          // Remove the single block and overlay (local only)
+          const block = document.getElementById(`plan-block-${pid}`);
+          if (block) block.remove();
+          const overlay = document.getElementById(`plan-window-${pid}`);
+          if (overlay) overlay.remove();
+          // Remove from planMap for safety
+          delete planMap[pid];
+        });
+      }
+
+      const editSaveBtn = document.getElementById('editSaveBtn');
+      if (editSaveBtn) {
+        editSaveBtn.addEventListener('click', async () => {
+          if (!currentCtxCell) return;
+          const pid = currentCtxCell.dataset.planId;
+          const row = Number(currentCtxCell.dataset.row);
+          const start = document.getElementById('editStart').value;
+          const end = document.getElementById('editEnd').value;
+          const staff = document.getElementById('editStaff').value || '1';
+          const active = document.getElementById('editActive').checked;
+          const note = document.getElementById('editNote').value || '';
+          const scheduleType = document.getElementById('editScheduleType').value || 'FIXED';
+          const winStart = document.getElementById('editWinStart').value;
+          const winEnd = document.getElementById('editWinEnd').value;
+          const duration = document.getElementById('editDuration').value;
+          // Compute target slots for conflict check
+          const startSlot = timeToSlot(scheduleType === 'FIXED' ? start : (winStart || start));
+          const endSlot = timeToSlot(scheduleType === 'FIXED' ? end : (winEnd || end));
+          if (startSlot < 0 || !(endSlot > startSlot)) {
+            alert('開始/終了時刻が不正です');
+            return;
+          }
+          // Conflict check across lanes for this block, excluding same plan id
+          if (hasBlockConflict(row, Number(staff || '1'), startSlot, endSlot, pid)) {
+            // silently ignore overlapping edits (do not close modal)
+            return;
+          }
+
+          // Stage update: if new item, update pendingCreates; otherwise stage in pendingUpdates
+          if (String(pid).startsWith('new-')) {
+            const idx = pendingCreates.findIndex(x => x.tempId === pid);
+            if (idx >= 0) {
+              const c = pendingCreates[idx];
+              c.scheduleType = scheduleType;
+              if (scheduleType === 'FIXED') {
+                c.fixedStartTime = start; c.fixedEndTime = end;
+                c.windowStartTime = undefined; c.windowEndTime = undefined; c.requiredDurationMinutes = undefined;
+              } else {
+                c.fixedStartTime = undefined; c.fixedEndTime = undefined;
+                c.windowStartTime = winStart; c.windowEndTime = winEnd; c.requiredDurationMinutes = duration ? Number(duration) : undefined;
+              }
+              c.requiredStaffCount = Number(staff);
+              c.lane = row + 1;
+              pendingCreates[idx] = c;
+            }
+          } else {
+            pendingUpdates.push({ planId: pid, scheduleType, fixedStartTime: start, fixedEndTime: end, windowStartTime: winStart, windowEndTime: winEnd, requiredDurationMinutes: duration ? Number(duration) : undefined, requiredStaffCount: Number(staff), lane: row + 1, active, note });
+          }
+          try {
+            // Update planMap for this plan id
+            const p = planMap[pid] || {};
+            p.scheduleType = scheduleType;
+            if (scheduleType === 'FIXED') {
+              p.fixedStartTime = start; p.fixedEndTime = end;
+              p.windowStartTime = undefined; p.windowEndTime = undefined; p.requiredDurationMinutes = undefined;
+            } else {
+              p.fixedStartTime = undefined; p.fixedEndTime = undefined;
+              p.windowStartTime = winStart; p.windowEndTime = winEnd; p.requiredDurationMinutes = duration ? Number(duration) : undefined;
+            }
+            p.requiredStaffCount = Number(staff);
+            p.lane = row + 1;
+            planMap[pid] = p;
+            // Update visual: block/window representation
+            const taskCode = currentCtxCell.dataset.taskCode || '';
+            const colorClass = getTaskColorClass(taskCode);
+            if (scheduleType === 'FIXED') {
+              createOrUpdateBlock(row, pid, startSlot, endSlot, taskCode, Number(staff || '1'), colorClass, start, end);
+              setSingleHandle(pid, endSlot);
+              const oldWin = document.getElementById(`plan-window-${pid}`);
+              if (oldWin) oldWin.remove();
+            } else {
+              const winStartSlot = timeToSlot(winStart);
+              const winEndSlot = timeToSlot(winEnd);
+              let durationMin = Number(duration || '0');
+              // If duration not specified, carry over from start/end
+              if ((!durationMin || isNaN(durationMin)) && winStartSlot >= 0 && winEndSlot > winStartSlot) {
+                durationMin = (winEndSlot - winStartSlot) * RES_MIN;
+              }
+              const durationSlots = Math.max(1, Math.ceil(durationMin / RES_MIN));
+              if (winStartSlot >= 0 && winEndSlot > winStartSlot) {
+                createOrUpdateWindow(row, pid, winStartSlot, winEndSlot, Number(staff || '1'), colorClass, taskCode);
+                const blockStart = winStartSlot;
+                const blockEnd = Math.min(winStartSlot + durationSlots, winEndSlot);
+                createOrUpdateBlock(row, pid, blockStart, blockEnd, taskCode, Number(staff || '1'), colorClass, null, null);
+                // add handle for FLEXIBLE so length can be adjusted
+                setSingleHandle(pid, blockEnd);
+              }
+            }
+            try { if (editModal) editModal.hide(); } catch {}
+          } catch (e) {
+            alert(e.message || '更新エラー');
+          }
+        });
+      }
+
+      // Delete from edit modal button
+      const editDeleteBtn = document.getElementById('editDeleteBtn');
+      if (editDeleteBtn) {
+        editDeleteBtn.addEventListener('click', () => {
+          if (!currentCtxCell) return;
+          const pid = currentCtxCell.dataset.planId;
+          if (!pid) return;
+          // If this is a staged new item, remove from pendingCreates instead of server delete
+          if (String(pid).startsWith('new-')) {
+            const idx = pendingCreates.findIndex(x => x.tempId === pid);
+            if (idx >= 0) pendingCreates.splice(idx, 1);
+          } else {
+            // Stage pending delete
+            if (!pendingDeletes.includes(pid)) pendingDeletes.push(pid);
+          }
+          // Remove the single block and overlay (local only)
+          const block = document.getElementById(`plan-block-${pid}`);
+          if (block) block.remove();
+          const overlay = document.getElementById(`plan-window-${pid}`);
+          if (overlay) overlay.remove();
+          // Remove from planMap for safety
+          delete planMap[pid];
+          try { if (editModal) editModal.hide(); } catch {}
+        });
+      }
+
+      // One-click commit for staged creates/updates/deletes
+      const gridSaveBtn = document.getElementById('gridSaveBtn');
+      if (gridSaveBtn) {
+        gridSaveBtn.addEventListener('click', async () => {
+          gridSaveBtn.disabled = true;
+          gridSaveBtn.textContent = '保存中...';
+          try {
+            const { header, token } = getCsrf();
+            // Delete pending plans first
+            while (pendingDeletes.length) {
+              const id = pendingDeletes.shift();
+              const form = new URLSearchParams();
+              form.set('store', storeCode);
+              form.set('mode', mode);
+              form.set('day', String(selectedDow || 1));
+              if (selectedDept) form.set('dept', selectedDept);
+              const resDel = await fetch(`/tasks/plan/${id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(header && token ? { [header]: token } : {}) }, body: form.toString() });
+              if (!resDel.ok) throw new Error('削除に失敗しました');
+            }
+            // Create pending plans
+            while (pendingCreates.length) {
+              const c = pendingCreates.shift();
+              const form = new URLSearchParams();
+              form.set('mode', c.mode);
+              form.set('storeCode', c.storeCode);
+              form.set('dayOfWeek', String(c.dayOfWeek));
+              form.set('departmentCode', c.departmentCode);
+              form.set('taskCode', c.taskCode);
+              form.set('scheduleType', 'FIXED');
+              form.set('fixedStartTime', c.fixedStartTime);
+              form.set('fixedEndTime', c.fixedEndTime);
+              form.set('requiredStaffCount', String(c.requiredStaffCount));
+              form.set('lane', String(c.lane));
+              const res = await fetch('/tasks/plan', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(header && token ? { [header]: token } : {}) }, body: form.toString() });
+              if (!res.ok) throw new Error('作成に失敗しました');
+              const body = await res.json().catch(() => ({}));
+              const newId = body?.id;
+              if (newId) {
+                document.querySelectorAll(`.cell.filled[data-plan-id="${c.tempId}"]`).forEach(el => { el.dataset.planId = String(newId); });
+                planMap[String(newId)] = { planId: newId, taskCode: c.taskCode, scheduleType: 'FIXED', fixedStartTime: c.fixedStartTime, fixedEndTime: c.fixedEndTime, lane: c.lane, requiredStaffCount: c.requiredStaffCount };
+              }
+            }
+            // Update pending plans
+            while (pendingUpdates.length) {
+              const u = pendingUpdates.shift();
+              const form = new URLSearchParams();
+              form.set('scheduleType', u.scheduleType);
+              if (u.scheduleType === 'FIXED') { form.set('fixedStartTime', u.fixedStartTime || ''); form.set('fixedEndTime', u.fixedEndTime || ''); }
+              else {
+                if (u.windowStartTime) form.set('windowStartTime', u.windowStartTime);
+                if (u.windowEndTime) form.set('windowEndTime', u.windowEndTime);
+                if (typeof u.requiredDurationMinutes !== 'undefined') form.set('requiredDurationMinutes', String(u.requiredDurationMinutes));
+              }
+              form.set('requiredStaffCount', String(u.requiredStaffCount));
+              form.set('lane', String(u.lane));
+              form.set('active', String(u.active));
+              if (u.note) form.set('note', u.note);
+              form.set('store', storeCode);
+              form.set('mode', mode);
+              form.set('day', String(selectedDow || 1));
+              if (selectedDept) form.set('dept', selectedDept);
+              const res = await fetch(`/tasks/plan/${u.planId}/update`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(header && token ? { [header]: token } : {}) }, body: form.toString() });
+              if (!res.ok) throw new Error('更新に失敗しました');
+            }
+            // All operations finished successfully: reload the page to reflect server state
+            window.location.reload();
+            return;
+          } catch (e) {
+            alert(e.message || '保存中にエラーが発生しました');
+          } finally {
+            gridSaveBtn.disabled = false;
+            gridSaveBtn.textContent = '保存';
+          }
+        });
+      }
+
+      function timesFromRange(startSlot, endSlotExclusive) {
+        const startMin = startSlot * RES_MIN;
+        const endMinRaw = endSlotExclusive * RES_MIN; // could be 1440 when reaching 24:00
+        const endMin = Math.min(endMinRaw, 1439); // clamp to 23:59 to avoid 24:00 parse issues
+        const sh = Math.floor(startMin / 60), sm = startMin % 60;
+        const eh = Math.floor(endMin / 60), em = endMin % 60;
+        return { start: `${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`, end: `${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}` };
+      }
+      function formatDate(d) {
+        try {
+          // d may be like '2025-10-10' or Date object/ISO string
+          const date = (d instanceof Date) ? d : new Date(d);
+          const y = date.getFullYear();
+          const m = String(date.getMonth()+1).padStart(2,'0');
+          const dd = String(date.getDate()).padStart(2,'0');
+          return `${y}-${m}-${dd}`;
+        } catch { return ''; }
+      }
+      function getTaskName(taskCode) {
+        if (!masters || !taskCode) return taskCode || '';
+        const task = masters.find(m => m.taskCode === taskCode);
+        return task ? (task.name || task.taskCode) : taskCode;
+      }
+      
+      function getTaskCategory(taskCode) {
+        if (!masters || !taskCode) return null;
+        const task = masters.find(m => m.taskCode === taskCode);
+        if (!task || !task.categoryCode) return null;
+        return categories.find(c => c.categoryCode === task.categoryCode);
+      }
+
+      function getTaskColorClass(taskCode) {
+        if (!taskCode) return 'task-cell-default';
+        
+        // Map task codes to color classes
+        if (taskCode.includes('REG') || taskCode.includes('レジ')) {
+          return 'task-cell-reg';
+        } else if (taskCode.includes('STOCK') || taskCode.includes('品出し')) {
+          return 'task-cell-stock';
+        } else if (taskCode.includes('CLEAN') || taskCode.includes('清掃')) {
+          return 'task-cell-clean';
+        }
+        
+        return 'task-cell-default';
+      }
+      
+      function getTaskCategoryColor(taskCode) {
+        const category = getTaskCategory(taskCode);
+        return category ? category.color : '#95a5a6';
+      }
+      
+      function getTaskDisplayColor(taskCode) {
+        if (!masters || !taskCode) return '#95a5a6';
+        const task = masters.find(m => m.taskCode === taskCode);
+        
+        // If task has a color defined, use it
+        if (task && task.color && task.color.trim() !== '') {
+          return task.color;
+        }
+        
+        // Otherwise, fallback to category color
+        const category = getTaskCategory(taskCode);
+        return category ? category.color : '#95a5a6';
+      }
+      
+      function applyTaskCategoryStyle(element, taskCode) {
+        const taskColor = getTaskDisplayColor(taskCode);
+        const taskName = getTaskName(taskCode);
+        const category = getTaskCategory(taskCode);
+        
+        element.style.backgroundColor = taskColor + '40'; // Add transparency
+        element.style.borderLeft = `4px solid ${taskColor}`;
+        
+        if (category) {
+          element.title = `${taskName} (${category.categoryName})`;
+        } else {
+          element.title = taskName;
+        }
+      }
+
+      function getCsrf() {
+        const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+        const token = document.querySelector('meta[name="_csrf"]')?.content;
+        return { header, token };
+      }
+
+      // Snap helpers for configurable-minute increments
+      function snapTimeToRes(hhmm) {
+        if (!hhmm) return hhmm;
+        try {
+          const parts = hhmm.split(':');
+          if (parts.length < 2) return hhmm;
+          let h = Number(parts[0]);
+          let m = Number(parts[1]);
+          if (isNaN(h) || isNaN(m)) return hhmm;
+          let total = h * 60 + m;
+          // Round to nearest resolution
+          total = Math.round(total / RES_MIN) * RES_MIN;
+          // Clamp to 0..(24h - RES_MIN)
+          if (total < 0) total = 0;
+          const max = (24 * 60) - RES_MIN;
+          if (total > max) total = max;
+          const nh = Math.floor(total / 60);
+          const nm = total % 60;
+          return `${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
+        } catch { return hhmm; }
+      }
+      function snapDurationToRes(minStr) {
+        const n = Number(minStr);
+        if (isNaN(n)) return minStr;
+        if (n <= 0) return '0';
+        return String(Math.round(n / RES_MIN) * RES_MIN);
+      }
+
+      // Attach snapping to all time/duration inputs
+      function attachSnapListeners() {
+        document.querySelectorAll('input[type="time"]').forEach(inp => {
+          inp.addEventListener('change', () => { inp.value = snapTimeToRes(inp.value); });
+          inp.addEventListener('blur', () => { inp.value = snapTimeToRes(inp.value); });
+        });
+        const dur = document.getElementById('editDuration');
+        if (dur) {
+          dur.addEventListener('change', () => { dur.value = snapDurationToRes(dur.value); });
+          dur.addEventListener('blur', () => { dur.value = snapDurationToRes(dur.value); });
+        }
+      }
+      attachSnapListeners();
+
+      // Inline warning helper for conflicts
+      function showInlineWarning(msg) {
+        const el = document.getElementById('gridMessage');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.classList.remove('d-none');
+        el.classList.remove('alert-success', 'alert-info');
+        el.classList.add('alert-danger');
+        if (el._hideTimer) { clearTimeout(el._hideTimer); }
+        el._hideTimer = setTimeout(() => {
+          el.classList.add('d-none');
+        }, 3000);
+      }
+
+      // Editable table functionality
+      document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('save-btn') || e.target.closest('.save-btn')) {
+          const row = e.target.closest('tr');
+          savePlanRow(row);
+        } else if (e.target.classList.contains('reset-btn') || e.target.closest('.reset-btn')) {
+          const row = e.target.closest('tr');
+          resetPlanRow(row);
+        } else if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
+          const row = e.target.closest('tr');
+          deletePlanRow(row);
+        }
+      });
+
+      async function savePlanRow(row) {
+        const planId = row.dataset.planId;
+        if (!planId) return;
+        
+        const formData = new URLSearchParams();
+        const inputs = row.querySelectorAll('input, select');
+        
+        inputs.forEach(input => {
+          if (input.name && input.value) {
+            formData.append(input.name, input.value);
+          }
+        });
+        
+        // Add required parameters
+        formData.append('store', storeCode);
+        formData.append('mode', mode);
+        if (mode === 'weekly') {
+          formData.append('day', String(selectedDow || 1));
+        } else if (selectedDate) {
+          // special date removed
+        }
+        if (selectedDept) {
+          formData.append('dept', selectedDept);
+        }
+
+        try {
+          const { header, token } = getCsrf();
+          const response = await fetch(`/tasks/plan/${planId}/update`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              ...(header && token ? { [header]: token } : {})
+            },
+            body: formData.toString()
+          });
+          
+          if (!response.ok) {
+            throw new Error('更新に失敗しました');
+          }
+          
+          // Update data-original attributes
+          inputs.forEach(input => {
+            input.setAttribute('data-original', input.value);
+          });
+          
+          // Visual feedback
+          row.style.backgroundColor = '#d4edda';
+          setTimeout(() => {
+            row.style.backgroundColor = '';
+          }, 2000);
+          
+        } catch (error) {
+          alert(error.message || '保存エラーが発生しました');
+        }
+      }
+
+      function resetPlanRow(row) {
+        const inputs = row.querySelectorAll('input, select');
+        inputs.forEach(input => {
+          const original = input.getAttribute('data-original');
+          if (original !== null) {
+            input.value = original;
+          }
+        });
+      }
+
+      async function deletePlanRow(row) {
+        const planId = row.dataset.planId;
+        if (!planId) return;
+        // Stage pending delete (handle staged new)
+        if (String(planId).startsWith('new-')) {
+          const idx = pendingCreates.findIndex(x => x.tempId === planId);
+          if (idx >= 0) pendingCreates.splice(idx, 1);
+        } else {
+          if (!pendingDeletes.includes(planId)) pendingDeletes.push(planId);
+        }
+        // Remove row immediately
+        row.remove();
+        // Clear from grid if visible (single-block and overlay)
+        const block = document.getElementById(`plan-block-${planId}`);
+        if (block) block.remove();
+        const overlay = document.getElementById(`plan-window-${planId}`);
+        if (overlay) overlay.remove();
+        // Fallback: clear any legacy cell paints
+        document.querySelectorAll(`.cell.filled[data-plan-id="${planId}"]`).forEach(el => {
+          el.className = 'cell';
+          el.removeAttribute('data-plan-id');
+          el.removeAttribute('data-task-code');
+          el.removeAttribute('data-staff');
+          el.innerHTML = '';
+        });
+        delete planMap[planId];
+      }
+    });
+  </script>
+</main>
+</body>
+</html>

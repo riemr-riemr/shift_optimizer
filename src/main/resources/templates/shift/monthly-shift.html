@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+    <title>月間シフト</title>
+    <style>
+        /* Monthly shift specific styles - using common.css base */
+        .shift-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            min-width: 800px;
+        }
+        
+        .shift-table th {
+            background: #6b7280;
+            color: #ffffff;
+            padding: 8px 6px;
+            text-align: center;
+            font-weight: 600;
+            border: 1px solid #dee2e6;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            min-width: 60px;
+        }
+        
+        .shift-table thead tr.summary-row-1 th {
+            top: 0;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-2 th {
+            top: 24px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-3 th {
+            top: 48px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-4 th {
+            top: 72px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.summary-row-5 th {
+            top: 96px;
+            position: sticky;
+        }
+
+        .shift-table thead tr.date-header-row th {
+            top: 120px;
+            position: sticky;
+        }
+        
+        .shift-table th.employee-header {
+            background: var(--color-header-dark);
+            min-width: 150px;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 11;
+        }
+        
+        .shift-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+            background: white;
+            position: relative;
+        }
+        
+        .shift-table td.employee-cell {
+            background: var(--color-light);
+            font-weight: 600;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            border-right: 2px solid #dee2e6;
+        }
+        
+        .shift-table td:hover {
+            background: #e3f2fd;
+            transition: background-color 0.2s ease;
+        }
+
+        .shift-cell.shift-editable {
+            cursor: pointer;
+        }
+
+        .shift-cell.shift-editable:hover {
+            background: #dbeafe;
+        }
+
+        .shift-off-request {
+            background: rgb(255, 127, 80) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-off-public-auto {
+            background: rgb(144, 238, 144) !important;
+            color: #14532d;
+            font-weight: 700;
+        }
+
+        .shift-off-public-manual {
+            background: rgb(60, 179, 113) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-off-paid {
+            background: rgb(255, 128, 192) !important;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .shift-manual-attendance {
+            background: #ffecb5 !important;
+            color: #7a4e00;
+            font-weight: 700;
+        }
+
+        .shift-prefer-on {
+            background: #fde68a !important;
+            color: #92400e;
+            font-weight: 700;
+        }
+        
+        .weekend-header {
+            background: #8a90d6 !important;
+        }
+        
+        .weekend-cell {
+            background: #f1f2fb;
+        }
+        
+        .today-cell {
+            background: var(--color-today);
+            color: #d63384;
+            font-weight: bold;
+        }
+        
+        .staffing-summary-row th {
+            background: rgba(78, 205, 196, 0.18);
+            color: var(--color-dark);
+            padding: 4px 6px;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            border-color: var(--border-normal);
+            height: 24px;
+        }
+        
+        .staffing-summary-row th.employee-header {
+            background: rgba(78, 205, 196, 0.28);
+            color: var(--color-dark);
+        }
+        
+        .staffing-summary-row th.weekend-header {
+            background: rgba(78, 205, 196, 0.18) !important;
+        }
+        
+        .staffing-summary-cell {
+            min-width: 80px;
+        }
+        
+        /* Balance hours styling */
+        .balance-hours {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0 3px;
+            border-radius: 3px;
+            margin-top: 1px;
+            line-height: 1.1;
+        }
+        
+        .balance-hours.shortage {
+            background-color: var(--color-danger);
+            color: white;
+        }
+        
+        .balance-hours.excess {
+            background-color: var(--color-success);
+            color: white;
+        }
+        
+        .balance-hours.balanced {
+            background-color: var(--color-info);
+            color: white;
+        }
+        
+        /* Employee info styling */
+        .employee-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            color: var(--color-dark);
+        }
+        
+        .employee-code {
+            font-size: 0.75rem;
+            color: var(--color-dark);
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        /* Shift time styling */
+        .shift-time {
+            display: block;
+            font-size: 0.75rem;
+            color: #495057;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="content-header">
+        <h1><i class="bi bi-calendar3"></i> 月次シフト</h1>
+        <p class="mb-0">従業員別の勤務時間を一覧で確認できます</p>
+    </div>
+
+    <div class="card search-card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-sliders"></i> 検索条件</h5>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/shift}" method="get">
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="targetMonth" class="form-label">対象月</label>
+                        <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                               th:value="${year + '-' + (#numbers.formatInteger(month, 2))}" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="storeCode" class="form-label">店舗</label>
+                        <select id="storeCode" name="storeCode" class="form-select">
+                            <option value="">すべての店舗</option>
+                            <option th:each="store : ${stores}" 
+                                    th:value="${store.storeCode}"
+                                    th:text="|${store.storeCode} - ${store.storeName}|"
+                                    th:selected="${store.storeCode == selectedStoreCode}">店舗名</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="departmentCode" class="form-label">部門</label>
+                        <select id="departmentCode" name="departmentCode" class="form-select">
+                            <option value="" th:selected="${selectedDepartmentCode == null}">部門を選択</option>
+                            <option th:each="dept : ${departments}"
+                                    th:value="${dept.departmentCode}"
+                                    th:text="|${dept.departmentCode} - ${dept.departmentName}|"
+                                    th:selected="${dept.departmentCode == selectedDepartmentCode}">部門名</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">
+                                <i class="bi bi-search"></i> 表示更新
+                            </button>
+                            <button type="button" id="attendanceOptimizeBtn" class="btn btn-success" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-people"></i> 月次シフト最適化
+                            </button>
+                            <button type="button" id="assignmentOptimizeBtn" class="btn btn-primary" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-tools"></i> 作業割当
+                            </button>
+                            <button type="button" id="clearAttendanceBtn" class="btn btn-outline-danger" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-trash"></i> 出勤クリア
+                            </button>
+                            <button type="button" id="clearAssignmentBtn" class="btn btn-outline-warning" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-eraser"></i> 作業割当クリア
+                            </button>
+                            <button type="button" id="clearManualAttendanceBtn" class="btn btn-outline-danger" style="flex: 1;"
+                                    th:disabled="${#strings.isEmpty(selectedStoreCode)}"
+                                    th:if="${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)}">
+                                <i class="bi bi-x-circle"></i> 手入力クリア
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 操作説明 -->
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> 
+        店舗を選択してから月次シフトを表示できます。
+    </div>
+    
+    <!-- 店舗選択必須の警告 -->
+    <div th:if="${#strings.isEmpty(selectedStoreCode)}" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <strong>店舗を選択してください。</strong> 月次シフトを表示するには、まず上の検索条件で店舗を選択する必要があります。
+    </div>
+    
+    <!-- エラー表示 -->
+    <div th:if="${error}" class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}">エラーメッセージ</span>
+    </div>
+
+    <!-- 月次シフト一覧表 -->
+    <div class="card grid-container">
+        <div class="card-header grid-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar3"></i> 
+                <span th:text="${year}"></span>年<span th:text="${month}"></span>月 月次シフト
+            </h5>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-muted small" th:if="${selectedStoreCode}">
+                    <i class="bi bi-shop"></i> 
+                    店舗: <span th:text="${selectedStoreCode}">STORE001</span>
+                </div>
+                <div class="text-muted small" th:if="${selectedDepartmentCode}">
+                    <i class="bi bi-diagram-3"></i>
+                    部門: <span th:text="${selectedDepartmentCode}">DEPT</span>
+                </div>
+                <div class="text-muted small">
+                    <i class="bi bi-people"></i> 従業員数: <span th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名
+                </div>
+            </div>
+        </div>
+        <div th:if="${#lists.isEmpty(employees)}" class="card-body text-center text-muted">
+            <i class="bi bi-person-x"></i> 
+            <span th:if="${#strings.isEmpty(selectedStoreCode)}">
+                店舗を選択してください。
+            </span>
+            <span th:if="${!#strings.isEmpty(selectedStoreCode)}">
+                選択された店舗には従業員が登録されていません。
+            </span>
+        </div>
+        <div th:if="${!#lists.isEmpty(employees)}" class="grid-body">
+            <table class="shift-table">
+            <thead>
+                <tr class="staffing-summary-row summary-row-1">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-people"></i> 出勤人数
+                    </th>
+                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${summary.headcount}">0</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <!-- 従来（月初〜月末） -->
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${summary.headcount}">0</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-2">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-bar-chart"></i> 必要人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.requiredMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.requiredMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-3">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-bar-chart"></i> 投入人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.assignedMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours text-muted"
+                             th:text="${#numbers.formatDecimal(summary.assignedMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-4">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-exclamation-triangle"></i> 不足人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours shortage"
+                             th:text="${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours shortage"
+                             th:text="${#numbers.formatDecimal(summary.totalShortageMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="staffing-summary-row summary-row-5">
+                    <th class="employee-header summary-header">
+                        <i class="bi bi-check-circle"></i> 超過人時
+                    </th>
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="dayIndex=${dStat.index + 1},
+                                 summary=${dailyStaffingInfo.get(dayIndex)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours excess"
+                             th:text="${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)},
+                                 summary=${dailyStaffingInfo.get(day)}"
+                        class="staffing-summary-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:if="${summary != null}" class="balance-hours excess"
+                             th:text="${#numbers.formatDecimal(summary.totalExcessMinutes / 60.0, 1, 2)}">0.00</div>
+                        <div th:if="${summary == null}" class="text-muted">-</div>
+                    </th>
+                </tr>
+                <tr class="date-header-row">
+                    <th class="employee-header">
+                        <i class="bi bi-person"></i> 従業員
+                    </th>
+                    <!-- 設定に基づくサイクルの表示（日付リストがある場合はこちらを優先） -->
+                    <th th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:class="${d.dayOfWeek.getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:text="${d.dayOfMonth}">1</div>
+                        <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
+                             th:text="${#temporals.format(d, 'E')}">月</div>
+                    </th>
+                    <!-- 従来（月初〜月末） -->
+                    <th th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}"
+                        th:class="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getValue() >= 6 ? 'weekend-header' : ''}">
+                        <div th:text="${day}">1</div>
+                        <div style="font-size: 0.7rem; font-weight: normal; opacity: 0.9;"
+                             th:text="${T(java.time.LocalDate).of(year, month, day).getDayOfWeek().getDisplayName(T(java.time.format.TextStyle).SHORT, T(java.util.Locale).JAPANESE)}">月</div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="emp : ${employees}">
+                    <td class="employee-cell">
+                        <div class="employee-info">
+                            <div class="employee-name" th:text="${emp.employeeName}">従業員名</div>
+                            <div class="employee-code" th:text="${emp.employeeCode}">EMP001</div>
+                            <div class="employee-hours text-muted small"
+                                 th:text="${employeeMonthlyHours != null and employeeMonthlyHours.get(emp.employeeCode) != null
+                                            ? #numbers.formatDecimal(employeeMonthlyHours.get(emp.employeeCode), 1, 2) + ' h'
+                                            : '0.00 h'}">0.00 h</div>
+                            <div class="employee-hours text-muted small"
+                                 th:text="'出勤日数:' + ${employeeWorkDays != null ? (employeeWorkDays.get(emp.employeeCode) != null ? employeeWorkDays.get(emp.employeeCode) : 0) : 0} + ' / 休み:' + ${employeeOffDays != null ? (employeeOffDays.get(emp.employeeCode) != null ? employeeOffDays.get(emp.employeeCode) : 0) : 0}">出勤日数:0 / 休み:0</div>
+                        </div>
+                    </td>
+                    <!-- 設定に基づくサイクル（dateList） -->
+                    <td th:if="${dateList != null}" th:each="d : ${dateList}"
+                        th:with="key=${emp.employeeCode + '_' + #temporals.format(d, 'yyyy-MM-dd')},
+                                 shifts=${employeeShifts != null ? employeeShifts.get(key) : null},
+                                 shift0=${(shifts != null and !#lists.isEmpty(shifts)) ? shifts.get(0) : null},
+                                 dateStr=${#temporals.format(d, 'yyyy-MM-dd')},
+                                 editable=${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)},
+                                 offKind=${employeeOffKinds != null ? employeeOffKinds.get(key) : null},
+                                 isOff=${shifts == null or shifts.isEmpty()},
+                                 manualEdit=${shift0 != null and shift0.manualEdit},
+                                 preferOnTime=${employeePreferOnTimes != null ? employeePreferOnTimes.get(key) : null},
+                                 preferOnMatch=${shift0 != null and preferOnTime != null and preferOnTime == (shift0.startTime + '|' + shift0.endTime)},
+                                 offClass=${isOff ? (offKind == 'REQUEST' ? ' shift-off-request' : (offKind == 'PAID' ? ' shift-off-paid' : (offKind == 'OFF' ? ' shift-off-public-manual' : ' shift-off-public-auto'))) : ''},
+                                 offLabel=${offKind == 'REQUEST' ? '希望休' : (offKind == 'PAID' ? '有給' : '公休')},
+                                 manualClass=${manualEdit ? ' shift-manual-attendance' : ''},
+                                 preferOnClass=${preferOnMatch ? ' shift-prefer-on' : ''}"
+                        class="shift-cell"
+                        th:classappend="${d.dayOfWeek.getValue() >= 6 ? ' weekend-cell' : ''} + ${d.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''} + ${editable ? ' shift-editable' : ''} + ${offClass} + ${manualClass} + ${preferOnClass}"
+                        th:attr="data-employee-code=${emp.employeeCode},
+                                 data-employee-name=${emp.employeeName},
+                                 data-date=${dateStr},
+                                 data-start=${shift0 != null ? shift0.startTime : ''},
+                                 data-end=${shift0 != null ? shift0.endTime : ''},
+                                 data-off-kind=${offKind != null ? offKind : ''},
+                                 data-manual-edit=${manualEdit},
+                                 data-prefer-on=${preferOnMatch},
+                                 data-editable=${editable}">
+                        <div th:if="${shifts != null and !shifts.isEmpty()}">
+                            <span class="shift-time" 
+                                  th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
+                                09:00 ~ 17:00
+                            </span>
+                        </div>
+                        <div th:if="${shifts == null or shifts.isEmpty()}">
+                            <span th:text="${offLabel}">公休</span>
+                        </div>
+                    </td>
+                    <!-- 従来（月初〜月末） -->
+                    <td th:if="${dateList == null}" th:each="day : ${#numbers.sequence(1, daysInMonth)}" 
+                        th:with="date=${T(java.time.LocalDate).of(year, month, day)}, 
+                                 shifts=${employeeShifts != null ? employeeShifts.get(emp.employeeCode + '_' + day) : null},
+                                 shift0=${(shifts != null and !#lists.isEmpty(shifts)) ? shifts.get(0) : null},
+                                 dateStr=${#temporals.format(date, 'yyyy-MM-dd')},
+                                 editable=${@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)},
+                                 key=${emp.employeeCode + '_' + dateStr},
+                                 offKind=${employeeOffKinds != null ? employeeOffKinds.get(key) : null},
+                                 isOff=${shifts == null or shifts.isEmpty()},
+                                 manualEdit=${shift0 != null and shift0.manualEdit},
+                                 preferOnTime=${employeePreferOnTimes != null ? employeePreferOnTimes.get(key) : null},
+                                 preferOnMatch=${shift0 != null and preferOnTime != null and preferOnTime == (shift0.startTime + '|' + shift0.endTime)},
+                                 offClass=${isOff ? (offKind == 'REQUEST' ? ' shift-off-request' : (offKind == 'PAID' ? ' shift-off-paid' : (offKind == 'OFF' ? ' shift-off-public-manual' : ' shift-off-public-auto'))) : ''},
+                                 offLabel=${offKind == 'REQUEST' ? '希望休' : (offKind == 'PAID' ? '有給' : '公休')},
+                                 manualClass=${manualEdit ? ' shift-manual-attendance' : ''},
+                                 preferOnClass=${preferOnMatch ? ' shift-prefer-on' : ''}"
+                        class="shift-cell"
+                        th:classappend="${date.getDayOfWeek().getValue() >= 6 ? ' weekend-cell' : ''} + 
+                                       ${date.equals(T(java.time.LocalDate).now()) ? ' today-cell' : ''} + ${editable ? ' shift-editable' : ''} + ${offClass} + ${manualClass} + ${preferOnClass}"
+                        th:attr="data-employee-code=${emp.employeeCode},
+                                 data-employee-name=${emp.employeeName},
+                                 data-date=${dateStr},
+                                 data-start=${shift0 != null ? shift0.startTime : ''},
+                                 data-end=${shift0 != null ? shift0.endTime : ''},
+                                 data-off-kind=${offKind != null ? offKind : ''},
+                                 data-manual-edit=${manualEdit},
+                                 data-prefer-on=${preferOnMatch},
+                                 data-editable=${editable}">
+                        <div th:if="${shifts != null and !shifts.isEmpty()}">
+                            <span class="shift-time" 
+                                  th:text="${shifts.get(0).startTime + ' ~ ' + shifts.get(0).endTime}">
+                                09:00 ~ 17:00
+                            </span>
+                        </div>
+                        <div th:if="${shifts == null or shifts.isEmpty()}">
+                            <span th:text="${offLabel}">公休</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> 表示説明</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0">
+                        <li><strong>時間表示:</strong> hh:mm ~ hh:mm 形式で勤務時間を表示</li>
+                        <li><strong>人時表示:</strong> 不足と超過の合算を時間（h）で別行表示（赤=不足、緑=超過、青=適正）</li>
+                        <li><strong>休日:</strong> 土日は薄赤の背景色で表示</li>
+                        <li><strong>今日:</strong> オレンジのグラデーション背景で強調</li>
+                        <li><strong>休み:</strong> 公休/希望休/有給の区分で色分け</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart"></i> 統計情報</h6>
+                </div>
+                <div class="card-body">
+                    <div class="small text-muted">
+                        <div class="mb-1">
+                            <i class="bi bi-calendar3"></i> 
+                            表示期間: <span class="fw-bold" th:text="${year + '年' + month + '月'}">2024年1月</span>
+                        </div>
+                        <div class="mb-1">
+                            <i class="bi bi-people"></i> 
+                            従業員数: <span class="fw-bold" th:text="${employees != null ? #lists.size(employees) : 0}">0</span>名
+                        </div>
+                        <div>
+                            <i class="bi bi-calendar-day"></i> 
+                            日数: <span class="fw-bold" th:text="${daysInMonth}">31</span>日
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最適化進行状況モーダル -->
+    <div class="modal fade" id="optimizationModal" tabindex="-1" aria-labelledby="optimizationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="optimizationModalLabel">
+                        <i class="bi bi-gear-fill"></i> シフト最適化
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="modalCloseBtn"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="optimizationProgress">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="spinner-border text-primary me-3" role="status">
+                                <span class="visually-hidden">最適化中...</span>
+                            </div>
+                            <div>
+                                <h6 class="mb-1">最適化を実行中です</h6>
+                                <p class="mb-0 text-muted" id="optimizationStatus">計算を開始しています...</p>
+                            </div>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 0%" id="progressBar"></div>
+                        </div>
+                        <!-- リアルタイムのスコア推移 -->
+                        <div class="mt-3">
+                            <div class="small text-muted mb-1">目的関数（hard/soft）の推移</div>
+                            <canvas id="scoreChart" height="120"></canvas>
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            <p>店舗: <span id="optimizationStore" th:text="${selectedStoreCode}"></span></p>
+                            <p>対象月: <span id="optimizationMonth"></span></p>
+                        </div>
+                    </div>
+                    
+                    <div id="optimizationResult" style="display: none;">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> 最適化が完了しました！
+                        </div>
+                        <p class="mt-2">シフトの最適化が正常に完了しました。必要に応じて表示を更新してください。</p>
+                    </div>
+                    
+                    <div id="optimizationError" style="display: none;">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> エラーが発生しました
+                        </div>
+                        <p id="errorMessage">最適化中にエラーが発生しました。</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeBtn">閉じる</button>
+                    <button type="button" class="btn btn-primary" id="refreshBtn" style="display: none;" onclick="window.location.reload();">
+                        <i class="bi bi-arrow-clockwise"></i> 表示更新
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="shiftEditModal" tabindex="-1" aria-labelledby="shiftEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title" id="shiftEditModalLabel">シフト修正</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2 small text-muted">
+                        <div id="shiftEditEmployee">従業員</div>
+                        <div id="shiftEditDate">2024-01-01</div>
+                    </div>
+                    <input type="hidden" id="shiftEditEmployeeCode" />
+                    <input type="hidden" id="shiftEditDateValue" />
+                    <div class="mb-2">
+                        <div class="form-label small mb-1">種別</div>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="shiftEditKind" id="shiftEditKindWork" value="work" checked>
+                                <label class="form-check-label small" for="shiftEditKindWork">出勤</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="shiftEditKind" id="shiftEditKindOff" value="off">
+                                <label class="form-check-label small" for="shiftEditKindOff">休み</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditStart" class="form-label small mb-1">開始</label>
+                        <input type="time" id="shiftEditStart" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditEnd" class="form-label small mb-1">終了</label>
+                        <input type="time" id="shiftEditEnd" class="form-control form-control-sm" />
+                    </div>
+                    <div class="mb-2">
+                        <label for="shiftEditOffKind" class="form-label small mb-1">休み区分</label>
+                        <select id="shiftEditOffKind" class="form-select form-select-sm">
+                            <option value="">(未選択)</option>
+                            <option value="OFF">公休（手入力）</option>
+                            <option value="REQUEST">希望休</option>
+                            <option value="PAID">有給</option>
+                        </select>
+                    </div>
+                    <div class="small text-muted">出勤は時間必須、休みは区分必須です。</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="shiftEditClearRequestBtn">手入力取り消し</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="shiftEditSaveBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart.js for plotting -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let optimizationTicket = null;
+        let statusCheckInterval = null;
+        let activeShiftCell = null;
+        
+        // 店舗選択が変更されたときの処理（自動送信は無効化）
+        document.addEventListener('DOMContentLoaded', function() {
+            const storeSelect = document.getElementById('storeCode');
+            const deptSelect = document.getElementById('departmentCode');
+            if (storeSelect) {
+                storeSelect.addEventListener('change', async function() {
+                    // 最適化ボタンの有効/無効を更新
+                    const attendanceBtn = document.getElementById('attendanceOptimizeBtn');
+                    const assignmentBtn = document.getElementById('assignmentOptimizeBtn');
+                    if (attendanceBtn) attendanceBtn.disabled = !this.value;
+                    if (assignmentBtn) assignmentBtn.disabled = !this.value;
+                    // 部門一覧をロード
+                    if (deptSelect) {
+                        deptSelect.innerHTML = '<option value="">部門を選択</option>';
+                        if (this.value) {
+                            try {
+                                const list = await fetch(`/shift/api/departments/${encodeURIComponent(this.value)}`).then(r=>r.json());
+                                deptSelect.innerHTML = '<option value="">部門を選択</option>' +
+                                  list.map(d => `<option value="${d.departmentCode}">${d.departmentCode} - ${d.departmentName||''}</option>`).join('');
+                            } catch (e) { console.error('部門取得失敗', e); }
+                        }
+                    }
+                });
+                // 初期ロード
+                if (storeSelect.value && deptSelect && deptSelect.options.length <= 1) {
+                    storeSelect.dispatchEvent(new Event('change'));
+                }
+            }
+            
+            // 最適化ボタンのイベント
+            const attendanceBtn = document.getElementById('attendanceOptimizeBtn');
+            const assignmentBtn = document.getElementById('assignmentOptimizeBtn');
+            if (attendanceBtn) attendanceBtn.addEventListener('click', () => startOptimization('ATTENDANCE'));
+            if (assignmentBtn) assignmentBtn.addEventListener('click', () => startOptimization('ASSIGNMENT'));
+            const clearAttendanceBtn = document.getElementById('clearAttendanceBtn');
+            const clearAssignmentBtn = document.getElementById('clearAssignmentBtn');
+            const clearManualAttendanceBtn = document.getElementById('clearManualAttendanceBtn');
+            if (clearAttendanceBtn) clearAttendanceBtn.addEventListener('click', clearAttendance);
+            if (clearAssignmentBtn) clearAssignmentBtn.addEventListener('click', clearAssignment);
+            if (clearManualAttendanceBtn) clearManualAttendanceBtn.addEventListener('click', clearManualAttendance);
+            setupShiftEditor();
+        });
+        
+        function startOptimization(stage) {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+            
+            // モーダルを表示
+            document.getElementById('optimizationStore').textContent = storeCode;
+            document.getElementById('optimizationMonth').textContent = targetMonth;
+            const modal = new bootstrap.Modal(document.getElementById('optimizationModal'));
+            modal.show();
+            
+            // 進行状況リセット
+            resetModal();
+            
+            // フェーズ1: 事前準備 (task_plan → work_demand_interval)
+            document.getElementById('optimizationStatus').textContent = '事前準備中...';
+            
+            const requestData = {
+                month: targetMonth,
+                storeCode: storeCode,
+                departmentCode: departmentCode
+            };
+            
+            fetch('/shift/api/calc/prepare', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Error response body:', text);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}. Response: ${text.substring(0, 500)}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(prepResult => {
+                console.log('Preparation result:', prepResult);
+                
+                if (!prepResult.success) {
+                    console.warn('Preparation had issues but continuing:', prepResult.message);
+                }
+                
+                // フェーズ2: 最適化実行（段階選択）
+                document.getElementById('optimizationStatus').textContent = '最適化を開始中...';
+                window.__currentOptimizationStage = stage;
+                // Assignment は日次で同期実行（チケット運用せず、完了を待って結果表示）
+                if (stage === 'ASSIGNMENT') {
+                    return fetch('/shift/api/assignment/start-daily', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData)
+                    })
+                    .then(res => {
+                        if (!res.ok) return res.text().then(t => { throw new Error(`HTTP ${res.status}: ${t.substring(0,200)}`); });
+                        return res.json();
+                    })
+                    .then(json => {
+                        if (!json.success) throw new Error(json.error || '日次割当の実行に失敗しました');
+                        // 成功表示
+                        document.getElementById('optimizationStatus').textContent = '日次割当の保存が完了しました';
+                        showSuccess();
+                        // ダミーのチケット返却で後続チェーンを満たす（ステータス監視は行わない）
+                        return { ticketId: null };
+                    });
+                }
+                // Attendance は既存のチケット方式で実行
+                return fetch('/shift/api/attendance/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Error response body:', text);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}. Response: ${text.substring(0, 500)}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(ticket => {
+                console.log('Optimization ticket received:', ticket);
+                // Assignment(日次)はチケット監視しない
+                if (window.__currentOptimizationStage === 'ASSIGNMENT') {
+                    return; // ここで完了
+                }
+                optimizationTicket = ticket;
+                if (!ticket || !ticket.ticketId) {
+                    throw new Error('Invalid ticket received: ' + JSON.stringify(ticket));
+                }
+                document.getElementById('optimizationStatus').textContent = '最適化を実行中...';
+                statusCheckInterval = setInterval(checkOptimizationStatus, 2000);
+            })
+            .catch(error => {
+                console.error('Error during optimization process:', error);
+                showError('最適化の開始に失敗しました: ' + error.message);
+            });
+        }
+
+        async function clearAttendance() {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            if (!storeCode) { alert('店舗を選択してください。'); return; }
+            if (!confirm('この月の出勤（シフト）を削除します。よろしいですか？')) return;
+            try {
+                const res = await fetch('/shift/api/clear/attendance', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: targetMonth, storeCode, departmentCode})
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || '削除に失敗しました');
+                alert('出勤を削除しました（件数: ' + (json.deleted ?? 0) + '）');
+                window.location.reload();
+            } catch (e) { alert('削除に失敗しました: ' + e.message); }
+        }
+
+        async function clearAssignment() {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            if (!storeCode) { alert('店舗を選択してください。'); return; }
+            if (!confirm('この月の作業割当（レジ/部門タスク）を削除します。よろしいですか？')) return;
+            try {
+                const res = await fetch('/shift/api/clear/assignment', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: targetMonth, storeCode, departmentCode})
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || '削除に失敗しました');
+                alert('作業割当を削除しました（件数: ' + (json.deleted ?? 0) + '）');
+                window.location.reload();
+            } catch (e) { alert('削除に失敗しました: ' + e.message); }
+        }
+
+        async function clearManualAttendance() {
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const targetMonth = document.getElementById('targetMonth').value;
+            if (!storeCode) { alert('店舗を選択してください。'); return; }
+            if (!confirm('この月の手入力出勤を削除します。よろしいですか？')) return;
+            try {
+                const res = await fetch('/shift/api/clear/attendance-manual', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: targetMonth, storeCode, departmentCode})
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || '削除に失敗しました');
+                const attendanceDeleted = json.deleted?.attendance ?? 0;
+                const requestDeleted = json.deleted?.requests ?? 0;
+                alert('手入力を削除しました（出勤: ' + attendanceDeleted + ' / 希望: ' + requestDeleted + '）');
+                window.location.reload();
+            } catch (e) { alert('削除に失敗しました: ' + e.message); }
+        }
+        
+        function checkOptimizationStatus() {
+            if (!optimizationTicket || !optimizationTicket.ticketId) {
+                console.error('Invalid optimization ticket:', optimizationTicket);
+                clearInterval(statusCheckInterval);
+                showError('最適化チケットが無効です');
+                return;
+            }
+            
+            console.log('Checking status for ticket ID:', optimizationTicket.ticketId);
+            
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value;
+            const stage = window.__currentOptimizationStage || '';
+            fetch(`/shift/api/calc/status/${optimizationTicket.ticketId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}&stage=${encodeURIComponent(stage)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(status => {
+                console.log('Status received:', status);
+                updateProgress(status);
+                
+                // NOT_SOLVING が完了状態、SOLVING_ACTIVE が実行中
+                if (status.status === 'NOT_SOLVING') {
+                    clearInterval(statusCheckInterval);
+                    
+                    // ハード制約違反チェック
+                    if (status.hasHardConstraintViolations) {
+                        showConstraintViolationError(status.constraintViolationMessages || []);
+                    } else {
+                        showSuccess();
+                    }
+                } else if (status.status === 'FAILED' || status.status === 'ERROR') {
+                    clearInterval(statusCheckInterval);
+                    showError('最適化に失敗しました: ' + (status.errorMessage || '不明なエラー'));
+                }
+                // SOLVING_ACTIVE の場合は継続
+            })
+            .catch(error => {
+                console.error('Error checking status:', error);
+                clearInterval(statusCheckInterval);
+                showError('ステータス確認中にエラーが発生しました: ' + error.message);
+            });
+        }
+        
+        function updateProgress(status) {
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('optimizationStatus');
+            
+            // 実際のプログレス値を使用（0-100の範囲に制限）
+            const progress = Math.max(0, Math.min(100, status.progress || 0));
+            progressBar.style.width = progress + '%';
+            
+            // ステータスに応じてメッセージを更新
+            if (status.status === 'SOLVING_ACTIVE') {
+                statusText.textContent = status.phase || '制約条件を計算中...';
+            } else if (status.status === 'NOT_SOLVING') {
+                statusText.textContent = '最適化完了';
+                progressBar.style.width = '100%';
+            } else {
+                statusText.textContent = status.phase || '最適化を実行中...';
+            }
+            // スコア推移を更新（2秒ごと）: 最新点が無くても直前値を時刻で1点追加
+            try { appendScorePointTick(); } catch(e) { console.warn('score update failed', e); }
+        }
+        
+        function showSuccess() {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationResult').style.display = 'block';
+            document.getElementById('refreshBtn').style.display = 'inline-block';
+            document.getElementById('modalCloseBtn').style.display = 'none';
+            // スコア系列を描画
+            try { loadScoreSeries(); } catch (e) { console.warn('loadScoreSeries failed', e); }
+        }
+        
+        function showError(message) {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+
+        function setupShiftEditor() {
+            const modalEl = document.getElementById('shiftEditModal');
+            if (!modalEl) return;
+            const modal = new bootstrap.Modal(modalEl);
+            const saveBtn = document.getElementById('shiftEditSaveBtn');
+            const clearRequestBtn = document.getElementById('shiftEditClearRequestBtn');
+            const startInput = document.getElementById('shiftEditStart');
+            const endInput = document.getElementById('shiftEditEnd');
+            const offKindSelect = document.getElementById('shiftEditOffKind');
+            const kindWork = document.getElementById('shiftEditKindWork');
+            const kindOff = document.getElementById('shiftEditKindOff');
+            const empLabel = document.getElementById('shiftEditEmployee');
+            const dateLabel = document.getElementById('shiftEditDate');
+            const empCodeInput = document.getElementById('shiftEditEmployeeCode');
+            const dateInput = document.getElementById('shiftEditDateValue');
+
+            function syncKindInputs() {
+                const isWork = kindWork.checked;
+                startInput.disabled = !isWork;
+                endInput.disabled = !isWork;
+                offKindSelect.disabled = isWork;
+                if (isWork) {
+                    offKindSelect.value = '';
+                } else {
+                    startInput.value = '';
+                    endInput.value = '';
+                }
+            }
+
+            kindWork.addEventListener('change', syncKindInputs);
+            kindOff.addEventListener('change', syncKindInputs);
+
+            document.querySelectorAll('td.shift-cell[data-editable="true"]').forEach(cell => {
+                cell.addEventListener('click', () => {
+                    activeShiftCell = cell;
+                    const employeeCode = cell.dataset.employeeCode || '';
+                    const employeeName = cell.dataset.employeeName || '';
+                    const date = cell.dataset.date || '';
+                    empLabel.textContent = `${employeeName} (${employeeCode})`;
+                    dateLabel.textContent = date;
+                    empCodeInput.value = employeeCode;
+                    dateInput.value = date;
+                    startInput.value = cell.dataset.start || '';
+                    endInput.value = cell.dataset.end || '';
+                    offKindSelect.value = cell.dataset.offKind || '';
+                    if (startInput.value && endInput.value) {
+                        kindWork.checked = true;
+                        kindOff.checked = false;
+                    } else {
+                        kindWork.checked = false;
+                        kindOff.checked = true;
+                    }
+                    syncKindInputs();
+                    modal.show();
+                });
+            });
+
+            clearRequestBtn.addEventListener('click', () => clearEmployeeRequest(modal));
+            saveBtn.addEventListener('click', () => saveShiftEdit(modal));
+        }
+
+        function saveShiftEdit(modal) {
+            const storeCode = document.getElementById('storeCode').value;
+            const employeeCode = document.getElementById('shiftEditEmployeeCode').value;
+            const date = document.getElementById('shiftEditDateValue').value;
+            const startTime = document.getElementById('shiftEditStart').value;
+            const endTime = document.getElementById('shiftEditEnd').value;
+            const offKind = document.getElementById('shiftEditOffKind').value;
+            const kind = document.querySelector('input[name="shiftEditKind"]:checked')?.value || 'work';
+
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+            if (kind === 'work') {
+                if (!startTime || !endTime) {
+                    alert('開始・終了を入力してください。');
+                    return;
+                }
+                if (endTime <= startTime) {
+                    alert('終了時刻は開始時刻より後にしてください。');
+                    return;
+                }
+                if (offKind) {
+                    alert('出勤の場合は休み区分を空にしてください。');
+                    return;
+                }
+            } else {
+                if (!offKind) {
+                    alert('休み区分を選択してください。');
+                    return;
+                }
+                if (startTime || endTime) {
+                    alert('休みの場合は開始・終了を空にしてください。');
+                    return;
+                }
+            }
+
+            const payload = { storeCode, employeeCode, date, startTime, endTime, offKind };
+            fetch('/shift/api/calc/shifts/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(json => {
+                if (!json.success) {
+                    throw new Error(json.message || '保存に失敗しました');
+                }
+                if (activeShiftCell) {
+                    activeShiftCell.dataset.manualEdit = kind === 'work' ? 'true' : 'false';
+                    activeShiftCell.dataset.preferOn = kind === 'work' ? 'true' : 'false';
+                    activeShiftCell.dataset.offKind = offKind || '';
+                    renderShiftCell(activeShiftCell, startTime, endTime);
+                }
+                modal.hide();
+            })
+            .catch(err => {
+                alert('保存に失敗しました: ' + err.message);
+            });
+        }
+
+        function renderShiftCell(cell, startTime, endTime) {
+            cell.dataset.start = startTime || '';
+            cell.dataset.end = endTime || '';
+            cell.classList.remove('shift-off-request', 'shift-off-paid', 'shift-off-public-auto', 'shift-off-public-manual', 'shift-manual-attendance', 'shift-prefer-on');
+            const isManual = cell.dataset.manualEdit === 'true';
+            const isPreferOn = cell.dataset.preferOn === 'true';
+            if (startTime && endTime) {
+                if (isManual) {
+                    cell.classList.add('shift-manual-attendance');
+                }
+                if (isPreferOn) {
+                    cell.classList.add('shift-prefer-on');
+                }
+                cell.innerHTML = `<div><span class="shift-time">${startTime} ~ ${endTime}</span></div>`;
+                return;
+            }
+            const offKind = cell.dataset.offKind || '';
+            let label = '公休';
+            let offClass = 'shift-off-public-auto';
+            if (offKind === 'REQUEST') {
+                label = '希望休';
+                offClass = 'shift-off-request';
+            } else if (offKind === 'PAID') {
+                label = '有給';
+                offClass = 'shift-off-paid';
+            } else if (offKind === 'OFF') {
+                label = '公休';
+                offClass = 'shift-off-public-manual';
+            }
+            cell.classList.add(offClass);
+            cell.innerHTML = `<div><span>${label}</span></div>`;
+        }
+
+        function clearEmployeeRequest(modal) {
+            const storeCode = document.getElementById('storeCode').value;
+            const employeeCode = document.getElementById('shiftEditEmployeeCode').value;
+            const date = document.getElementById('shiftEditDateValue').value;
+            if (!storeCode) {
+                alert('店舗を選択してください。');
+                return;
+            }
+
+            fetch('/shift/api/employee-request/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ storeCode, employeeCode, date })
+            })
+            .then(res => res.json())
+            .then(json => {
+                if (!json.success) {
+                    throw new Error(json.message || '削除に失敗しました');
+                }
+                if (activeShiftCell) {
+                    activeShiftCell.dataset.offKind = '';
+                    activeShiftCell.dataset.manualEdit = 'false';
+                    activeShiftCell.dataset.preferOn = 'false';
+                    activeShiftCell.dataset.start = '';
+                    activeShiftCell.dataset.end = '';
+                    renderShiftCell(activeShiftCell, '', '');
+                }
+                document.getElementById('shiftEditStart').value = '';
+                document.getElementById('shiftEditEnd').value = '';
+                document.getElementById('shiftEditOffKind').value = '';
+                modal.hide();
+            })
+            .catch(err => {
+                alert('削除に失敗しました: ' + err.message);
+            });
+        }
+        
+        function showConstraintViolationError(violationMessages) {
+            document.getElementById('optimizationProgress').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'block';
+            
+            // 制約違反メッセージを構築
+            let messageHtml = `
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading mb-2">⚠️ ハード制約違反が検出されました</h6>
+                    <div class="constraint-violations">
+            `;
+            
+            violationMessages.forEach(message => {
+                messageHtml += `<div class="mb-1">• ${message}</div>`;
+            });
+            
+            messageHtml += `
+                    </div>
+                    <hr class="my-3">
+                    <p class="mb-0">
+                        <strong>対処方法:</strong> 上記の制約違反を解決してから再度最適化を実行してください。
+                        制約違反がある状態では結果を保存できません。
+                    </p>
+                </div>
+            `;
+            
+            document.getElementById('errorMessage').innerHTML = messageHtml;
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+        
+        function resetModal() {
+            document.getElementById('optimizationProgress').style.display = 'block';
+            document.getElementById('optimizationResult').style.display = 'none';
+            document.getElementById('optimizationError').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('optimizationStatus').textContent = '計算を開始しています...';
+            document.getElementById('refreshBtn').style.display = 'none';
+            document.getElementById('modalCloseBtn').style.display = 'block';
+            document.getElementById('closeBtn').style.display = 'inline-block';
+        }
+
+        // Chart.js for score plotting (リアルタイムに時刻で1点ずつ追加)
+        let scoreChart;
+        let lastHard = null, lastSoft = null;
+        let baseHard = null, baseSoft = null; // 正規化用ベースライン（最初に観測したbestを0とする）
+        function appendScorePointTick(){
+            const storeCode = document.getElementById('storeCode').value;
+            const departmentCode = document.getElementById('departmentCode').value || '';
+            if (!optimizationTicket || !optimizationTicket.ticketId) return;
+            const url = `/shift/api/calc/score-series/${optimizationTicket.ticketId}?storeCode=${encodeURIComponent(storeCode)}&departmentCode=${encodeURIComponent(departmentCode)}`;
+            fetch(url)
+                .then(r => r.ok ? r.json() : [])
+                .then(list => {
+                    // 最新のスコア（bestSolution）が無ければ直前値を使用
+                    if (Array.isArray(list) && list.length > 0) {
+                        const last = list[list.length - 1];
+                        lastHard = last.hardScore;
+                        lastSoft = last.softScore;
+                    }
+                    if (lastHard == null || lastSoft == null) return; // 初回はbestが記録されるまで待機
+                    const canvas = document.getElementById('scoreChart');
+                    if (!canvas) return;
+                    if (!scoreChart) {
+                        const ctx = canvas.getContext('2d');
+                        scoreChart = new Chart(ctx, {
+                            type: 'line',
+                            data: { labels: [], datasets: [
+                                { label: 'hard(Δ)', data: [], borderColor: '#dc3545', fill: false, tension: 0.15, yAxisID: 'yHard' },
+                                { label: 'soft(Δ)', data: [], borderColor: '#0d6efd', fill: false, tension: 0.15, yAxisID: 'ySoft' }
+                            ]},
+                            options: {
+                                responsive: true,
+                                interaction: { mode: 'index', intersect: false },
+                                stacked: false,
+                                plugins: { legend: { position: 'bottom' } },
+                                scales: {
+                                    x: { title: { display: true, text: 'time' } },
+                                    yHard: { type: 'linear', position: 'left', title: { display: true, text: 'hard Δ' }, grid: { drawOnChartArea: true } },
+                                    ySoft: { type: 'linear', position: 'right', title: { display: true, text: 'soft Δ' }, grid: { drawOnChartArea: false } }
+                                }
+                            }
+                        });
+                    }
+                    // ベースライン（最初に観測した値）を保持してΔ表示にする
+                    if (baseHard === null) baseHard = lastHard;
+                    if (baseSoft === null) baseSoft = lastSoft;
+
+                    const label = new Date().toLocaleTimeString();
+                    scoreChart.data.labels.push(label);
+                    scoreChart.data.datasets[0].data.push(lastHard - baseHard);
+                    scoreChart.data.datasets[1].data.push(lastSoft - baseSoft);
+                    // 点数が多くなりすぎないように200点で古いものを切り捨て
+                    const MAX_POINTS = 200;
+                    if (scoreChart.data.labels.length > MAX_POINTS) {
+                        scoreChart.data.labels.shift();
+                        scoreChart.data.datasets[0].data.shift();
+                        scoreChart.data.datasets[1].data.shift();
+                    }
+                    scoreChart.update();
+                })
+                .catch(()=>{});
+        }
+    </script>
+</div>
+</body>
+</html>

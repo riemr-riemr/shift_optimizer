@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeWeeklyPreferenceMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference">
+    <result column="employee_code" jdbcType="VARCHAR" property="employeeCode" />
+    <result column="day_of_week" jdbcType="SMALLINT" property="dayOfWeek" />
+    <result column="work_style" jdbcType="VARCHAR" property="workStyle" />
+    <result column="base_start_time" jdbcType="TIME" property="baseStartTime" />
+    <result column="base_end_time" jdbcType="TIME" property="baseEndTime" />
+    <result column="store_code" jdbcType="VARCHAR" property="storeCode" />
+    <result column="created_at" jdbcType="TIMESTAMP" property="createdAt" />
+    <result column="updated_at" jdbcType="TIMESTAMP" property="updatedAt" />
+  </resultMap>
+
+  <select id="selectByEmployee" parameterType="string" resultMap="BaseResultMap">
+    select employee_code, day_of_week, work_style, base_start_time, base_end_time, store_code, created_at, updated_at
+    from public.employee_weekly_preference
+    where employee_code = #{employeeCode}
+    order by day_of_week
+  </select>
+
+  <delete id="deleteByEmployee" parameterType="string">
+    delete from public.employee_weekly_preference where employee_code = #{employeeCode}
+  </delete>
+
+  <delete id="deleteAll">
+    delete from public.employee_weekly_preference
+  </delete>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference">
+    insert into public.employee_weekly_preference (
+      employee_code, day_of_week, work_style, base_start_time, base_end_time, store_code, created_at, updated_at)
+    values (
+      #{employeeCode}, #{dayOfWeek}, #{workStyle}, #{baseStartTime}, #{baseEndTime}, #{storeCode}, now(), now())
+  </insert>
+
+  <!-- custom upsert; assumes unique (employee_code, day_of_week) -->
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeWeeklyPreference">
+    INSERT INTO public.employee_weekly_preference (
+      employee_code, day_of_week, work_style, base_start_time, base_end_time, store_code, created_at, updated_at)
+    VALUES (
+      #{employeeCode}, #{dayOfWeek}, #{workStyle}, #{baseStartTime}, #{baseEndTime}, #{storeCode}, now(), now())
+    ON CONFLICT (employee_code, day_of_week) DO UPDATE SET
+      work_style      = EXCLUDED.work_style,
+      base_start_time = EXCLUDED.base_start_time,
+      base_end_time   = EXCLUDED.base_end_time,
+      store_code      = EXCLUDED.store_code,
+      updated_at      = now()
+  </insert>
+</mapper>

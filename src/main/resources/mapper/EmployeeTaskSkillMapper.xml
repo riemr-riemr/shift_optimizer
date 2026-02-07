@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeTaskSkillMapper">
+  <resultMap id="EmployeeTaskSkillMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill">
+    <id     column="employee_code"   property="employeeCode"/>
+    <id     column="task_code"       property="taskCode"/>
+    <result column="store_code"      property="storeCode"/>
+    <result column="department_code" property="departmentCode"/>
+    <result column="skill_level"     property="skillLevel"/>
+  </resultMap>
+
+  <select id="selectAll" resultMap="EmployeeTaskSkillMap">
+    SELECT employee_code, store_code, department_code, task_code, skill_level
+    FROM employee_task_skill
+  </select>
+
+  <select id="selectByTask" parameterType="string" resultMap="EmployeeTaskSkillMap">
+    SELECT employee_code, store_code, department_code, task_code, skill_level
+    FROM employee_task_skill
+    WHERE task_code = #{taskCode}
+  </select>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeTaskSkill">
+    INSERT INTO employee_task_skill (employee_code, store_code, department_code, task_code, skill_level)
+    VALUES (#{employeeCode}, #{storeCode}, #{departmentCode}, #{taskCode}, #{skillLevel})
+    ON CONFLICT (employee_code, task_code) DO UPDATE SET
+      skill_level = EXCLUDED.skill_level,
+      store_code = EXCLUDED.store_code,
+      department_code = EXCLUDED.department_code
+  </insert>
+</mapper>

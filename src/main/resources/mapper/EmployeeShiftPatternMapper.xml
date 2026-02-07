@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.EmployeeShiftPatternMapper">
+  <resultMap id="EmployeeShiftPatternMap" type="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern">
+    <id     column="employee_code" property="employeeCode"/>
+    <id     column="pattern_code"  property="patternCode"/>
+    <result column="priority"      property="priority"/>
+    <result column="start_time"    property="startTime"/>
+    <result column="end_time"      property="endTime"/>
+    <result column="emp_active"    property="active"/>
+  </resultMap>
+
+  <select id="selectByEmployee" parameterType="string" resultMap="EmployeeShiftPatternMap">
+    SELECT ep.employee_code, ep.pattern_code, ep.priority,
+           sp.start_time, sp.end_time,
+           ep.active AS emp_active
+      FROM employee_shift_pattern ep
+      JOIN shift_pattern sp ON sp.pattern_code = ep.pattern_code
+     WHERE ep.employee_code = #{employeeCode}
+       AND COALESCE(ep.active, true) = true
+       AND COALESCE(sp.active, true) = true
+     ORDER BY COALESCE(ep.priority, 32767) ASC, ep.pattern_code ASC
+  </select>
+
+  <select id="selectAllActive" resultMap="EmployeeShiftPatternMap">
+    SELECT ep.employee_code, ep.pattern_code, ep.priority,
+           sp.start_time, sp.end_time,
+           ep.active AS emp_active
+      FROM employee_shift_pattern ep
+      JOIN shift_pattern sp ON sp.pattern_code = ep.pattern_code
+     WHERE COALESCE(ep.active, true) = true
+       AND COALESCE(sp.active, true) = true
+     ORDER BY ep.employee_code ASC, COALESCE(ep.priority, 32767) ASC, ep.pattern_code ASC
+  </select>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.EmployeeShiftPattern">
+    INSERT INTO employee_shift_pattern(employee_code, pattern_code, priority, active)
+    VALUES (#{employeeCode}, #{patternCode}, #{priority}, COALESCE(#{active}, true))
+    ON CONFLICT (employee_code, pattern_code) DO UPDATE SET
+      priority = EXCLUDED.priority,
+      active   = EXCLUDED.active
+  </insert>
+
+  <delete id="delete">
+    DELETE FROM employee_shift_pattern WHERE employee_code = #{employeeCode} AND pattern_code = #{patternCode}
+  </delete>
+</mapper>

@@ -1,0 +1,479 @@
+/* 
+ * Common Styles for Shift Management System
+ * Used by: monthly task planning, shift calculation, and work planning screens
+ */
+
+/* ==========================================
+   Color Palette
+   ========================================== */
+:root {
+  /* Task type colors (based on plan/index.html) */
+  --color-register: #ff6b6b;    /* レジ作業 */
+  --color-stock: #4ecdc4;       /* 在庫作業 */
+  --color-clean: #45b7d1;       /* 清掃作業 */
+  --color-orange: #ffa726;      /* オレンジ */
+  --color-default: #95a5a6;     /* デフォルト/その他 */
+  
+  /* Status colors */
+  --color-success: #20c997;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-info: #0dcaf0;
+  
+  /* Neutral colors */
+  --color-dark: #343a40;
+  --color-secondary: #495057;
+  --color-light: #f8f9fa;
+  --color-white: #ffffff;
+  --color-muted: #6c757d;
+  
+  /* Special display colors */
+  --color-weekend: #ff8a80;        /* 土日ヘッダー */
+  --color-weekend-light: #fff5f5;  /* 土日セル */
+  --color-today: #ffecd2;          /* 今日のセル */
+  --color-header-dark: #495057;    /* ダークヘッダー */
+  
+  /* Border colors */
+  --border-light: #f0f0f0;
+  --border-lighter: #f7f7f7;
+  --border-normal: #dee2e6;
+  
+  /* Hover effects */
+  --hover-light: #f1f5ff;
+}
+
+/* ==========================================
+   Grid System Components
+   ========================================== */
+.grid-container {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--border-normal);
+  border-radius: 6px;
+  width: max-content;
+  background: var(--color-white);
+}
+
+.grid-header, .grid-cell {
+  padding: 8px 4px;
+  text-align: center;
+  background-color: var(--color-light);
+  color: var(--color-dark);
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-lighter);
+  white-space: nowrap;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.grid-header.time-slot {
+  background: var(--color-dark);
+  color: white;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border: 1px solid var(--border-normal);
+}
+
+.grid-row-header {
+  font-weight: 700;
+  background: var(--color-secondary);
+  color: white;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border: 1px solid var(--border-normal);
+}
+
+.grid-cell:hover {
+  background: var(--hover-light);
+}
+
+/* ==========================================
+   Assignment Cell Styles
+   ========================================== */
+.grid-cell.assigned {
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.grid-cell.assigned.color-0 { background: var(--color-stock); }
+.grid-cell.assigned.color-1 { background: var(--color-clean); }
+.grid-cell.assigned.color-2 { background: var(--color-register); }
+.grid-cell.assigned.color-3 { background: var(--color-orange); }
+.grid-cell.assigned.color-4 { background: var(--color-default); }
+
+/* Task assignment (department tasks) */
+.grid-cell.task-assigned {
+  background: var(--color-default);
+  color: white;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* Break assignment */
+.break-assigned {
+  background: var(--color-default);
+  color: white;
+  border: 1px solid var(--color-default);
+}
+
+.break-assigned::before {
+  content: "休";
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* ==========================================
+   Work Hours Display
+   ========================================== */
+.work-hours-cell {
+  background: var(--color-light);
+  border: 1px solid var(--border-normal);
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.work-hours-cell.working {
+  background: var(--hover-light);
+  color: #495057;
+  border: 1px solid var(--border-normal);
+}
+
+/* ==========================================
+   Work Model Cells
+   ========================================== */
+.work-model-cell {
+  position: relative;
+  padding: 2px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--border-normal);
+}
+
+.work-model-cell.register-needed {
+  background: var(--color-stock);
+  border: 1px solid var(--color-stock);
+}
+
+.work-model-cell.register-needed.has-employee {
+  background: var(--color-clean);
+  border: 1px solid var(--color-clean);
+  color: white;
+  font-weight: 600;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.work-model-cell-empty {
+  background: transparent;
+  border: none;
+  height: 35px;
+}
+
+/* ==========================================
+   Staffing Balance Cells
+   ========================================== */
+.staffing-balance-cell {
+  position: relative;
+  padding: 4px;
+  height: 35px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--border-normal);
+  background: var(--color-light);
+}
+
+.staffing-balance-cell.shortage {
+  background: var(--color-register);
+  color: white;
+  border: 1px solid var(--color-register);
+}
+
+.staffing-balance-cell.excess {
+  background: var(--color-orange);
+  color: white;
+  border: 1px solid var(--color-orange);
+}
+
+.staffing-balance-cell.balanced {
+  background: var(--color-stock);
+  color: white;
+  border: 1px solid var(--color-stock);
+}
+
+.balance-value {
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.balance-detail {
+  font-size: 0.5rem;
+  opacity: 0.8;
+}
+
+/* ==========================================
+   Employee Information Display
+   ========================================== */
+.employee-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  line-height: 1.2;
+}
+
+.employee-code {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.9);
+  margin-top: 2px;
+}
+
+.employee-shift-cell {
+  background: var(--color-light);
+  border: 1px solid var(--border-normal);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* ==========================================
+   Calendar Components (for monthly view)
+   ========================================== */
+.calendar-grid { 
+  display: grid; 
+  grid-template-columns: repeat(7, 1fr); 
+  gap: 8px; 
+  margin-bottom: 1rem;
+}
+
+.cal-cell { 
+  border: 1px solid var(--border-normal); 
+  border-radius: 8px; 
+  padding: 8px; 
+  min-height: 120px; 
+  background: var(--color-white); 
+  transition: box-shadow 0.2s ease;
+}
+
+.cal-cell:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.cal-head { 
+  font-weight: 600; 
+  text-align: center; 
+  padding: 8px 0; 
+  color: #495057; 
+  background: var(--color-light);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.cal-date { 
+  font-size: 13px; 
+  color: var(--color-muted); 
+  margin-bottom: 6px; 
+  font-weight: 500;
+}
+
+.cal-item { 
+  font-size: 11px; 
+  line-height: 1.3; 
+  padding: 4px 6px; 
+  border-left: 3px solid #0d6efd; 
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%); 
+  border-radius: 4px; 
+  margin-bottom: 4px; 
+  cursor: pointer;
+  transition: all 0.2s ease;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.cal-item:hover {
+  background: linear-gradient(135deg, #e3f2fd 0%, #d1ecf1 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.cal-item.cal-updated {
+  border-left-color: var(--color-orange) !important;
+  background: linear-gradient(135deg, #fff4e6 0%, #ffe8cc 100%) !important;
+}
+
+.cal-item.cal-preview {
+  border-left-color: var(--color-success) !important;
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
+  opacity: 0.8 !important;
+  cursor: pointer !important;
+  animation: pulse 2s infinite;
+}
+
+.cal-item.cal-preview:hover {
+  opacity: 1 !important;
+  background: linear-gradient(135deg, #c3e6cb 0%, #a3d9a5 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+.cal-empty { 
+  color: #adb5bd; 
+  font-size: 12px; 
+  text-align: center;
+  font-style: italic;
+}
+
+/* ==========================================
+   Drag & Drop Functionality
+   ========================================== */
+.grid-cell.assigned[draggable="true"] {
+  cursor: grab;
+  position: relative;
+}
+
+.grid-cell.assigned.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  transform: rotate(3deg) scale(0.95);
+  z-index: 1000;
+}
+
+.drop-zone {
+  transition: all 0.2s ease;
+}
+
+.drop-zone.drag-over {
+  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
+  border: 2px dashed #4caf50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+.drop-zone.modified {
+  border: 2px solid var(--color-success);
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+/* ==========================================
+   Context Menu
+   ========================================== */
+.context-menu {
+  position: absolute;
+  background: white;
+  border: 1px solid var(--border-normal);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1500;
+  min-width: 150px;
+  padding: 4px 0;
+  display: none;
+}
+
+.context-menu.show {
+  display: block;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #495057;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu-item:hover {
+  background: var(--color-light);
+  color: #0d6efd;
+}
+
+.context-menu-item.danger {
+  color: var(--color-danger);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--color-light);
+  color: var(--color-danger);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-normal);
+  margin: 4px 0;
+}
+
+/* ==========================================
+   Responsive Design
+   ========================================== */
+@media (max-width: 768px) {
+  .calendar-grid {
+    gap: 4px;
+  }
+  .cal-cell {
+    min-height: 80px;
+    padding: 4px;
+  }
+  .cal-item {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+  
+  .grid-header, .grid-cell {
+    padding: 4px 2px;
+    font-size: 0.65rem;
+  }
+  
+  .employee-name {
+    font-size: 0.7rem;
+  }
+  
+  .employee-code {
+    font-size: 0.6rem;
+  }
+}
+
+/* ==========================================
+   Utility Classes
+   ========================================== */
+.text-task-register { color: var(--color-register); }
+.text-task-stock { color: var(--color-stock); }
+.text-task-clean { color: var(--color-clean); }
+.text-task-default { color: var(--color-default); }
+
+.bg-task-register { background-color: var(--color-register); }
+.bg-task-stock { background-color: var(--color-stock); }
+.bg-task-clean { background-color: var(--color-clean); }
+.bg-task-default { background-color: var(--color-default); }
+
+.border-task-register { border-color: var(--color-register); }
+.border-task-stock { border-color: var(--color-stock); }
+.border-task-clean { border-color: var(--color-clean); }
+.border-task-default { border-color: var(--color-default); }

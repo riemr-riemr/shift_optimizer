@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" 
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" 
+      layout:decorate="~{layout}">
+<head>
+  <title>従業員個人シフト表示</title>
+  <style>
+    .shift-calendar-table {
+      font-size: 0.9rem;
+    }
+    .shift-calendar-table th {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .shift-calendar-table td {
+      border: 1px solid #e9ecef;
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      width: calc(100% / 7);
+      min-height: 100px;
+      background: #fafafa;
+      position: relative;
+    }
+    .shift-calendar-table td:hover {
+      background: #f8f9fa;
+      transition: background-color 0.2s ease;
+    }
+    .day-number {
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: #495057;
+      margin-bottom: 5px;
+    }
+    .other-month .day-number {
+      color: #adb5bd;
+    }
+    .shift-detail {
+      font-size: 0.8rem;
+      margin-bottom: 2px;
+    }
+    .work-time {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+      display: inline-block;
+      margin-bottom: 3px;
+    }
+    .work-duration {
+      background: #f3e5f5;
+      color: #7b1fa2;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 0.7rem;
+    }
+    .holiday-cell {
+      background: #fff5f5 !important;
+    }
+    .holiday-text {
+      color: #d32f2f;
+      font-size: 0.8rem;
+      text-align: center;
+      padding-top: 20px;
+    }
+    .weekend {
+      background-color: #fff5f5 !important;
+    }
+    .today {
+      background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%) !important;
+    }
+    .today .day-number {
+      color: #d63384;
+      font-weight: 800;
+    }
+    .stats-card {
+      background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+      border-radius: 8px;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 1rem;
+    }
+    .stat-number {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    .stat-label {
+      font-size: 0.9rem;
+      color: #6c757d;
+    }
+    .employee-info {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .no-data-message {
+      text-align: center;
+      padding: 3rem;
+      color: #6c757d;
+    }
+  </style>
+</head>
+<body>
+<div layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-person-lines-fill"></i> 従業員個人シフト表示</h1>
+    <p class="mb-0">従業員を指定して1カ月のシフトと勤務時間を確認できます</p>
+  </div>
+
+  <!-- 検索条件カード -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-funnel"></i> 検索条件</h5>
+    </div>
+    <div class="card-body">
+      <form th:action="@{/employee-shift}" method="get">
+        <div class="row align-items-end">
+          <div class="col-md-4">
+            <label for="employeeCode" class="form-label">
+              <i class="bi bi-person"></i> 従業員
+              <span class="text-danger">*</span>
+            </label>
+            <select id="employeeCode" name="employeeCode" class="form-select" required>
+              <option value="">-- 従業員を選択してください --</option>
+              <option th:each="emp : ${employees}" 
+                      th:value="${emp.employeeCode}"
+                      th:selected="${emp.employeeCode == selectedEmployeeCode}"
+                      th:text="${emp.employeeCode + ' - ' + emp.employeeName}"></option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="targetMonth" class="form-label">
+              <i class="bi bi-calendar-month"></i> 対象月
+            </label>
+            <input type="month" id="targetMonth" name="targetMonth" class="form-control" 
+                   th:value="${selectedYear + '-' + (selectedMonth < 10 ? '0' + selectedMonth : selectedMonth)}" required />
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-search"></i> 表示
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- エラーメッセージ表示 -->
+  <div th:if="${errorMessage}" class="alert alert-danger">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <span th:text="${errorMessage}"></span>
+  </div>
+
+  <!-- シフトデータ表示 -->
+  <div th:if="${hasShiftData}">
+    <!-- 従業員情報カード -->
+    <div class="employee-info">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <h3 class="mb-1">
+            <i class="bi bi-person-badge"></i>
+            <span th:text="${selectedEmployee.employeeName}">従業員名</span>
+          </h3>
+          <div class="mb-2">
+            <span class="badge bg-light text-dark me-2">
+              <i class="bi bi-credit-card-2-front"></i>
+              <span th:text="${selectedEmployee.employeeCode}">コード</span>
+            </span>
+            <span class="badge bg-light text-dark">
+              <i class="bi bi-shop"></i>
+              店舗: <span th:text="${selectedEmployee.storeCode}">店舗</span>
+            </span>
+          </div>
+        </div>
+        <div class="col-md-4 text-end">
+          <h4 class="mb-0">
+            <span th:text="${monthlyShift.targetMonth.year}">2024</span>年
+            <span th:text="${monthlyShift.targetMonth.monthValue}">1</span>月
+          </h4>
+          <div class="mt-2">
+            <a th:href="@{/employee-shift/export(employeeCode=${selectedEmployeeCode}, targetMonth=${selectedYear + '-' + (selectedMonth < 10 ? '0' + selectedMonth : selectedMonth)})}" 
+               class="btn btn-light btn-sm">
+              <i class="bi bi-download"></i> CSV出力
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 月間統計情報 -->
+    <div class="row mb-4">
+      <div class="col-lg-12">
+        <div class="card stats-card">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-primary" th:text="${monthlyShift.monthlyStats.totalWorkDays}">0</div>
+                  <div class="stat-label">勤務日数</div>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-success" th:text="${monthlyShift.monthlyStats.totalWorkTimeFormatted}">0:00</div>
+                  <div class="stat-label">総勤務時間</div>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-info" th:text="${monthlyShift.monthlyStats.averageWorkTimeFormatted}">0:00</div>
+                  <div class="stat-label">平均勤務時間</div>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-warning" th:text="${monthlyShift.monthlyStats.maxWorkTimeFormatted}">0:00</div>
+                  <div class="stat-label">最長勤務時間</div>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-secondary" th:text="${monthlyShift.monthlyStats.minWorkTimeFormatted}">0:00</div>
+                  <div class="stat-label">最短勤務時間</div>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="stat-item">
+                  <div class="stat-number text-danger" th:text="${monthlyShift.monthlyStats.holidayCount}">0</div>
+                  <div class="stat-label">休日数</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- シフトカレンダー -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="bi bi-calendar-week"></i> 
+          シフトカレンダー
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table shift-calendar-table mb-0">
+            <thead>
+              <tr>
+                <th>日</th>
+                <th>月</th>
+                <th>火</th>
+                <th>水</th>
+                <th>木</th>
+                <th>金</th>
+                <th>土</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="week : ${monthlyShift.weeks}">
+                <td th:each="date : ${week}" 
+                    th:class="(${date.monthValue != monthlyShift.targetMonth.monthValue} ? 'other-month' : '') + 
+                             (${date.dayOfWeek.value == 6 or date.dayOfWeek.value == 7} ? ' weekend' : '') +
+                             (${date.equals(T(java.time.LocalDate).now())} ? ' today' : '') +
+                             (${monthlyShift.dailyShifts.get(date) != null and monthlyShift.dailyShifts.get(date).holiday} ? ' holiday-cell' : '')">
+                  <div class="day-number" th:text="${date.dayOfMonth}"></div>
+                  
+                  <!-- 勤務がある日 -->
+                  <div th:if="${monthlyShift.dailyShifts.get(date) != null and !monthlyShift.dailyShifts.get(date).holiday}">
+                    <div class="work-time" th:text="${monthlyShift.dailyShifts.get(date).workPeriod}"></div>
+                    <div class="work-duration" th:text="${monthlyShift.dailyShifts.get(date).workTimeFormatted}"></div>
+                    <div th:if="${monthlyShift.dailyShifts.get(date).registerNo != null}" class="shift-detail">
+                      <small class="text-muted">
+                        <i class="bi bi-calculator"></i> レジ<span th:text="${monthlyShift.dailyShifts.get(date).registerNo}"></span>
+                      </small>
+                    </div>
+                  </div>
+                  
+                  <!-- 休日 -->
+                  <div th:if="${monthlyShift.dailyShifts.get(date) != null and monthlyShift.dailyShifts.get(date).holiday}" 
+                       class="holiday-text">
+                    <i class="bi bi-house"></i><br>休日
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="mt-3 d-flex justify-content-center">
+      <div class="d-flex gap-3 flex-wrap">
+        <div class="d-flex align-items-center">
+          <div style="width: 16px; height: 16px; background: #e3f2fd; border: 1px solid #1976d2; border-radius: 3px; margin-right: 6px;"></div>
+          <small>勤務時間</small>
+        </div>
+        <div class="d-flex align-items-center">
+          <div style="width: 16px; height: 16px; background: #f3e5f5; border: 1px solid #7b1fa2; border-radius: 3px; margin-right: 6px;"></div>
+          <small>勤務時間数</small>
+        </div>
+        <div class="d-flex align-items-center">
+          <div style="width: 16px; height: 16px; background: #fff5f5; border: 1px solid #d32f2f; border-radius: 3px; margin-right: 6px;"></div>
+          <small>休日・土日</small>
+        </div>
+        <div class="d-flex align-items-center">
+          <div style="width: 16px; height: 16px; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 3px; margin-right: 6px;"></div>
+          <small>今日</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- データがない場合の表示 -->
+  <div th:if="${!hasShiftData and selectedEmployeeCode != null}" class="card">
+    <div class="card-body no-data-message">
+      <i class="bi bi-calendar-x display-1"></i>
+      <h4 class="mt-3">シフトデータがありません</h4>
+      <p>選択された従業員・期間のシフトデータが見つかりませんでした。</p>
+    </div>
+  </div>
+
+  <!-- 初期表示メッセージ -->
+  <div th:if="${selectedEmployeeCode == null}" class="card">
+    <div class="card-body no-data-message">
+      <i class="bi bi-person-plus display-1"></i>
+      <h4 class="mt-3">従業員を選択してください</h4>
+      <p>上記の検索フォームから従業員と期間を選択して「表示」ボタンをクリックしてください。</p>
+    </div>
+  </div>
+
+  <script>
+    // 今日の日付をデフォルトに設定
+    document.addEventListener('DOMContentLoaded', function() {
+      const today = new Date();
+      const yearInput = document.getElementById('year');
+      const monthInput = document.getElementById('month');
+      
+      if (!yearInput.value) {
+        yearInput.value = today.getFullYear();
+      }
+      if (!monthInput.value) {
+        monthInput.value = today.getMonth() + 1;
+      }
+    });
+  </script>
+</div>
+</body>
+</html>

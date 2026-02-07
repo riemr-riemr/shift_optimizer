@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>他作業スキルマトリクス</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    .table td, .table th { vertical-align: middle; }
+    .sticky-header { position: sticky; top: 0; background: #fff; z-index: 2; }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-grid-3x3-gap"></i> 他作業スキルマトリクス</h1>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <form class="row g-2 align-items-end" method="get" th:action="@{/skills/department}">
+        <div class="col-auto">
+          <label class="form-label">部門</label>
+          <select class="form-select" name="departmentCode">
+            <option value="">部門を選択</option>
+            <option th:each="d : ${departments}"
+                    th:value="${d.departmentCode}"
+                    th:text="${d.departmentCode + ' - ' + (d.departmentName?:'')}"
+                    th:selected="${d.departmentCode == selectedDepartment}"></option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-primary" type="submit">表示</button>
+        </div>
+      </form>
+    </div>
+    <div class="card-body">
+      <div th:if="${selectedDepartment == null || selectedDepartment.isEmpty()}">
+        <div class="alert alert-info">部門を選択してください。</div>
+      </div>
+      <div th:if="${selectedDepartment != null && !selectedDepartment.isEmpty()}">
+        <form method="post" th:action="@{/skills/department}">
+          <input type="hidden" name="departmentCode" th:value="${selectedDepartment}">
+          <div class="table-responsive" style="max-height: 70vh;">
+            <table class="table table-sm table-striped">
+              <thead class="sticky-header">
+              <tr><th>従業員コード</th><th>従業員名</th><th>スキルレベル (0-4)</th></tr>
+              </thead>
+              <tbody>
+              <tr th:each="e : ${employees}">
+                <td th:text="${e.employeeCode}"></td>
+                <td th:text="${e.employeeName}"></td>
+                <td style="max-width: 140px;">
+                  <select class="form-select form-select-sm"
+                          th:name="${'skill_' + e.employeeCode}">
+                    <option th:each="lvl : ${#numbers.sequence(0,4)}"
+                            th:value="${lvl}"
+                            th:text="${lvl}"
+                            th:selected="${skillMap[e.employeeCode] != null and skillMap[e.employeeCode] == lvl}"></option>
+                  </select>
+                </td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-3">
+            <button class="btn btn-success" type="submit"><i class="bi bi-floppy"></i> 保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+

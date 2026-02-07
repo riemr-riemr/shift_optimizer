@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>従業員マスタ</title>
+</head>
+<body>
+<main layout:fragment="content">
+  <div th:replace="~{fragments/master-layout :: master-list-modal('従業員マスタ', 'bi bi-people', ~{::add-modal}, ~{::data-table}, ~{::edit-modal})}">
+    
+    <!-- Data Table -->
+    <div th:fragment="data-table" class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>従業員コード</th>
+            <th>氏名</th>
+            <th>店舗コード</th>
+            <th>日下限(分)</th>
+            <th>日上限(分)</th>
+            <th>週下限(時)</th>
+            <th>週上限(時)</th>
+            
+            
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="e : ${employees}">
+            <td th:text="${e.employeeCode}"></td>
+            <td th:text="${e.employeeName}"></td>
+            <td>
+              <span class="badge bg-info" th:text="${e.storeCode}"></span>
+            </td>
+            <td class="text-end" th:text="${e.minWorkMinutesDay}"></td>
+            <td class="text-end" th:text="${e.maxWorkMinutesDay}"></td>
+            <td class="text-end" th:text="${e.minWorkHoursWeek}"></td>
+            <td class="text-end" th:text="${e.maxWorkHoursWeek}"></td>
+            <td>
+              <a class="btn btn-sm btn-outline-primary me-1"
+                 th:href="@{'/employees/' + ${e.employeeCode}}">編集</a>
+              <form th:action="@{'/employees/' + ${e.employeeCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('従業員「' + '[[${e.employeeName}]]' + '」を削除しますか？');">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn btn-sm btn-outline-danger">削除</button>
+              </form>
+            </td>
+          </tr>
+          <tr th:if="${#lists.isEmpty(employees)}">
+            <td colspan="6" class="text-center text-muted py-4">
+              <i class="bi bi-inbox display-4 d-block mb-2"></i>
+              登録されている従業員がありません
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Add Modal -->
+    <div th:fragment="add-modal" class="modal fade" id="addModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">従業員追加</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form th:action="@{/employees}" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員コード</label>
+                    <input type="text" class="form-control" name="employeeCode" required maxlength="32">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員名</label>
+                    <input type="text" class="form-control" name="employeeName" required maxlength="100">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">店舗コード</label>
+                    <input type="text" class="form-control" name="storeCode" required maxlength="32">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日下限(分)</label>
+                    <input type="number" class="form-control" name="minWorkMinutesDay" min="0" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日上限(分)</label>
+                    <input type="number" class="form-control" name="maxWorkMinutesDay" min="1" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週下限(時)</label>
+                    <input type="number" class="form-control" name="minWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週上限(時)</label>
+                    <input type="number" class="form-control" name="maxWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+              </div>
+                          </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div th:fragment="edit-modal" class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">従業員編集</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="editForm" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員コード</label>
+                    <input type="text" class="form-control" id="editEmployeeCode" readonly>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">従業員名</label>
+                    <input type="text" class="form-control" name="employeeName" id="editEmployeeName" required maxlength="100">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">店舗コード</label>
+                    <input type="text" class="form-control" name="storeCode" id="editStoreCode" required maxlength="32">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日下限(分)</label>
+                    <input type="number" class="form-control" name="minWorkMinutesDay" id="editMinWorkMinutesDay" min="0" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">日上限(分)</label>
+                    <input type="number" class="form-control" name="maxWorkMinutesDay" id="editMaxWorkMinutesDay" min="1" max="1440">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週下限(時)</label>
+                    <input type="number" class="form-control" name="minWorkHoursWeek" id="editMinWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label class="form-label">週上限(時)</label>
+                    <input type="number" class="form-control" name="maxWorkHoursWeek" id="editMaxWorkHoursWeek" min="0" max="100">
+                  </div>
+                </div>
+              </div>
+                          </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script></script>
+</main>
+</body>
+</html>

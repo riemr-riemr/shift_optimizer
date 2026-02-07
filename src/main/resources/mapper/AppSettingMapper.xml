@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.AppSettingMapper">
+  <resultMap id="BaseResultMap" type="io.github.riemr.shift.infrastructure.persistence.entity.AppSetting">
+    <id column="setting_key" jdbcType="VARCHAR" property="settingKey" />
+    <result column="setting_value" jdbcType="VARCHAR" property="settingValue" />
+    <result column="updated_at" jdbcType="TIMESTAMP" property="updatedAt" />
+  </resultMap>
+
+  <select id="selectByKey" parameterType="string" resultMap="BaseResultMap">
+    select setting_key, setting_value, updated_at
+      from public.app_setting
+     where setting_key = #{key}
+  </select>
+
+  <insert id="upsert">
+    insert into public.app_setting (setting_key, setting_value, updated_at)
+    values (#{key}, #{value}, now())
+    on conflict (setting_key) do update set setting_value = excluded.setting_value,
+                                         updated_at = now()
+  </insert>
+</mapper>
+
