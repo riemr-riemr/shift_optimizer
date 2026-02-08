@@ -41,7 +41,6 @@ public class ShiftOptimizationPreparationService {
         
         boolean success = true;
         LocalDate cycleStart = month;
-        LocalDate cycleEndInclusive = month.plusMonths(1).minusDays(1);
         
         // 部門作業需要の物質化（全部門対象）
         try {

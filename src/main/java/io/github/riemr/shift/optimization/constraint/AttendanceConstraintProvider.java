@@ -47,10 +47,8 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 consecutiveSevenDaysHard(f),
                 requirePatternAlignment(f),
                 headcountBalance(f),
-                // headcountShortageWhenNone(f),
                 weeklyWorkHoursRange(f),
                 monthlyWorkHoursRange(f),
-                // consecutiveSevenDaysPenalty(f),
                 overstaffLightPenalty(f),
                 attendanceGroupMinOnDutyShortage(f),
                 attendanceGroupMinOnDutyShortageWhenNone(f),
@@ -234,22 +232,6 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter((d, assigned) -> assigned > (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
                 .penalize(HardSoftScore.ofSoft(10), (d, assigned) -> assigned - (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
                 .asConstraint("Attendance: overstaff light penalty");
-    }
-
-    /**
-     * 需要スロットに誰も割り当てがない場合に不足分を強く誘導する。
-     *
-     * @param f 制約ファクトリ
-     * @return 不足誘導制約
-     */
-    private Constraint headcountShortageWhenNone(ConstraintFactory f) {
-        return f.forEach(RegisterDemandSlot.class)
-                .ifNotExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
-                        Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
-                .penalize(HardSoftScore.ofSoft(120), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()) * 2)
-                .asConstraint("Quarter headcount shortage (none)");
     }
 
     /**
@@ -626,46 +608,5 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     private static YearMonth getMonthStart(EmployeeMonthlySetting setting) {
         LocalDate date = setting.getMonthStart().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
         return YearMonth.from(date);
-    }
-
-    // ===== 連勤ペナルティ（ATTENDANCE） =====
-    // 7日連続の出勤を強く避けるためのソフト制約。
-    // ベースとなる当日の割当（1件）に対し、前6日それぞれに同一従業員の割当が存在する場合にペナルティ。
-    // 注意: 同一日に複数パターンが存在する場合、重複カウントの可能性があるが、同日ダブルブッキングはハード制約で抑止済み。
-    /**
-     * 7日連続出勤を抑制するソフト制約。
-     *
-     * @param f 制約ファクトリ
-     * @return 7連勤ペナルティ制約
-     */
-    private Constraint consecutiveSevenDaysPenalty(ConstraintFactory f) {
-        return f.forEach(DailyPatternAssignmentEntity.class)
-                .filter(a -> a.getAssignedEmployee() != null)
-                // d-1
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(1))))
-                // d-2
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(2))))
-                // d-3
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(3))))
-                // d-4
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(4))))
-                // d-5
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(5))))
-                // d-6
-                .ifExists(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(a -> a.getAssignedEmployee().getEmployeeCode(), b -> b.getAssignedEmployee() != null ? b.getAssignedEmployee().getEmployeeCode() : null),
-                        Joiners.filtering((a, b) -> b.getAssignedEmployee() != null && b.getDate().equals(a.getDate().minusDays(6))))
-                .penalize(HardSoftScore.ofSoft(10000))
-                .asConstraint("Attendance: 7 consecutive days penalty");
     }
 }

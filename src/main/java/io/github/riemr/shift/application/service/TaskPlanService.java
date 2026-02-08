@@ -303,8 +303,6 @@ public class TaskPlanService {
     // Special-day generation removed; use monthly_task_plan
 
     private static int nvl(Integer v, int def) { return v == null ? def : v; }
-    private static Date toDate(LocalDate d) { return Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()); }
-    private static Date toDate(LocalDateTime dt) { return Date.from(dt.atZone(ZoneId.systemDefault()).toInstant()); }
     private static LocalTime toLocalTime(Date timeOnly) { 
         if (timeOnly == null) return null;
         return timeOnly.toInstant().atZone(ZoneId.systemDefault()).toLocalTime(); 
