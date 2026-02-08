@@ -90,36 +90,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Missing 60min break within 2h buffer when daily work >= 6h");
     }
 
-    private static int continuousSpanMinutes(List<ShiftAssignmentPlanningEntity> assignments) {
-        Date minStart = null;
-        Date maxEnd = null;
-        for (ShiftAssignmentPlanningEntity a : assignments) {
-            if (a.getStartAt() == null || a.getEndAt() == null) continue;
-            if (minStart == null || a.getStartAt().before(minStart)) {
-                minStart = a.getStartAt();
-            }
-            if (maxEnd == null || a.getEndAt().after(maxEnd)) {
-                maxEnd = a.getEndAt();
-            }
-        }
-        if (minStart == null || maxEnd == null) return 0;
-        long diffMs = maxEnd.getTime() - minStart.getTime();
-        return diffMs > 0 ? (int) (diffMs / (1000 * 60)) : 0;
-    }
-
-    private static boolean hasGapOfAtLeast(List<ShiftAssignmentPlanningEntity> assignments, int minutes) {
-        if (assignments.size() <= 1) return false;
-        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
-        for (int i = 1; i < assignments.size(); i++) {
-            var prevEnd = assignments.get(i - 1).getEndAt();
-            var curStart = assignments.get(i).getStartAt();
-            if (prevEnd == null || curStart == null) continue;
-            long gapMin = (curStart.getTime() - prevEnd.getTime()) / (1000 * 60);
-            if (gapMin >= minutes) return true;
-        }
-        return false;
-    }
-
     private static boolean hasGapWithinWindow(List<ShiftAssignmentPlanningEntity> assignments,
                                               Date shiftStart,
                                               Date shiftEnd,
@@ -166,17 +136,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter((sa, skill) -> skill.getSkillLevel() != null && (skill.getSkillLevel() == 0 || skill.getSkillLevel() == 1))
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Forbidden department assignment (skill 0/1)");
-    }
-
-    /**
-     * 未割り当てスロット禁止制約（ハード制約）- テスト用
-     * ASSIGNMENT段階では全スロットが必ず割り当てられている必要がある
-     */
-    private Constraint forbidUnassignedSlotForAssignment(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() == null)
-                .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Forbid unassigned slot (ASSIGNMENT) - HARD");
     }
 
     /**
@@ -600,32 +559,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         }
 
         return blocks;
-    }
-
-    /**
-     * 出勤時間外での割り当て禁止制約（ハード制約）
-     * 休憩・レジ・部門タスクは従業員の出勤時間内でのみ可能とする
-     * 出勤していない時間帯に業務を割り当てることを禁止
-     *
-     * @param f 制約ファクトリ
-     * @return 出勤時間外割り当て禁止制約
-     */
-    private Constraint forbidAssignmentOutsideShiftTime(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null
-                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
-                .join(ShiftAssignment.class,
-                        Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), ShiftAssignment::getEmployeeCode),
-                        Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate, 
-                                shift -> shift.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()))
-                .filter((sa, shift) -> {
-                    // タスク割り当て時間が出勤時間の外にある場合に違反
-                    return sa.getStartAt() != null && sa.getEndAt() != null
-                        && shift.getStartAt() != null && shift.getEndAt() != null
-                        && (sa.getStartAt().before(shift.getStartAt()) || sa.getEndAt().after(shift.getEndAt()));
-                })
-                .penalize(HardSoftScore.ONE_HARD)
-                .asConstraint("Forbid assignment outside shift time");
     }
 
     /**

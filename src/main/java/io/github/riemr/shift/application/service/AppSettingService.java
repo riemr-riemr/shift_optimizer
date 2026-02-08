@@ -106,41 +106,4 @@ public class AppSettingService {
         return false;
     }
 
-    @Deprecated(forRemoval = true)
-    private void assertDemandIntervalsAligned(int minutesPerSlot) {
-        // 旧方針（整列チェックして変更許可）。現在は変更禁止のため未使用。
-        try {
-            Integer regMisaligned = jdbc.queryForObject("""
-                    SELECT COUNT(*)
-                    FROM register_demand_interval
-                    WHERE (MOD(EXTRACT(MINUTE FROM from_time)::int, ?) <> 0)
-                       OR (EXTRACT(SECOND FROM from_time)::int <> 0)
-                       OR (MOD(EXTRACT(MINUTE FROM to_time)::int, ?) <> 0)
-                       OR (EXTRACT(SECOND FROM to_time)::int <> 0)
-                    """, Integer.class, minutesPerSlot, minutesPerSlot);
-            if (regMisaligned != null && regMisaligned > 0) {
-                throw new IllegalStateException("timeResolutionMinutes を " + minutesPerSlot
-                        + " に変更できません。register_demand_interval に " + minutesPerSlot + " 分境界に揃っていないデータが "
-                        + regMisaligned + " 件あります。");
-            }
-
-            Integer workMisaligned = jdbc.queryForObject("""
-                    SELECT COUNT(*)
-                    FROM work_demand_interval
-                    WHERE (MOD(EXTRACT(MINUTE FROM from_time)::int, ?) <> 0)
-                       OR (EXTRACT(SECOND FROM from_time)::int <> 0)
-                       OR (MOD(EXTRACT(MINUTE FROM to_time)::int, ?) <> 0)
-                       OR (EXTRACT(SECOND FROM to_time)::int <> 0)
-                    """, Integer.class, minutesPerSlot, minutesPerSlot);
-            if (workMisaligned != null && workMisaligned > 0) {
-                throw new IllegalStateException("timeResolutionMinutes を " + minutesPerSlot
-                        + " に変更できません。work_demand_interval に " + minutesPerSlot + " 分境界に揃っていないデータが "
-                        + workMisaligned + " 件あります。");
-            }
-        } catch (IllegalStateException e) {
-            throw e;
-        } catch (Exception e) {
-            // テーブル未作成/権限/方言差異などで検査できない場合は、既存動作を優先してスキップする。
-        }
-    }
 }
