@@ -287,6 +287,12 @@
      WHERE employee_code = #{employeeCode}
   </update>
 
+  <update id="updateAuthorityCode">
+    UPDATE public.employee
+       SET authority_code = #{authorityCode}
+     WHERE employee_code = #{employeeCode}
+  </update>
+
   <!-- custom upsert (excluding auth fields) -->
   <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     INSERT INTO public.employee (

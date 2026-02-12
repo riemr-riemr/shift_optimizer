@@ -18,6 +18,9 @@ public class EmployeeForm {
     @NotBlank(message = "氏名は必須です")
     private String employeeName;
 
+    @NotBlank(message = "権限コードは必須です")
+    private String authorityCode;
+
 
     @NotNull(message = "1日上限時間は必須です")
     @Min(value = 1, message = "1日上限時間は1分以上である必要があります")

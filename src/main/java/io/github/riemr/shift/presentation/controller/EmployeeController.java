@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.EmployeeService;
+import io.github.riemr.shift.infrastructure.mapper.AuthorityMasterMapper;
 import io.github.riemr.shift.presentation.form.EmployeeForm;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 @RequiredArgsConstructor
 public class EmployeeController {
     private final EmployeeService service;
+    private final AuthorityMasterMapper authorityMasterMapper;
     private final EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
     private final EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
 
@@ -59,9 +61,16 @@ public class EmployeeController {
         for (int i = 0; i < 3; i++) form.getMonthlyHours().add(new EmployeeForm.MonthlyHoursRow());
         // 年選択の初期値（今年）
         form.setSelectedYear(Year.now().getValue());
+        var roles = authorityMasterMapper.selectAll();
+        if (roles.stream().anyMatch(r -> "USER".equalsIgnoreCase(r.getAuthorityCode()))) {
+            form.setAuthorityCode("USER");
+        } else if (!roles.isEmpty()) {
+            form.setAuthorityCode(roles.get(0).getAuthorityCode());
+        }
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("authorityOptions", roles);
         model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
@@ -105,12 +114,17 @@ public class EmployeeController {
         // 年選択の初期値設定とテーブル形式データ変換
         Integer currentYear = Year.now().getValue();
         form.setSelectedYear(currentYear);
+        var auth = service.findAuth(code);
+        if (auth != null && auth.getAuthorityCode() != null && !auth.getAuthorityCode().isBlank()) {
+            form.setAuthorityCode(auth.getAuthorityCode());
+        }
         loadMonthlyHoursForYear(form, code, currentYear);
         loadMonthlyOffdaysForYear(form, code, currentYear);
         
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("authorityOptions", authorityMasterMapper.selectAll());
         model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
@@ -123,6 +137,7 @@ public class EmployeeController {
         if (result.hasErrors()) {
             model.addAttribute("edit", edit);
             model.addAttribute("stores", service.findAllStores());
+            model.addAttribute("authorityOptions", authorityMasterMapper.selectAll());
             model.addAttribute("availableYears", getAvailableYears());
             return "employee/form";
         }
@@ -179,7 +194,7 @@ public class EmployeeController {
                 }
             }
         }
-        service.save(form.toEntity(), !edit, prefs, monthly, offdays);
+        service.save(form.toEntity(), !edit, form.getAuthorityCode(), prefs, monthly, offdays);
         return "redirect:/employees";
     }
 

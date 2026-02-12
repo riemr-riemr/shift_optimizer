@@ -39,6 +39,10 @@ public class EmployeeService {
         return mapper.selectByPrimaryKey(code);
     }
 
+    public io.github.riemr.shift.infrastructure.security.AuthUser findAuth(String employeeCode) {
+        return mapper.selectAuthByEmployeeCode(employeeCode);
+    }
+
     public List<EmployeeWeeklyPreference> findWeekly(String employeeCode) {
         return weeklyMapper.selectByEmployee(employeeCode);
     }
@@ -50,7 +54,7 @@ public class EmployeeService {
     }
 
     @Transactional
-    public void save(Employee e, boolean isNew, List<EmployeeWeeklyPreference> prefs,
+    public void save(Employee e, boolean isNew, String authorityCode, List<EmployeeWeeklyPreference> prefs,
                      List<EmployeeMonthlyHoursSetting> monthlyHours,
                      List<EmployeeMonthlyOffdaysSetting> monthlyOffdays) {
         if (isNew) {
@@ -87,6 +91,8 @@ public class EmployeeService {
                 }
             }
         }
+
+        mapper.updateAuthorityCode(e.getEmployeeCode(), authorityCode);
     }
 
     @Transactional
