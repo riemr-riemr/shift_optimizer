@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.AttendanceGroupConstraintService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
@@ -17,6 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AttendanceGroupConstraintController {
     private final AttendanceGroupConstraintService service;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
@@ -27,7 +29,12 @@ public class AttendanceGroupConstraintController {
         if ((storeCode == null || storeCode.isBlank()) && !stores.isEmpty()) {
             storeCode = stores.get(0).getStoreCode();
         }
-        var departments = service.listDepartments();
+        var departments = departmentAuthorizationService.filterAccessibleDepartments(service.listDepartments());
+        String requestedDepartmentCode = departmentCode;
+        if (requestedDepartmentCode != null && !requestedDepartmentCode.isBlank()
+                && departments.stream().noneMatch(d -> requestedDepartmentCode.equals(d.getDepartmentCode()))) {
+            departmentCode = null;
+        }
         var employees = service.listEmployees();
         var constraints = service.listConstraints(storeCode, departmentCode);
 

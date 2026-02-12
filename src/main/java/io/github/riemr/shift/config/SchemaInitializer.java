@@ -43,6 +43,15 @@ public class SchemaInitializer {
                     "skill_level SMALLINT NOT NULL, " +
                     "PRIMARY KEY (employee_code, department_code)" +
                     ")");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS authority_department_permission (" +
+                    "authority_code VARCHAR(20) NOT NULL REFERENCES authority_master(authority_code) ON DELETE CASCADE, " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code) ON DELETE CASCADE, " +
+                    "PRIMARY KEY (authority_code, department_code)" +
+                    ")");
+            jdbc.execute("INSERT INTO authority_department_permission(authority_code, department_code) " +
+                    "SELECT a.authority_code, d.department_code " +
+                    "FROM authority_master a CROSS JOIN department_master d " +
+                    "ON CONFLICT (authority_code, department_code) DO NOTHING");
             // Ensure department_master has register department '520' (legacy)
             jdbc.execute("INSERT INTO department_master(department_code, department_name, is_register) VALUES ('520','Register', TRUE) ON CONFLICT (department_code) DO NOTHING");
 

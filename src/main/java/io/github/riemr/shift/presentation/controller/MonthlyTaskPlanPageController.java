@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.application.service.TaskCategoryMasterService;
 import io.github.riemr.shift.application.service.AppSettingService;
@@ -16,17 +17,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class MonthlyTaskPlanPageController {
     private final StoreMapper storeMapper;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
     private final TaskMasterService taskMasterService;
     private final TaskCategoryMasterService taskCategoryMasterService;
     private final AppSettingService appSettingService;
 
     public MonthlyTaskPlanPageController(StoreMapper storeMapper,
                                          DepartmentSkillMatrixService departmentSkillMatrixService,
+                                         DepartmentAuthorizationService departmentAuthorizationService,
                                          TaskMasterService taskMasterService,
                                          TaskCategoryMasterService taskCategoryMasterService,
                                          AppSettingService appSettingService) {
         this.storeMapper = storeMapper;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
+        this.departmentAuthorizationService = departmentAuthorizationService;
         this.taskMasterService = taskMasterService;
         this.taskCategoryMasterService = taskCategoryMasterService;
         this.appSettingService = appSettingService;
@@ -40,7 +44,7 @@ public class MonthlyTaskPlanPageController {
         model.addAttribute("dept", departmentCode);
         model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
         model.addAttribute("stores", storeMapper.selectByExample(null));
-        model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
+        model.addAttribute("departments", departmentAuthorizationService.filterAccessibleDepartments(departmentSkillMatrixService.listDepartments()));
         model.addAttribute("masters", taskMasterService.list());
         model.addAttribute("categories", taskCategoryMasterService.list());
         return "tasks/monthly";

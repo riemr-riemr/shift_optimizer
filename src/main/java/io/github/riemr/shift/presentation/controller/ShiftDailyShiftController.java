@@ -36,6 +36,7 @@ import io.github.riemr.shift.application.dto.EmployeeRequestDeleteRequest;
 import io.github.riemr.shift.application.dto.WorkDemandSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.service.WorkDemandIntervalService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
@@ -94,6 +95,7 @@ public class ShiftDailyShiftController {
     private final EmployeeDepartmentMapper employeeDepartmentMapper;
     private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
 
     @GetMapping("/daily-shift")
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
@@ -220,6 +222,9 @@ public class ShiftDailyShiftController {
     public List<ShiftAssignmentView> getAssignmentsByDate(@PathVariable("date") String dateString,
                                                           @RequestParam("storeCode") String storeCode,
                                                           @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var zone = ZoneId.systemDefault();
         var from = date;
@@ -298,6 +303,9 @@ public class ShiftDailyShiftController {
     public List<ShiftAssignmentMonthlyView> getMonthlyShifts(@PathVariable("ym") String yearMonth,
                                                              @RequestParam("storeCode") String storeCode,
                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         var ym = YearMonth.parse(yearMonth);
         var from = ym.atDay(1);
         var to = ym.plusMonths(1).atDay(1);
@@ -362,6 +370,9 @@ public class ShiftDailyShiftController {
     @GetMapping("/api/calc/task-masters")
     @ResponseBody
     public List<TaskMaster> getTaskMasters(@RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         var list = taskMasterService.list();
         if (departmentCode == null || departmentCode.isBlank()) {
             return list;
@@ -382,6 +393,9 @@ public class ShiftDailyShiftController {
     public List<DemandIntervalDto> getWorkDemands(@PathVariable("date") String dateString,
                                                   @RequestParam("storeCode") String storeCode,
                                                   @RequestParam("departmentCode") String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         return workDemandIntervalService.list(storeCode, date, departmentCode);
     }
@@ -389,6 +403,9 @@ public class ShiftDailyShiftController {
     @PostMapping("/api/calc/work-demands/save")
     @ResponseBody
     public Map<String, Object> saveWorkDemands(@RequestBody WorkDemandSaveRequest request) {
+        if (isDeniedDepartment(request.getDepartmentCode())) {
+            return Map.of("success", false, "message", "部門の閲覧権限がありません。");
+        }
         LocalDate date = LocalDate.parse(request.getDate(), DateTimeFormatter.ISO_LOCAL_DATE);
         workDemandIntervalService.replaceForDate(request.getStoreCode(), date, request.getDepartmentCode(), request.getIntervals());
         return Map.of("success", true);
@@ -399,6 +416,9 @@ public class ShiftDailyShiftController {
     public List<WorkDemandSlot> getWorkDemandSlotsByDate(@PathVariable("date") String dateString,
                                                          @RequestParam("storeCode") String storeCode,
                                                          @RequestParam("departmentCode") String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = workDemandIntervalMapper.selectByDate(storeCode, departmentCode, date);
         List<WorkDemandSlot> result = new ArrayList<>();
@@ -428,10 +448,13 @@ public class ShiftDailyShiftController {
     public List<WorkDemandSlot> getDepartmentTaskSlotsByDate(@PathVariable("date") String dateString,
                                                              @RequestParam("storeCode") String storeCode,
                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         List<String> departments;
         if (departmentCode == null || departmentCode.isBlank()) {
-            departments = storeDepartmentMapper.findDepartmentsByStore(storeCode).stream()
+            departments = departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode)).stream()
                     .map(DepartmentMaster::getDepartmentCode)
                     .toList();
         } else {
@@ -543,7 +566,7 @@ public class ShiftDailyShiftController {
     @GetMapping("/api/departments/{storeCode}")
     @ResponseBody
     public List<DepartmentMaster> getDepartmentsByStore(@PathVariable("storeCode") String storeCode) {
-        return storeDepartmentMapper.findDepartmentsByStore(storeCode);
+        return departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
     }
 
     @PostMapping("/api/calc/assignments/save")
@@ -632,6 +655,9 @@ public class ShiftDailyShiftController {
     public List<StaffingBalanceDto> getStaffingBalance(@PathVariable("date") String dateString,
                                                        @RequestParam("storeCode") String storeCode,
                                                        @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedDepartment(departmentCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         return staffingBalanceService.getHourlyStaffingBalance(storeCode, date, departmentCode);
     }
@@ -659,8 +685,11 @@ public class ShiftDailyShiftController {
             stores.sort(Comparator.comparing(Store::getStoreCode));
             List<DepartmentMaster> departments = List.of();
             if (storeCode != null && !storeCode.isBlank()) {
-                departments = storeDepartmentMapper.findDepartmentsByStore(storeCode);
+                departments = departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
                 departments.sort(Comparator.comparing(DepartmentMaster::getDepartmentCode));
+            }
+            if (isDeniedDepartment(departmentCode)) {
+                departmentCode = null;
             }
             
             // 月次シフトデータ取得（出勤＝shift_assignmentベース）
@@ -841,8 +870,11 @@ public class ShiftDailyShiftController {
             stores.sort(Comparator.comparing(Store::getStoreCode));
             List<DepartmentMaster> departments = List.of();
             if (storeCode != null && !storeCode.isBlank()) {
-                departments = storeDepartmentMapper.findDepartmentsByStore(storeCode);
+                departments = departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
                 departments.sort(Comparator.comparing(DepartmentMaster::getDepartmentCode));
+            }
+            if (isDeniedDepartment(departmentCode)) {
+                departmentCode = null;
             }
             
             model.addAttribute("year", currentMonth.getYear());
@@ -860,6 +892,11 @@ public class ShiftDailyShiftController {
             
             return "shift/monthly-shift";
         }
+    }
+
+    private boolean isDeniedDepartment(String departmentCode) {
+        return departmentCode != null && !departmentCode.isBlank()
+                && !departmentAuthorizationService.canAccessDepartment(departmentCode);
     }
     
     // 内部クラスでEmployeeInfoを定義

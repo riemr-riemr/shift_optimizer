@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,15 +16,20 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DepartmentSkillMatrixController {
     private final DepartmentSkillMatrixService service;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).DEPT_SKILL_MATRIX)")
     public String view(@RequestParam(value = "departmentCode", required = false) String departmentCode,
                        Model model) {
-        model.addAttribute("departments", service.listDepartments());
+        var departments = departmentAuthorizationService.filterAccessibleDepartments(service.listDepartments());
+        boolean requestedAllowed = departmentCode == null || departmentCode.isBlank()
+                || departments.stream().anyMatch(d -> departmentCode.equals(d.getDepartmentCode()));
+        String effectiveDepartmentCode = requestedAllowed ? departmentCode : null;
+        model.addAttribute("departments", departments);
         model.addAttribute("employees", service.listEmployees());
-        model.addAttribute("selectedDepartment", departmentCode);
-        model.addAttribute("skillMap", service.loadSkillMap(departmentCode));
+        model.addAttribute("selectedDepartment", effectiveDepartmentCode);
+        model.addAttribute("skillMap", service.loadSkillMap(effectiveDepartmentCode));
         return "skill/department-matrix";
     }
 
@@ -45,4 +51,3 @@ public class DepartmentSkillMatrixController {
         return "redirect:/skills/department?departmentCode=" + departmentCode;
     }
 }
-

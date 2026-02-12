@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS authority_screen_permission (
     PRIMARY KEY (authority_code, screen_code)
 );
 
+-- 2.7 authority_department_permission : 閲覧可能部門
+CREATE TABLE IF NOT EXISTS authority_department_permission (
+    authority_code VARCHAR(20) REFERENCES authority_master(authority_code) ON DELETE CASCADE,
+    department_code VARCHAR(32) NOT NULL,
+    PRIMARY KEY (authority_code, department_code)
+);
+
 -- 既定権限付与
 -- ADMIN: 全画面 参照/更新可
 INSERT INTO authority_screen_permission (authority_code, screen_code, can_view, can_update) VALUES
@@ -343,6 +350,13 @@ CREATE TABLE IF NOT EXISTS employee_department_skill (
   skill_level       SMALLINT    NOT NULL,
   PRIMARY KEY (employee_code, department_code)
 );
+
+-- 既定: 後方互換のため、既存権限は全ての部門を閲覧可能にする
+INSERT INTO authority_department_permission(authority_code, department_code)
+SELECT a.authority_code, d.department_code
+  FROM authority_master a
+ CROSS JOIN department_master d
+ON CONFLICT (authority_code, department_code) DO NOTHING;
 
 -- 12. work_demand_interval (non-register demand)
 CREATE TABLE IF NOT EXISTS work_demand_interval (

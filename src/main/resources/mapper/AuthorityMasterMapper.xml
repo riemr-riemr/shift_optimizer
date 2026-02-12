@@ -12,5 +12,23 @@
       FROM authority_master
       ORDER BY authority_code
   </select>
-</mapper>
 
+  <select id="findByCode" resultMap="BaseMap">
+    SELECT authority_code, authority_name, description
+      FROM authority_master
+     WHERE authority_code = #{authorityCode}
+     LIMIT 1
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster">
+    INSERT INTO authority_master(authority_code, authority_name, description)
+    VALUES(#{authorityCode}, #{authorityName}, #{description})
+  </insert>
+
+  <update id="update" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster">
+    UPDATE authority_master
+       SET authority_name = #{authorityName},
+           description = #{description}
+     WHERE authority_code = #{authorityCode}
+  </update>
+</mapper>

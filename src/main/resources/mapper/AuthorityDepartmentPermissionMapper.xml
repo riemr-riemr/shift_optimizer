@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.AuthorityDepartmentPermissionMapper">
+  <resultMap id="BaseMap" type="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityDepartmentPermission">
+    <id column="authority_code" property="authorityCode" />
+    <id column="department_code" property="departmentCode" />
+  </resultMap>
+
+  <select id="findAllByAuthority" resultMap="BaseMap">
+    SELECT authority_code, department_code
+      FROM authority_department_permission
+     WHERE authority_code = #{authorityCode}
+     ORDER BY department_code
+  </select>
+
+  <select id="findDepartmentCodesByAuthority" resultType="string">
+    SELECT department_code
+      FROM authority_department_permission
+     WHERE authority_code = #{authorityCode}
+     ORDER BY department_code
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityDepartmentPermission">
+    INSERT INTO authority_department_permission(authority_code, department_code)
+    VALUES(#{authorityCode}, #{departmentCode})
+    ON CONFLICT(authority_code, department_code) DO NOTHING
+  </insert>
+
+  <delete id="deleteByAuthority">
+    DELETE FROM authority_department_permission
+     WHERE authority_code = #{authorityCode}
+  </delete>
+</mapper>

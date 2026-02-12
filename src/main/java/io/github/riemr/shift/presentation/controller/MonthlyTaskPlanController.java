@@ -1,10 +1,12 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.repository.MonthlyTaskPlanRepository;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -17,9 +19,13 @@ import java.text.SimpleDateFormat;
 @RequestMapping("/tasks/api/monthly")
 public class MonthlyTaskPlanController {
     private final MonthlyTaskPlanRepository repository;
+    @Nullable
+    private final DepartmentAuthorizationService departmentAuthorizationService;
 
-    public MonthlyTaskPlanController(MonthlyTaskPlanRepository repository) {
+    public MonthlyTaskPlanController(MonthlyTaskPlanRepository repository,
+                                     @Nullable DepartmentAuthorizationService departmentAuthorizationService) {
         this.repository = repository;
+        this.departmentAuthorizationService = departmentAuthorizationService;
     }
 
     public static class DomRequest {
@@ -69,6 +75,9 @@ public class MonthlyTaskPlanController {
 
     @PostMapping(path = "/dom", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> createDom(@RequestBody DomRequest req) {
+        if (isDeniedDepartment(req.departmentCode)) {
+            return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));
+        }
         validateCommon(req.storeCode, req.taskCode, req.scheduleType);
         if (req.daysOfMonth == null || req.daysOfMonth.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error","daysOfMonth is required"));
@@ -84,6 +93,9 @@ public class MonthlyTaskPlanController {
 
     @PostMapping(path = "/wom", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> createWom(@RequestBody WomRequest req) {
+        if (isDeniedDepartment(req.departmentCode)) {
+            return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));
+        }
         validateCommon(req.storeCode, req.taskCode, req.scheduleType);
         if (req.weeksOfMonth == null || req.weeksOfMonth.isEmpty() || req.daysOfWeek == null || req.daysOfWeek.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error","weeksOfMonth and daysOfWeek are required"));
@@ -109,6 +121,9 @@ public class MonthlyTaskPlanController {
             @RequestParam("store") String storeCode,
             @RequestParam(name = "dept", required = false) String departmentCode,
             @RequestParam("month") String yearMonthStr) {
+        if (isDeniedDepartment(departmentCode)) {
+            return Map.of();
+        }
         YearMonth ym = YearMonth.parse(yearMonthStr);
         LocalDate from = ym.atDay(1);
         LocalDate to = ym.atEndOfMonth();
@@ -162,6 +177,9 @@ public class MonthlyTaskPlanController {
         if (existing == null) {
             return ResponseEntity.notFound().build();
         }
+        if (isDeniedDepartment(existing.getDepartmentCode())) {
+            return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));
+        }
         // Only overwrite fields that are provided (non-null) in request
         if (req.getScheduleType() != null) existing.setScheduleType(req.getScheduleType());
         if (req.getFixedStartTime() != null ||
@@ -194,6 +212,14 @@ public class MonthlyTaskPlanController {
         if (req.getActive() != null) existing.setActive(req.getActive());
         repository.update(existing);
         return ResponseEntity.ok().build();
+    }
+
+    private boolean isDeniedDepartment(String departmentCode) {
+        if (departmentAuthorizationService == null) {
+            return false;
+        }
+        return departmentCode != null && !departmentCode.isBlank()
+                && !departmentAuthorizationService.canAccessDepartment(departmentCode);
     }
 
     private void validateCommon(String storeCode, String taskCode, String scheduleType) {

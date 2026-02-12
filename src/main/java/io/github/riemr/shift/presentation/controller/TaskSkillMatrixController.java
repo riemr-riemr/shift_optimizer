@@ -1,6 +1,7 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.TaskSkillMatrixService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.StoreExample;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster;
@@ -19,6 +20,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class TaskSkillMatrixController {
     private final TaskSkillMatrixService service;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
     private final StoreMapper storeMapper;
     private final StoreDepartmentMapper storeDepartmentMapper;
 
@@ -34,7 +36,9 @@ public class TaskSkillMatrixController {
         model.addAttribute("stores", stores);
         List<DepartmentMaster> depts = List.of();
         if (!stores.isEmpty()) {
-            depts = storeDepartmentMapper.findDepartmentsByStore(stores.get(0).getStoreCode());
+            depts = departmentAuthorizationService.filterAccessibleDepartments(
+                    storeDepartmentMapper.findDepartmentsByStore(stores.get(0).getStoreCode())
+            );
         }
         model.addAttribute("departments", depts);
         return "skill/task-matrix";
@@ -90,6 +94,6 @@ public class TaskSkillMatrixController {
     @ResponseBody
     public List<DepartmentMaster> departmentsByStore(@RequestParam("storeCode") String storeCode) {
         if (storeCode == null || storeCode.isBlank()) return List.of();
-        return storeDepartmentMapper.findDepartmentsByStore(storeCode);
+        return departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
     }
 }
