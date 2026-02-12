@@ -44,13 +44,14 @@ CREATE TABLE register (
 CREATE TABLE authority_master (
     authority_code   VARCHAR(20) PRIMARY KEY,
     authority_name   VARCHAR(50) NOT NULL,
-    description      TEXT
+    description      TEXT,
+    authority_level  INTEGER NOT NULL DEFAULT 0 CHECK (authority_level BETWEEN 0 AND 99)
 );
 
-INSERT INTO authority_master(authority_code, authority_name, description) VALUES
-    ('ADMIN',   '管理者',          '全機能へのアクセス'),
-    ('MANAGER', '店長/管理者',     '店舗運用・最適化・設定の一部'),
-    ('USER',    '一般ユーザ',      '閲覧・自身に関する操作')
+INSERT INTO authority_master(authority_code, authority_name, description, authority_level) VALUES
+    ('ADMIN',   '管理者',          '全機能へのアクセス', 90),
+    ('MANAGER', '店長/管理者',     '店舗運用・最適化・設定の一部', 50),
+    ('USER',    '一般ユーザ',      '閲覧・自身に関する操作', 10)
 ON CONFLICT (authority_code) DO NOTHING;
 
 -- 2.6 authority_screen_permission : 画面権限 (参照/更新)

@@ -5,30 +5,32 @@
     <id column="authority_code" property="authorityCode" />
     <result column="authority_name" property="authorityName" />
     <result column="description" property="description" />
+    <result column="authority_level" property="authorityLevel" />
   </resultMap>
 
   <select id="selectAll" resultMap="BaseMap">
-    SELECT authority_code, authority_name, description
+    SELECT authority_code, authority_name, description, authority_level
       FROM authority_master
-      ORDER BY authority_code
+      ORDER BY authority_level DESC, authority_code
   </select>
 
   <select id="findByCode" resultMap="BaseMap">
-    SELECT authority_code, authority_name, description
+    SELECT authority_code, authority_name, description, authority_level
       FROM authority_master
      WHERE authority_code = #{authorityCode}
      LIMIT 1
   </select>
 
   <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster">
-    INSERT INTO authority_master(authority_code, authority_name, description)
-    VALUES(#{authorityCode}, #{authorityName}, #{description})
+    INSERT INTO authority_master(authority_code, authority_name, description, authority_level)
+    VALUES(#{authorityCode}, #{authorityName}, #{description}, #{authorityLevel})
   </insert>
 
   <update id="update" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster">
     UPDATE authority_master
        SET authority_name = #{authorityName},
-           description = #{description}
+           description = #{description},
+           authority_level = #{authorityLevel}
      WHERE authority_code = #{authorityCode}
   </update>
 </mapper>

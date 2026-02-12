@@ -17,6 +17,13 @@ public class SchemaInitializer {
     @PostConstruct
     public void ensureTables() {
         try {
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master ADD COLUMN IF NOT EXISTS authority_level INTEGER NOT NULL DEFAULT 0");
+            jdbc.execute("UPDATE authority_master SET authority_level = 90 WHERE authority_code = 'ADMIN' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("UPDATE authority_master SET authority_level = 50 WHERE authority_code = 'MANAGER' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("UPDATE authority_master SET authority_level = 10 WHERE authority_code = 'USER' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master DROP CONSTRAINT IF EXISTS chk_authority_master_level");
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master ADD CONSTRAINT chk_authority_master_level CHECK (authority_level BETWEEN 0 AND 99)");
+
             // Department tables (ensure exist for batch imports)
             jdbc.execute("CREATE TABLE IF NOT EXISTS department_master (" +
                     "department_code VARCHAR(32) PRIMARY KEY, " +

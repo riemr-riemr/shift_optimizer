@@ -94,7 +94,7 @@
                 <option value="">-- 選択してください --</option>
                 <option th:each="a : ${authorityOptions}"
                         th:value="${a.authorityCode}"
-                        th:text="${a.authorityCode + ' - ' + a.authorityName}"></option>
+                        th:text="${a.authorityCode + ' - ' + a.authorityName + ' (Lv.' + a.authorityLevel + ')'}"></option>
               </select>
               <div class="invalid-feedback" th:if="${#fields.hasErrors('authorityCode')}" th:errors="*{authorityCode}"></div>
             </div>

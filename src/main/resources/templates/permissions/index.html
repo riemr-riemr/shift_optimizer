@@ -27,7 +27,11 @@
           <label for="authorityName" class="form-label">権限名</label>
           <input id="authorityName" name="authorityName" class="form-control" maxlength="50" placeholder="例: 副店長" required />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-2">
+          <label for="authorityLevel" class="form-label">権限レベル</label>
+          <input id="authorityLevel" name="authorityLevel" type="number" min="0" max="99" class="form-control" placeholder="00-99" required />
+        </div>
+        <div class="col-md-2">
           <label for="description" class="form-label">説明</label>
           <input id="description" name="description" class="form-control" placeholder="必要に応じて入力" />
         </div>
@@ -43,7 +47,8 @@
             <thead class="table-light">
               <tr>
                 <th style="width: 20%;">権限コード</th>
-                <th style="width: 25%;">権限名</th>
+                <th style="width: 24%;">権限名</th>
+                <th style="width: 16%;">レベル</th>
                 <th>説明</th>
               </tr>
             </thead>
@@ -54,6 +59,11 @@
                   <input class="form-control form-control-sm" maxlength="50" required
                          th:name="${r.authorityCode + '|name'}"
                          th:value="${r.authorityName}" />
+                </td>
+                <td>
+                  <input class="form-control form-control-sm text-end" type="number" min="0" max="99" required
+                         th:name="${r.authorityCode + '|level'}"
+                         th:value="${r.authorityLevel}" />
                 </td>
                 <td>
                   <input class="form-control form-control-sm"

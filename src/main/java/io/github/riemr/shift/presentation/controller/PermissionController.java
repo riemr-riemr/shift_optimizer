@@ -53,6 +53,8 @@ public class PermissionController {
     );
     private static final Pattern AUTHORITY_CODE_PATTERN = Pattern.compile("^[A-Z0-9_]{2,20}$");
     private static final int AUTHORITY_NAME_MAX_LENGTH = 50;
+    private static final int AUTHORITY_LEVEL_MIN = 0;
+    private static final int AUTHORITY_LEVEL_MAX = 99;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
@@ -65,6 +67,7 @@ public class PermissionController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
     public String createRole(@RequestParam("authorityCode") String authorityCode,
                              @RequestParam("authorityName") String authorityName,
+                             @RequestParam("authorityLevel") Integer authorityLevel,
                              @RequestParam(name = "description", required = false) String description,
                              RedirectAttributes redirectAttributes) {
         String normalizedCode = normalizeCode(authorityCode);
@@ -87,11 +90,16 @@ public class PermissionController {
             redirectAttributes.addFlashAttribute("error", "同じ権限コードが既に存在します。");
             return "redirect:/permissions";
         }
+        if (!isValidAuthorityLevel(authorityLevel)) {
+            redirectAttributes.addFlashAttribute("error", "権限レベルは0〜99の整数で入力してください。");
+            return "redirect:/permissions";
+        }
 
         AuthorityMaster newRole = new AuthorityMaster();
         newRole.setAuthorityCode(normalizedCode);
         newRole.setAuthorityName(normalizedName);
         newRole.setDescription(normalizedDesc);
+        newRole.setAuthorityLevel(authorityLevel);
         authorityMasterMapper.insert(newRole);
 
         initializeScreenPermissions(normalizedCode);
@@ -108,8 +116,10 @@ public class PermissionController {
             String code = role.getAuthorityCode();
             String nameKey = code + "|name";
             String descriptionKey = code + "|description";
+            String levelKey = code + "|level";
             String normalizedName = trimToNull(request.getParameter(nameKey));
             String normalizedDesc = normalizeDescription(request.getParameter(descriptionKey));
+            Integer authorityLevel = parseAuthorityLevel(request.getParameter(levelKey));
 
             if (normalizedName == null) {
                 redirectAttributes.addFlashAttribute("error", "権限名を入力してください: " + code);
@@ -119,11 +129,16 @@ public class PermissionController {
                 redirectAttributes.addFlashAttribute("error", "権限名は50文字以内で入力してください: " + code);
                 return "redirect:/permissions";
             }
+            if (!isValidAuthorityLevel(authorityLevel)) {
+                redirectAttributes.addFlashAttribute("error", "権限レベルは0〜99の整数で入力してください: " + code);
+                return "redirect:/permissions";
+            }
 
             AuthorityMaster updated = new AuthorityMaster();
             updated.setAuthorityCode(code);
             updated.setAuthorityName(normalizedName);
             updated.setDescription(normalizedDesc);
+            updated.setAuthorityLevel(authorityLevel);
             authorityMasterMapper.update(updated);
         }
 
@@ -228,5 +243,23 @@ public class PermissionController {
             return null;
         }
         return trimmed;
+    }
+
+    private boolean isValidAuthorityLevel(Integer authorityLevel) {
+        return authorityLevel != null
+                && authorityLevel >= AUTHORITY_LEVEL_MIN
+                && authorityLevel <= AUTHORITY_LEVEL_MAX;
+    }
+
+    private Integer parseAuthorityLevel(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(trimmed);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
