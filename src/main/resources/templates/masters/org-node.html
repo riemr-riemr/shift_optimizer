@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout" layout:decorate="~{layout}">
+<head>
+  <meta charset="UTF-8">
+  <title>組織ノード管理</title>
+  <style>
+    .node-tree {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 520px;
+      overflow: auto;
+    }
+    .node-tree ul {
+      list-style: none;
+      padding-left: 20px;
+      margin: 0;
+      position: relative;
+    }
+    .node-tree ul::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      border-left: 1px dashed #d1d5db;
+    }
+    .node-tree li {
+      position: relative;
+      margin: 4px 0;
+      padding-left: 16px;
+    }
+    .node-tree li::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 14px;
+      width: 10px;
+      border-top: 1px dashed #d1d5db;
+    }
+    .node-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    .node-item.active {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .node-meta {
+      color: #64748b;
+      font-size: 12px;
+    }
+    .tree-tools {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .store-list {
+      max-height: 260px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+<main layout:fragment="content">
+  <div class="content-header">
+    <h1><i class="bi bi-diagram-3"></i> 組織ノード管理</h1>
+    <p class="mb-0">エリア階層を木構造で管理し、最下層に店舗を割り当てます。</p>
+  </div>
+
+  <div class="alert d-none" id="messageBox"></div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>組織ツリー</span>
+          <div class="tree-tools">
+            <button class="btn btn-sm btn-light" type="button" id="addRootBtn">ルート追加</button>
+            <button class="btn btn-sm btn-light" type="button" id="addChildBtn">子追加</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="node-tree" id="treeContainer"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card mb-3">
+        <div class="card-header">ノード編集</div>
+        <div class="card-body">
+          <form id="nodeForm">
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label">ノードコード</label>
+                <input class="form-control" id="nodeCode" maxlength="32" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">ノード名</label>
+                <input class="form-control" id="nodeName" maxlength="100" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">親ノード</label>
+                <select class="form-select" id="parentNodeId">
+                  <option value="">(ルート)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">表示順</label>
+                <input class="form-control" id="displayOrder" type="number" min="0" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label d-block">状態</label>
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="isActive" checked />
+                  <label class="form-check-label" for="isActive">有効</label>
+                </div>
+              </div>
+            </div>
+            <div class="mt-3 d-flex gap-2 justify-content-end">
+              <button class="btn btn-secondary" type="button" id="resetBtn">リセット</button>
+              <button class="btn btn-danger" type="button" id="deleteBtn">削除</button>
+              <button class="btn btn-primary" type="submit" id="saveBtn">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">店舗割当（選択ノード）</div>
+        <div class="card-body">
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-8">
+              <label class="form-label">店舗</label>
+              <select class="form-select" id="storeCodeSelect">
+                <option value="">店舗を選択</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-outline-primary w-100" type="button" id="assignBtn">割り当て</button>
+            </div>
+          </div>
+          <div class="store-list">
+            <table class="table table-sm">
+              <thead>
+              <tr><th>店舗コード</th><th>店舗名</th></tr>
+              </thead>
+              <tbody id="assignedStoreBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:inline="javascript">
+    const NODES = /*[[${nodes}]]*/ [];
+    const STORES = /*[[${stores}]]*/ [];
+    const ASSIGNED = /*[[${assignedNodeByStore}]]*/ {};
+    const STORE_COUNT = /*[[${storeCountByNode}]]*/ {};
+  </script>
+  <script>
+    (() => {
+      const treeContainer = document.getElementById('treeContainer');
+      const messageBox = document.getElementById('messageBox');
+      const nodeCode = document.getElementById('nodeCode');
+      const nodeName = document.getElementById('nodeName');
+      const parentNodeId = document.getElementById('parentNodeId');
+      const displayOrder = document.getElementById('displayOrder');
+      const isActive = document.getElementById('isActive');
+      const assignedStoreBody = document.getElementById('assignedStoreBody');
+      const storeCodeSelect = document.getElementById('storeCodeSelect');
+
+      const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+      const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+
+      let nodes = [...NODES];
+      let storeMap = {...ASSIGNED};
+      let selectedNodeId = null;
+      let createMode = false;
+
+      function notify(kind, text) {
+        messageBox.className = `alert alert-${kind}`;
+        messageBox.textContent = text;
+        messageBox.classList.remove('d-none');
+        setTimeout(() => messageBox.classList.add('d-none'), 2500);
+      }
+
+      function childrenOf(parentId) {
+        return nodes
+          .filter(n => (n.parentNodeId ?? null) === (parentId ?? null))
+          .sort((a, b) => (a.displayOrder ?? 9999) - (b.displayOrder ?? 9999) || a.nodeCode.localeCompare(b.nodeCode));
+      }
+
+      function renderTree() {
+        treeContainer.innerHTML = '';
+        const roots = childrenOf(null);
+        const rootUl = document.createElement('ul');
+        roots.forEach(node => rootUl.appendChild(renderNode(node)));
+        treeContainer.appendChild(rootUl);
+      }
+
+      function renderNode(node) {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `node-item ${selectedNodeId === node.nodeId ? 'active' : ''}`;
+        btn.innerHTML = `
+          <span>
+            <strong>${escapeHtml(node.nodeCode)}</strong> ${escapeHtml(node.nodeName)}
+            <span class="node-meta ms-2">Lv.${node.hierarchyLevel} / 店舗 ${STORE_COUNT[node.nodeId] || 0}</span>
+          </span>
+          <span class="badge text-bg-secondary">${node.isActive ? '有効' : '無効'}</span>
+        `;
+        btn.addEventListener('click', () => selectNode(node.nodeId));
+        li.appendChild(btn);
+
+        const children = childrenOf(node.nodeId);
+        if (children.length > 0) {
+          const ul = document.createElement('ul');
+          children.forEach(child => ul.appendChild(renderNode(child)));
+          li.appendChild(ul);
+        }
+        return li;
+      }
+
+      function selectNode(nodeId) {
+        selectedNodeId = nodeId;
+        createMode = false;
+        const node = nodes.find(n => n.nodeId === nodeId);
+        if (!node) return;
+        nodeCode.value = node.nodeCode;
+        nodeCode.readOnly = true;
+        nodeName.value = node.nodeName || '';
+        displayOrder.value = node.displayOrder ?? '';
+        isActive.checked = !!node.isActive;
+        buildParentOptions(node.nodeId, node.parentNodeId);
+        renderAssignedStores();
+        renderTree();
+      }
+
+      function buildParentOptions(excludeNodeId, selectedParentId) {
+        parentNodeId.innerHTML = '<option value="">(ルート)</option>';
+        nodes.forEach(n => {
+          if (n.nodeId === excludeNodeId) return;
+          if (isDescendant(excludeNodeId, n.nodeId)) return;
+          const opt = document.createElement('option');
+          opt.value = String(n.nodeId);
+          opt.textContent = `${'  '.repeat(n.hierarchyLevel || 0)}${n.nodeCode} - ${n.nodeName}`;
+          if (selectedParentId != null && n.nodeId === selectedParentId) opt.selected = true;
+          parentNodeId.appendChild(opt);
+        });
+      }
+
+      function isDescendant(rootId, candidateId) {
+        if (rootId == null || candidateId == null) return false;
+        let cur = nodes.find(n => n.nodeId === candidateId);
+        while (cur && cur.parentNodeId != null) {
+          if (cur.parentNodeId === rootId) return true;
+          cur = nodes.find(n => n.nodeId === cur.parentNodeId);
+        }
+        return false;
+      }
+
+      function renderStoreOptions() {
+        storeCodeSelect.innerHTML = '<option value="">店舗を選択</option>';
+        STORES.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.storeCode;
+          const mapped = storeMap[s.storeCode];
+          const mappedNode = mapped ? nodes.find(n => n.nodeId === mapped) : null;
+          opt.textContent = `${s.storeCode} - ${s.storeName}${mappedNode ? ` (現在: ${mappedNode.nodeCode})` : ''}`;
+          storeCodeSelect.appendChild(opt);
+        });
+      }
+
+      function renderAssignedStores() {
+        assignedStoreBody.innerHTML = '';
+        if (!selectedNodeId) return;
+        const list = STORES.filter(s => storeMap[s.storeCode] === selectedNodeId)
+          .sort((a,b) => a.storeCode.localeCompare(b.storeCode));
+        list.forEach(s => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${escapeHtml(s.storeCode)}</td><td>${escapeHtml(s.storeName || '')}</td>`;
+          assignedStoreBody.appendChild(tr);
+        });
+      }
+
+      function resetForm() {
+        createMode = false;
+        selectedNodeId = null;
+        nodeCode.value = '';
+        nodeCode.readOnly = false;
+        nodeName.value = '';
+        displayOrder.value = '';
+        isActive.checked = true;
+        buildParentOptions(null, null);
+        renderAssignedStores();
+        renderTree();
+      }
+
+      async function postJson(url, data) {
+        const headers = {'Content-Type': 'application/json'};
+        if (csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+        const res = await fetch(url, {method: 'POST', headers, body: JSON.stringify(data)});
+        return res.json();
+      }
+
+      document.getElementById('addRootBtn').addEventListener('click', () => {
+        resetForm();
+        createMode = true;
+        parentNodeId.value = '';
+      });
+
+      document.getElementById('addChildBtn').addEventListener('click', () => {
+        if (!selectedNodeId) {
+          notify('warning', '親にするノードを先に選択してください。');
+          return;
+        }
+        createMode = true;
+        nodeCode.value = '';
+        nodeCode.readOnly = false;
+        nodeName.value = '';
+        displayOrder.value = '';
+        isActive.checked = true;
+        buildParentOptions(null, selectedNodeId);
+      });
+
+      document.getElementById('resetBtn').addEventListener('click', () => resetForm());
+
+      document.getElementById('nodeForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+          nodeCode: nodeCode.value,
+          nodeName: nodeName.value,
+          parentNodeId: parentNodeId.value ? Number(parentNodeId.value) : null,
+          displayOrder: displayOrder.value ? Number(displayOrder.value) : null,
+          isActive: !!isActive.checked
+        };
+        let result;
+        if (createMode || !selectedNodeId) {
+          result = await postJson('/masters/org-node/api/nodes', payload);
+        } else {
+          result = await postJson(`/masters/org-node/api/nodes/${selectedNodeId}`, payload);
+        }
+        if (!result.success) {
+          notify('danger', result.message || '保存に失敗しました。');
+          return;
+        }
+        window.location.reload();
+      });
+
+      document.getElementById('deleteBtn').addEventListener('click', async () => {
+        if (!selectedNodeId) {
+          notify('warning', '削除するノードを選択してください。');
+          return;
+        }
+        if (!confirm('このノードを削除しますか？')) return;
+        const result = await postJson(`/masters/org-node/api/nodes/${selectedNodeId}/delete`, {});
+        if (!result.success) {
+          notify('danger', result.message || '削除に失敗しました。');
+          return;
+        }
+        window.location.reload();
+      });
+
+      document.getElementById('assignBtn').addEventListener('click', async () => {
+        if (!selectedNodeId) {
+          notify('warning', '割り当て先ノードを選択してください。');
+          return;
+        }
+        const storeCode = storeCodeSelect.value;
+        if (!storeCode) {
+          notify('warning', '店舗を選択してください。');
+          return;
+        }
+        const result = await postJson(`/masters/org-node/api/stores/${encodeURIComponent(storeCode)}/assign`, {nodeId: selectedNodeId});
+        if (!result.success) {
+          notify('danger', result.message || '店舗割当に失敗しました。');
+          return;
+        }
+        storeMap[storeCode] = selectedNodeId;
+        notify('success', '店舗を割り当てました。');
+        renderStoreOptions();
+        renderAssignedStores();
+      });
+
+      function escapeHtml(s) {
+        return String(s ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      buildParentOptions(null, null);
+      renderStoreOptions();
+      renderTree();
+      renderAssignedStores();
+    })();
+  </script>
+</main>
+</body>
+</html>

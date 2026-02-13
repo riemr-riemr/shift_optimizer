@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.AuthorityNodePermissionMapper">
+  <resultMap id="BaseMap" type="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityNodePermission">
+    <id column="authority_code" property="authorityCode" />
+    <id column="node_id" property="nodeId" />
+    <result column="can_view_store" property="canViewStore" />
+    <result column="can_manage_store" property="canManageStore" />
+  </resultMap>
+
+  <select id="findAllByAuthority" resultMap="BaseMap">
+    SELECT authority_code, node_id, can_view_store, can_manage_store
+      FROM authority_node_permission
+     WHERE authority_code = #{authorityCode}
+     ORDER BY node_id
+  </select>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.AuthorityNodePermission">
+    INSERT INTO authority_node_permission(authority_code, node_id, can_view_store, can_manage_store)
+    VALUES(#{authorityCode}, #{nodeId}, #{canViewStore}, #{canManageStore})
+    ON CONFLICT(authority_code, node_id)
+    DO UPDATE SET can_view_store = EXCLUDED.can_view_store,
+                  can_manage_store = EXCLUDED.can_manage_store
+  </insert>
+
+  <delete id="deleteByAuthority">
+    DELETE FROM authority_node_permission
+     WHERE authority_code = #{authorityCode}
+  </delete>
+</mapper>

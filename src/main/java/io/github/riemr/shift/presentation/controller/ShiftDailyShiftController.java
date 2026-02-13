@@ -37,6 +37,7 @@ import io.github.riemr.shift.application.dto.WorkDemandSaveRequest;
 import io.github.riemr.shift.application.service.AppSettingService;
 import io.github.riemr.shift.application.service.WorkDemandIntervalService;
 import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.dto.ScorePoint;
 import io.github.riemr.shift.application.dto.DailySolveRequest;
@@ -51,6 +52,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.ZoneId;
 import java.time.LocalDate;
@@ -96,11 +99,12 @@ public class ShiftDailyShiftController {
     private final StoreDepartmentMapper storeDepartmentMapper;
     private final AppSettingService appSettingService;
     private final DepartmentAuthorizationService departmentAuthorizationService;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     @GetMapping("/daily-shift")
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_DAILY)")
     public String view(Model model) {
-        List<Store> stores = storeMapper.selectByExample(null);
+        List<Store> stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
         stores.sort(Comparator.comparing(Store::getStoreCode));
         model.addAttribute("stores", stores);
         model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
@@ -112,6 +116,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> prepare(@RequestBody SolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
             LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -137,6 +144,9 @@ public class ShiftDailyShiftController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
     public SolveTicket start(@RequestBody SolveRequest req) {
+        if (isDeniedStoreManage(req.storeCode())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "店舗の更新権限がありません。");
+        }
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -155,6 +165,9 @@ public class ShiftDailyShiftController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
     public SolveTicket startAttendance(@RequestBody SolveRequest req) {
+        if (isDeniedStoreManage(req.storeCode())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "店舗の更新権限がありません。");
+        }
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -167,6 +180,9 @@ public class ShiftDailyShiftController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     @ResponseBody
     public SolveTicket startAssignment(@RequestBody SolveRequest req) {
+        if (isDeniedStoreManage(req.storeCode())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "店舗の更新権限がありません。");
+        }
         LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         int startDay = appSettingService.getShiftCycleStartDay();
         LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -192,6 +208,9 @@ public class ShiftDailyShiftController {
                                  @RequestParam("storeCode") String storeCode,
                                  @RequestParam("departmentCode") String departmentCode,
                                  @RequestParam(value = "stage", required = false) String stage) {
+        if (isDeniedStoreView(storeCode)) {
+            return new SolveStatusDto("FORBIDDEN", 0, 0L);
+        }
         return (stage == null || stage.isBlank())
                 ? service.getStatus(id, storeCode, departmentCode)
                 : service.getStatus(id, storeCode, departmentCode, stage);
@@ -203,6 +222,9 @@ public class ShiftDailyShiftController {
                                             @RequestParam("storeCode") String storeCode,
                                             @RequestParam("departmentCode") String departmentCode,
                                             @RequestParam(value = "stage", required = false) String stage) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         return (stage == null || stage.isBlank())
                 ? service.fetchResult(id, storeCode, departmentCode)
                 : service.fetchResult(id, storeCode, departmentCode, stage);
@@ -214,6 +236,9 @@ public class ShiftDailyShiftController {
     public List<ScorePoint> scoreSeries(@PathVariable("id") String id,
                                                                               @RequestParam("storeCode") String storeCode,
                                                                               @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         return service.getScoreSeries(id, storeCode, departmentCode);
     }
 
@@ -222,6 +247,9 @@ public class ShiftDailyShiftController {
     public List<ShiftAssignmentView> getAssignmentsByDate(@PathVariable("date") String dateString,
                                                           @RequestParam("storeCode") String storeCode,
                                                           @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -303,6 +331,9 @@ public class ShiftDailyShiftController {
     public List<ShiftAssignmentMonthlyView> getMonthlyShifts(@PathVariable("ym") String yearMonth,
                                                              @RequestParam("storeCode") String storeCode,
                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -342,6 +373,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public List<RegisterDemandHourDto> getWorkModelByDate(@PathVariable("date") String dateString,
                                                           @RequestParam("storeCode") String storeCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         return registerDemandHourService.findHourlyDemands(storeCode, date);
     }
@@ -350,6 +384,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public List<RegisterDemandSlot> getWorkModelSlotsByDate(@PathVariable("date") String dateString,
                                                             @RequestParam("storeCode") String storeCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var intervals = registerDemandIntervalMapper.selectByStoreAndDate(storeCode, date);
         int resMin = appSettingService.getTimeResolutionMinutes();
@@ -393,6 +430,9 @@ public class ShiftDailyShiftController {
     public List<DemandIntervalDto> getWorkDemands(@PathVariable("date") String dateString,
                                                   @RequestParam("storeCode") String storeCode,
                                                   @RequestParam("departmentCode") String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -403,6 +443,9 @@ public class ShiftDailyShiftController {
     @PostMapping("/api/calc/work-demands/save")
     @ResponseBody
     public Map<String, Object> saveWorkDemands(@RequestBody WorkDemandSaveRequest request) {
+        if (isDeniedStoreManage(request.getStoreCode())) {
+            return Map.of("success", false, "message", "店舗の更新権限がありません。");
+        }
         if (isDeniedDepartment(request.getDepartmentCode())) {
             return Map.of("success", false, "message", "部門の閲覧権限がありません。");
         }
@@ -416,6 +459,9 @@ public class ShiftDailyShiftController {
     public List<WorkDemandSlot> getWorkDemandSlotsByDate(@PathVariable("date") String dateString,
                                                          @RequestParam("storeCode") String storeCode,
                                                          @RequestParam("departmentCode") String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -448,6 +494,9 @@ public class ShiftDailyShiftController {
     public List<WorkDemandSlot> getDepartmentTaskSlotsByDate(@PathVariable("date") String dateString,
                                                              @RequestParam("storeCode") String storeCode,
                                                              @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -502,6 +551,9 @@ public class ShiftDailyShiftController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     public Map<String, Object> startAssignmentDaily(@RequestBody SolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "error", "店舗の更新権限がありません。");
+            }
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
             LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -520,6 +572,9 @@ public class ShiftDailyShiftController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SHIFT_MONTHLY)")
     public Map<String, Object> startAssignmentForDay(@RequestBody DailySolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "error", "店舗の更新権限がありません。");
+            }
             LocalDate date = LocalDate.parse(req.date(), DateTimeFormatter.ISO_LOCAL_DATE);
             boolean ok = service.startSolveAssignmentForDate(date, req.storeCode(), req.departmentCode());
             return Map.of("success", ok, "date", req.date());
@@ -533,6 +588,9 @@ public class ShiftDailyShiftController {
     public List<Employee> getEmployeesByStore(@PathVariable("storeCode") String storeCode,
                                               @RequestParam("date") String dateString,
                                               @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         // 指定日の出勤者のみ（shift_assignment）
         LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
         var from = date;
@@ -566,6 +624,9 @@ public class ShiftDailyShiftController {
     @GetMapping("/api/departments/{storeCode}")
     @ResponseBody
     public List<DepartmentMaster> getDepartmentsByStore(@PathVariable("storeCode") String storeCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         return departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
     }
 
@@ -574,6 +635,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> saveShiftAssignments(@RequestBody ShiftAssignmentSaveRequest request) {
         try {
+            if (isDeniedStoreManage(request.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             service.saveShiftAssignmentChanges(request);
             return Map.of("success", true, "message", "変更が保存されました");
         } catch (Exception e) {
@@ -586,6 +650,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> saveShiftAttendance(@RequestBody ShiftAttendanceSaveRequest request) {
         try {
+            if (isDeniedStoreManage(request.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             service.saveShiftAttendanceChange(request);
             return Map.of("success", true, "message", "変更が保存されました");
         } catch (Exception e) {
@@ -598,6 +665,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> deleteEmployeeRequest(@RequestBody EmployeeRequestDeleteRequest request) {
         try {
+            if (isDeniedStoreManage(request.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             int deleted = service.deleteEmployeeRequestForDate(request.storeCode(), request.employeeCode(), request.date());
             return Map.of("success", true, "deleted", deleted);
         } catch (Exception e) {
@@ -610,6 +680,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> clearAttendance(@RequestBody SolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
             LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -625,6 +698,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> clearManualAttendance(@RequestBody SolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
             LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -640,6 +716,9 @@ public class ShiftDailyShiftController {
     @ResponseBody
     public Map<String, Object> clearAssignment(@RequestBody SolveRequest req) {
         try {
+            if (isDeniedStoreManage(req.storeCode())) {
+                return Map.of("success", false, "message", "店舗の更新権限がありません。");
+            }
             LocalDate base = LocalDate.parse(req.month() + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             int startDay = appSettingService.getShiftCycleStartDay();
             LocalDate cycleStart = computeCycleStart(base, startDay);
@@ -655,6 +734,9 @@ public class ShiftDailyShiftController {
     public List<StaffingBalanceDto> getStaffingBalance(@PathVariable("date") String dateString,
                                                        @RequestParam("storeCode") String storeCode,
                                                        @RequestParam(value = "departmentCode", required = false) String departmentCode) {
+        if (isDeniedStoreView(storeCode)) {
+            return List.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return List.of();
         }
@@ -681,8 +763,11 @@ public class ShiftDailyShiftController {
             LocalDate cycleEnd = cycleStart.plusMonths(1);
             
             // 店舗リストを取得
-            List<Store> stores = storeMapper.selectByExample(null);
+            List<Store> stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
             stores.sort(Comparator.comparing(Store::getStoreCode));
+            if (isDeniedStoreView(storeCode)) {
+                storeCode = null;
+            }
             List<DepartmentMaster> departments = List.of();
             if (storeCode != null && !storeCode.isBlank()) {
                 departments = departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
@@ -770,12 +855,13 @@ public class ShiftDailyShiftController {
 
             if (storeCode != null && !storeCode.isEmpty() && !employees.isEmpty()) {
                 LocalDate cycleEndForOff = cycleStart.plusMonths(1);
+                String selectedStoreCode = storeCode;
                 Set<String> employeeCodesForOff = employees.stream()
                         .map(EmployeeInfo::employeeCode)
                         .collect(Collectors.toSet());
                 employeeRequestMapper.selectByDateRange(cycleStart, cycleEndForOff).stream()
                         .filter(req -> req != null && req.getRequestDate() != null)
-                        .filter(req -> storeCode.equals(req.getStoreCode()))
+                        .filter(req -> selectedStoreCode.equals(req.getStoreCode()))
                         .filter(req -> employeeCodesForOff.contains(req.getEmployeeCode()))
                         .forEach(req -> {
                             String kind = req.getRequestKind() == null ? "" : req.getRequestKind().trim();
@@ -866,8 +952,11 @@ public class ShiftDailyShiftController {
         } catch (Exception e) {
             // エラーハンドリング
             YearMonth currentMonth = YearMonth.now();
-            List<Store> stores = storeMapper.selectByExample(null);
+            List<Store> stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
             stores.sort(Comparator.comparing(Store::getStoreCode));
+            if (isDeniedStoreView(storeCode)) {
+                storeCode = null;
+            }
             List<DepartmentMaster> departments = List.of();
             if (storeCode != null && !storeCode.isBlank()) {
                 departments = departmentAuthorizationService.filterAccessibleDepartments(storeDepartmentMapper.findDepartmentsByStore(storeCode));
@@ -897,6 +986,16 @@ public class ShiftDailyShiftController {
     private boolean isDeniedDepartment(String departmentCode) {
         return departmentCode != null && !departmentCode.isBlank()
                 && !departmentAuthorizationService.canAccessDepartment(departmentCode);
+    }
+
+    private boolean isDeniedStoreView(String storeCode) {
+        return storeCode != null && !storeCode.isBlank()
+                && !storeAuthorizationService.canViewStore(storeCode);
+    }
+
+    private boolean isDeniedStoreManage(String storeCode) {
+        return storeCode != null && !storeCode.isBlank()
+                && !storeAuthorizationService.canManageStore(storeCode);
     }
     
     // 内部クラスでEmployeeInfoを定義

@@ -1,5 +1,6 @@
 package io.github.riemr.shift.presentation.controller;
 
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.Employee;
 import io.github.riemr.shift.infrastructure.persistence.entity.EmployeeRequest;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
@@ -59,6 +60,7 @@ public class EmployeeRequestController {
     private final EmployeeRequestMapper employeeRequestMapper;
     private final EmployeeMapper employeeMapper;
     private final StoreMapper storeMapper;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_REQUEST)")
@@ -75,9 +77,13 @@ public class EmployeeRequestController {
                 YearMonth.parse(targetMonth) : YearMonth.now();
             
             // 店舗リストを取得
-            List<Store> stores = storeMapper.selectByExample(null);
+            List<Store> stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
             stores.sort(Comparator.comparing(Store::getStoreCode));
             log.info("Found {} stores", stores.size());
+            if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+                storeCode = null;
+                model.addAttribute("error", "店舗の参照権限がありません。");
+            }
             
             // 従業員リストを取得（店舗でフィルタリング）
             List<Employee> employees;
@@ -191,6 +197,9 @@ public class EmployeeRequestController {
 
             Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
             log.info("Employee lookup result: {}", emp != null ? "found" : "not found");
+            if (emp != null && !storeAuthorizationService.canManageStore(emp.getStoreCode())) {
+                return "error: 店舗の更新権限がありません";
+            }
             if (emp != null && emp.getStoreCode() != null) {
                 EmployeeRequest newRequest = buildRequest(employeeCode, requestDate, normalized, emp.getStoreCode());
                 employeeRequestMapper.insert(newRequest);
@@ -239,6 +248,9 @@ public class EmployeeRequestController {
                 }
 
                 Employee emp = employeeMapper.selectByPrimaryKey(employeeCode);
+                if (emp != null && !storeAuthorizationService.canManageStore(emp.getStoreCode())) {
+                    return "error: 店舗の更新権限がありません";
+                }
                 if (emp != null && emp.getStoreCode() != null) {
                     EmployeeRequest newRequest = buildRequest(employeeCode, requestDate, normalized, emp.getStoreCode());
                     employeeRequestMapper.insert(newRequest);
@@ -261,6 +273,11 @@ public class EmployeeRequestController {
                           @RequestParam(required = false) List<String> selectedDates,
                           RedirectAttributes redirectAttributes) {
         try {
+            Employee targetEmployee = employeeMapper.selectByPrimaryKey(employeeCode);
+            if (targetEmployee == null || !storeAuthorizationService.canManageStore(targetEmployee.getStoreCode())) {
+                redirectAttributes.addFlashAttribute("error", "店舗の更新権限がありません。");
+                return "redirect:/employee-requests?targetMonth=" + targetMonth;
+            }
             YearMonth yearMonth = YearMonth.parse(targetMonth);
             LocalDate fromDate = yearMonth.atDay(1);
             LocalDate toDate = yearMonth.atEndOfMonth();
@@ -320,6 +337,9 @@ public class EmployeeRequestController {
             
             YearMonth yearMonth = targetMonth != null ? 
                 YearMonth.parse(targetMonth) : YearMonth.now();
+            if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+                storeCode = null;
+            }
             
             // 最小限のデータのみ取得
             List<Employee> allEmployees = employeeMapper.selectAll();

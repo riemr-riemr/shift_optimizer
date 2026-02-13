@@ -308,6 +308,12 @@
                     </a>
                 </li>
                 <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
+                    <a th:href="@{/masters/org-node}">
+                        <i class="bi bi-diagram-2"></i>
+                        組織ノード管理
+                    </a>
+                </li>
+                <li class="nav-item" th:if="${@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).TASK_MASTER)}">
                     <a th:href="@{/masters/register}">
                         <i class="bi bi-cash-coin"></i>
                         レジマスタ

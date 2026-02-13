@@ -103,13 +103,13 @@
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox"
                          th:name="${r.authorityCode + '|' + screen + '|view'}"
-                         th:checked="${perm[r.authorityCode] != null and perm[r.authorityCode].get(screen) != null and perm[r.authorityCode].get(screen).canView}">
+                         th:checked="${perm[r.authorityCode] != null and perm[r.authorityCode].get(screen) != null and perm[r.authorityCode].get(screen).canView == true}">
                   <label class="form-check-label">参照</label>
                 </div>
                 <div class="form-check form-check-inline ms-3">
                   <input class="form-check-input" type="checkbox"
                          th:name="${r.authorityCode + '|' + screen + '|update'}"
-                         th:checked="${perm[r.authorityCode] != null and perm[r.authorityCode].get(screen) != null and perm[r.authorityCode].get(screen).canUpdate}">
+                         th:checked="${perm[r.authorityCode] != null and perm[r.authorityCode].get(screen) != null and perm[r.authorityCode].get(screen).canUpdate == true}">
                   <label class="form-check-label">更新</label>
                 </div>
               </td>
@@ -119,7 +119,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card mb-4">
       <div class="card-header">部門閲覧権限マトリクス</div>
       <div class="card-body p-0">
         <table class="table table-hover mb-0">
@@ -139,11 +139,50 @@
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox"
                          th:name="${r.authorityCode + '|DEPT|' + d.departmentCode}"
-                         th:checked="${deptPerm[r.authorityCode] != null and deptPerm[r.authorityCode].get(d.departmentCode) != null and deptPerm[r.authorityCode].get(d.departmentCode)}">
+                         th:checked="${deptPerm[r.authorityCode] != null and deptPerm[r.authorityCode].get(d.departmentCode) != null and deptPerm[r.authorityCode].get(d.departmentCode) == true}">
                   <label class="form-check-label">閲覧可</label>
                 </div>
               </td>
             </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        <span class="text-muted small">部門単位の閲覧可否</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">店舗権限（組織ノード単位）</div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+          <tr>
+            <th>組織ノード</th>
+            <th th:each="r : ${roles}" th:text="${r.authorityCode}">ROLE</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="n : ${orgNodes}">
+            <td>
+              <div class="fw-semibold" th:text="${n.nodeCode}" th:style="|margin-left:${(n.hierarchyLevel != null ? n.hierarchyLevel : 0) * 16}px;|">ROOT</div>
+              <div class="text-muted small" th:text="${n.nodeName}">全社</div>
+            </td>
+            <td th:each="r : ${roles}">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox"
+                       th:name="${r.authorityCode + '|NODE|' + n.nodeId + '|view'}"
+                       th:checked="${nodePerm[r.authorityCode] != null and nodePerm[r.authorityCode].get(n.nodeId) != null and nodePerm[r.authorityCode].get(n.nodeId).canViewStore == true}">
+                <label class="form-check-label">参照</label>
+              </div>
+              <div class="form-check form-check-inline ms-3">
+                <input class="form-check-input" type="checkbox"
+                       th:name="${r.authorityCode + '|NODE|' + n.nodeId + '|update'}"
+                       th:checked="${nodePerm[r.authorityCode] != null and nodePerm[r.authorityCode].get(n.nodeId) != null and nodePerm[r.authorityCode].get(n.nodeId).canManageStore == true}">
+                <label class="form-check-label">更新</label>
+              </div>
+            </td>
+          </tr>
           </tbody>
         </table>
       </div>

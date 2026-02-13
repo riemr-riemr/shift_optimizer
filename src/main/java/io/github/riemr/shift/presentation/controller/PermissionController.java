@@ -3,11 +3,15 @@ package io.github.riemr.shift.presentation.controller;
 import io.github.riemr.shift.infrastructure.mapper.AuthorityMasterMapper;
 import io.github.riemr.shift.infrastructure.mapper.AuthorityScreenPermissionMapper;
 import io.github.riemr.shift.infrastructure.mapper.AuthorityDepartmentPermissionMapper;
+import io.github.riemr.shift.infrastructure.mapper.AuthorityNodePermissionMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentMasterMapper;
+import io.github.riemr.shift.infrastructure.mapper.OrgNodeMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster;
 import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityDepartmentPermission;
+import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityNodePermission;
 import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityScreenPermission;
 import io.github.riemr.shift.infrastructure.persistence.entity.DepartmentMaster;
+import io.github.riemr.shift.infrastructure.persistence.entity.OrgNode;
 import io.github.riemr.shift.util.ScreenCodes;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +38,8 @@ public class PermissionController {
     private final AuthorityScreenPermissionMapper permissionMapper;
     private final DepartmentMasterMapper departmentMasterMapper;
     private final AuthorityDepartmentPermissionMapper authorityDepartmentPermissionMapper;
+    private final OrgNodeMapper orgNodeMapper;
+    private final AuthorityNodePermissionMapper authorityNodePermissionMapper;
 
     private static final List<String> SCREENS = List.of(
             ScreenCodes.SHIFT_MONTHLY,
@@ -176,6 +182,26 @@ public class PermissionController {
                 deptPerm.setDepartmentCode(department.getDepartmentCode());
                 authorityDepartmentPermissionMapper.insert(deptPerm);
             }
+
+            authorityNodePermissionMapper.deleteByAuthority(role.getAuthorityCode());
+            List<OrgNode> nodes = orgNodeMapper.selectAll();
+            for (OrgNode node : nodes) {
+                String keyViewStore = role.getAuthorityCode() + "|NODE|" + node.getNodeId() + "|view";
+                String keyUpdateStore = role.getAuthorityCode() + "|NODE|" + node.getNodeId() + "|update";
+                String keyManageStore = role.getAuthorityCode() + "|NODE|" + node.getNodeId() + "|manage"; // backward compatibility
+                boolean canViewStore = request.getParameter(keyViewStore) != null;
+                boolean canManageStore = request.getParameter(keyUpdateStore) != null
+                        || request.getParameter(keyManageStore) != null;
+                if (!canViewStore && !canManageStore) {
+                    continue;
+                }
+                AuthorityNodePermission p = new AuthorityNodePermission();
+                p.setAuthorityCode(role.getAuthorityCode());
+                p.setNodeId(node.getNodeId());
+                p.setCanViewStore(canViewStore || canManageStore);
+                p.setCanManageStore(canManageStore);
+                authorityNodePermissionMapper.upsert(p);
+            }
         }
         redirectAttributes.addFlashAttribute("success", "権限設定を保存しました。");
         return "redirect:/permissions";
@@ -184,9 +210,11 @@ public class PermissionController {
     private void populatePermissionPage(Model model) {
         List<AuthorityMaster> roles = authorityMasterMapper.selectAll();
         List<DepartmentMaster> departments = departmentMasterMapper.selectAll();
+        List<OrgNode> orgNodes = orgNodeMapper.selectAll();
         model.addAttribute("roles", roles);
         model.addAttribute("screens", SCREENS);
         model.addAttribute("departments", departments);
+        model.addAttribute("orgNodes", orgNodes);
 
         Map<String, Map<String, AuthorityScreenPermission>> matrix = new HashMap<>();
         for (AuthorityMaster role : roles) {
@@ -209,6 +237,17 @@ public class PermissionController {
             deptMatrix.put(role.getAuthorityCode(), m);
         }
         model.addAttribute("deptPerm", deptMatrix);
+
+        Map<String, Map<Long, AuthorityNodePermission>> nodeMatrix = new HashMap<>();
+        for (AuthorityMaster role : roles) {
+            var list = authorityNodePermissionMapper.findAllByAuthority(role.getAuthorityCode());
+            Map<Long, AuthorityNodePermission> map = new HashMap<>();
+            for (var p : list) {
+                map.put(p.getNodeId(), p);
+            }
+            nodeMatrix.put(role.getAuthorityCode(), map);
+        }
+        model.addAttribute("nodePerm", nodeMatrix);
     }
 
     private void initializeScreenPermissions(String authorityCode) {

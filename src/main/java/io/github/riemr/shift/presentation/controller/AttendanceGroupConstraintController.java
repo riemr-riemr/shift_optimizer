@@ -2,6 +2,7 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.AttendanceGroupConstraintService;
 import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
@@ -19,13 +20,18 @@ import java.util.List;
 public class AttendanceGroupConstraintController {
     private final AttendanceGroupConstraintService service;
     private final DepartmentAuthorizationService departmentAuthorizationService;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     @GetMapping
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).SETTINGS)")
     public String view(@RequestParam(value = "storeCode", required = false) String storeCode,
                        @RequestParam(value = "departmentCode", required = false) String departmentCode,
                        Model model) {
-        var stores = service.listStores();
+        var stores = storeAuthorizationService.filterViewableStores(service.listStores());
+        if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+            storeCode = null;
+            model.addAttribute("error", "店舗の参照権限がありません。");
+        }
         if ((storeCode == null || storeCode.isBlank()) && !stores.isEmpty()) {
             storeCode = stores.get(0).getStoreCode();
         }
@@ -55,6 +61,10 @@ public class AttendanceGroupConstraintController {
                          @RequestParam(value = "minOnDuty", required = false) Integer minOnDuty,
                          @RequestParam(value = "memberEmployeeCodes", required = false) List<String> memberEmployeeCodes,
                          Model model) {
+        if (!storeAuthorizationService.canManageStore(storeCode)) {
+            model.addAttribute("error", "店舗の更新権限がありません。");
+            return view(storeCode, departmentCode, model);
+        }
         try {
             service.createConstraint(storeCode, departmentCode, ruleType, minOnDuty, memberEmployeeCodes);
             model.addAttribute("success", "登録しました");
@@ -70,6 +80,10 @@ public class AttendanceGroupConstraintController {
                          @RequestParam("storeCode") String storeCode,
                          @RequestParam(value = "departmentCode", required = false) String departmentCode,
                          Model model) {
+        if (!storeAuthorizationService.canManageStore(storeCode)) {
+            model.addAttribute("error", "店舗の更新権限がありません。");
+            return view(storeCode, departmentCode, model);
+        }
         service.deleteConstraint(constraintId);
         model.addAttribute("success", "削除しました");
         return view(storeCode, departmentCode, model);

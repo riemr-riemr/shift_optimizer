@@ -2,6 +2,7 @@ package io.github.riemr.shift.presentation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.riemr.shift.application.repository.MonthlyTaskPlanRepository;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,10 +42,14 @@ class MonthlyTaskPlanControllerTest {
 
     @MockBean
     MonthlyTaskPlanRepository repository;
+    @MockBean
+    StoreAuthorizationService storeAuthorizationService;
 
     @BeforeEach
     void setup() {
-        Mockito.reset(repository);
+        Mockito.reset(repository, storeAuthorizationService);
+        when(storeAuthorizationService.canViewStore(any())).thenReturn(true);
+        when(storeAuthorizationService.canManageStore(any())).thenReturn(true);
     }
 
     @Test
@@ -142,6 +147,11 @@ class MonthlyTaskPlanControllerTest {
 
     @Test
     void delete_succeeds_andCallsRepository() throws Exception {
+        MonthlyTaskPlan existing = new MonthlyTaskPlan();
+        existing.setPlanId(10L);
+        existing.setStoreCode("S001");
+        when(repository.find(10L)).thenReturn(existing);
+
         mockMvc.perform(delete("/tasks/api/monthly/delete/{id}", 10L))
                 .andExpect(status().isOk());
         verify(repository, times(1)).delete(10L);

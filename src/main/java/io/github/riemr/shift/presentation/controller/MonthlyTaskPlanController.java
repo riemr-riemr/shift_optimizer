@@ -2,6 +2,7 @@ package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.repository.MonthlyTaskPlanRepository;
 import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.MonthlyTaskPlan;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
@@ -19,12 +20,15 @@ import java.text.SimpleDateFormat;
 @RequestMapping("/tasks/api/monthly")
 public class MonthlyTaskPlanController {
     private final MonthlyTaskPlanRepository repository;
+    private final StoreAuthorizationService storeAuthorizationService;
     @Nullable
     private final DepartmentAuthorizationService departmentAuthorizationService;
 
     public MonthlyTaskPlanController(MonthlyTaskPlanRepository repository,
+                                     StoreAuthorizationService storeAuthorizationService,
                                      @Nullable DepartmentAuthorizationService departmentAuthorizationService) {
         this.repository = repository;
+        this.storeAuthorizationService = storeAuthorizationService;
         this.departmentAuthorizationService = departmentAuthorizationService;
     }
 
@@ -75,6 +79,9 @@ public class MonthlyTaskPlanController {
 
     @PostMapping(path = "/dom", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> createDom(@RequestBody DomRequest req) {
+        if (!storeAuthorizationService.canManageStore(req.storeCode)) {
+            return ResponseEntity.status(403).body(Map.of("error", "店舗の更新権限がありません"));
+        }
         if (isDeniedDepartment(req.departmentCode)) {
             return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));
         }
@@ -93,6 +100,9 @@ public class MonthlyTaskPlanController {
 
     @PostMapping(path = "/wom", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> createWom(@RequestBody WomRequest req) {
+        if (!storeAuthorizationService.canManageStore(req.storeCode)) {
+            return ResponseEntity.status(403).body(Map.of("error", "店舗の更新権限がありません"));
+        }
         if (isDeniedDepartment(req.departmentCode)) {
             return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));
         }
@@ -113,6 +123,9 @@ public class MonthlyTaskPlanController {
     @GetMapping(path = "/effective", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<MonthlyTaskPlan> listEffective(@RequestParam("store") String storeCode,
                                                @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) Date date) {
+        if (!storeAuthorizationService.canViewStore(storeCode)) {
+            return List.of();
+        }
         return repository.listEffectiveByStoreAndDate(storeCode, date);
     }
 
@@ -121,6 +134,9 @@ public class MonthlyTaskPlanController {
             @RequestParam("store") String storeCode,
             @RequestParam(name = "dept", required = false) String departmentCode,
             @RequestParam("month") String yearMonthStr) {
+        if (!storeAuthorizationService.canViewStore(storeCode)) {
+            return Map.of();
+        }
         if (isDeniedDepartment(departmentCode)) {
             return Map.of();
         }
@@ -164,6 +180,13 @@ public class MonthlyTaskPlanController {
 
     @DeleteMapping(path = "/delete/{id}")
     public ResponseEntity<?> deletePlan(@PathVariable("id") Long planId) {
+        MonthlyTaskPlan existing = repository.find(planId);
+        if (existing == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!storeAuthorizationService.canManageStore(existing.getStoreCode())) {
+            return ResponseEntity.status(403).body(Map.of("error", "店舗の更新権限がありません"));
+        }
         repository.delete(planId);
         return ResponseEntity.ok().build();
     }
@@ -176,6 +199,9 @@ public class MonthlyTaskPlanController {
         MonthlyTaskPlan existing = repository.find(req.getPlanId());
         if (existing == null) {
             return ResponseEntity.notFound().build();
+        }
+        if (!storeAuthorizationService.canManageStore(existing.getStoreCode())) {
+            return ResponseEntity.status(403).body(Map.of("error", "店舗の更新権限がありません"));
         }
         if (isDeniedDepartment(existing.getDepartmentCode())) {
             return ResponseEntity.status(403).body(Map.of("error", "部門の閲覧権限がありません"));

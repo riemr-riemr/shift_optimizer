@@ -359,6 +359,55 @@ SELECT a.authority_code, d.department_code
  CROSS JOIN department_master d
 ON CONFLICT (authority_code, department_code) DO NOTHING;
 
+-- ------------------------------------------------
+-- 11.5 org_node / store_org_node / authority_node_permission
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS org_node (
+  node_id           BIGSERIAL PRIMARY KEY,
+  node_code         VARCHAR(32) NOT NULL UNIQUE,
+  node_name         VARCHAR(100) NOT NULL,
+  parent_node_id    BIGINT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT,
+  hierarchy_level   SMALLINT NOT NULL DEFAULT 0 CHECK (hierarchy_level >= 0),
+  display_order     INTEGER,
+  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+  CHECK (parent_node_id IS NULL OR parent_node_id <> node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_org_node_parent ON org_node(parent_node_id);
+
+CREATE TABLE IF NOT EXISTS store_org_node (
+  store_code        VARCHAR(10) PRIMARY KEY REFERENCES store(store_code) ON DELETE CASCADE,
+  node_id           BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_store_org_node_node ON store_org_node(node_id);
+
+CREATE TABLE IF NOT EXISTS authority_node_permission (
+  authority_code    VARCHAR(20) NOT NULL REFERENCES authority_master(authority_code) ON DELETE CASCADE,
+  node_id           BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE CASCADE,
+  can_view_store    BOOLEAN NOT NULL DEFAULT FALSE,
+  can_manage_store  BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (authority_code, node_id)
+);
+
+-- 初期ルートノード（既存店舗の受け皿）
+INSERT INTO org_node(node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active)
+VALUES ('ROOT', '全社', NULL, 0, 0, TRUE)
+ON CONFLICT (node_code) DO NOTHING;
+
+-- 既存店舗をROOTへ割当
+INSERT INTO store_org_node(store_code, node_id)
+SELECT s.store_code, r.node_id
+  FROM store s
+ CROSS JOIN org_node r
+ WHERE r.node_code = 'ROOT'
+ON CONFLICT (store_code) DO NOTHING;
+
+-- ADMINはROOT配下を参照・管理可
+INSERT INTO authority_node_permission(authority_code, node_id, can_view_store, can_manage_store)
+SELECT 'ADMIN', r.node_id, TRUE, TRUE
+  FROM org_node r
+ WHERE r.node_code = 'ROOT'
+ON CONFLICT (authority_code, node_id) DO NOTHING;
+
 -- 12. work_demand_interval (non-register demand)
 CREATE TABLE IF NOT EXISTS work_demand_interval (
   id               BIGSERIAL   PRIMARY KEY,

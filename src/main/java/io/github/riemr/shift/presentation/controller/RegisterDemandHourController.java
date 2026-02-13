@@ -23,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import io.github.riemr.shift.application.service.RegisterDemandHourService;
 import io.github.riemr.shift.application.service.AppSettingService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.presentation.form.RegisterDemandHourForm;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.Store;
@@ -43,6 +44,7 @@ class RegisterDemandHourController {
     private final AppSettingService appSettingService;
     private final StoreMapper storeMapper;
     private final RegisterMapper registerMapper;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     /**
      * 編集画面を表示 (GET)。
@@ -55,8 +57,12 @@ class RegisterDemandHourController {
                        Model model) {
         LocalDate target = (date == null ? LocalDate.now() : date);
 
-        List<Store> stores = storeMapper.selectByExample(null);
+        List<Store> stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
         stores.sort(Comparator.comparing(Store::getStoreCode));
+        if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+            model.addAttribute("error", "店舗の参照権限がありません。");
+            storeCode = null;
+        }
         String effectiveStore = (storeCode != null && !storeCode.isBlank())
                 ? storeCode
                 : (stores.isEmpty() ? null : stores.get(0).getStoreCode());
@@ -90,6 +96,11 @@ class RegisterDemandHourController {
                        BindingResult br, RedirectAttributes redirect) {
         if (br.hasErrors()) {
             return "registerDemand/form";
+        }
+        if (!storeAuthorizationService.canManageStore(form.getStoreCode())) {
+            redirect.addFlashAttribute("error", "店舗の更新権限がありません。");
+            redirect.addAttribute("date", form.getTargetDate().format(DateTimeFormatter.ISO_DATE));
+            return "redirect:/register-demand";
         }
         // Accept interval grid via demandsCsv
         String demandsCsv = null;
