@@ -73,7 +73,8 @@
                 </td>
                 <td>
                   <form method="post" th:action="@{/permissions/roles/delete}"
-                        th:onsubmit="|return confirm('権限コード ' + ${r.authorityCode} + ' を削除してよいですか？')|">
+                        th:data-authority-code="${r.authorityCode}"
+                        onsubmit="return confirm('権限コード ' + this.dataset.authorityCode + ' を削除してよいですか？')">
                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
                     <input type="hidden" name="authorityCode" th:value="${r.authorityCode}" />
                     <button type="submit" class="btn btn-outline-danger btn-sm">
