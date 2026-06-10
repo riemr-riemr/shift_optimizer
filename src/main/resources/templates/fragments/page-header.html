@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--
+  共通ページヘッダ
+  使い方: <div th:replace="~{fragments/page-header :: page-header('bi bi-upload', 'CSV取り込み', '説明文')}"></div>
+  icon / description は不要なら null を渡す
+-->
+<div th:fragment="page-header(icon, title, description)" class="content-header">
+  <h1><i th:if="${icon}" th:class="${icon}"></i> <span th:text="${title}">タイトル</span></h1>
+  <p class="mb-0" th:if="${description}" th:text="${description}"></p>
+</div>
+
+</body>
+</html>

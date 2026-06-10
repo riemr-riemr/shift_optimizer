@@ -72,10 +72,7 @@
 </head>
 <body>
 <main layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-diagram-3"></i> 組織ノード管理</h1>
-    <p class="mb-0">エリア階層を木構造で管理し、最下層に店舗を割り当てます。</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-diagram-3', '組織ノード管理', 'エリア階層を木構造で管理し、最下層に店舗を割り当てます。')}"></div>
 
   <div class="alert d-none" id="messageBox"></div>
 

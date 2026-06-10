@@ -7,10 +7,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-calendar-day"></i> 日次シフト表示</h1>
-    <p class="mb-0">日別のシフト割り当て結果を確認できます</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-calendar-day', '日次シフト表示', '日別のシフト割り当て結果を確認できます')}"></div>
 
 <div class="row g-4">
   <!-- Control Panel -->

@@ -5,10 +5,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-    <div class="content-header">
-        <h1><i class="bi bi-exclamation-triangle text-danger"></i> エラーが発生しました</h1>
-        <p class="mb-0">希望休入力画面でエラーが発生しました</p>
-    </div>
+    <div th:replace="~{fragments/page-header :: page-header('bi bi-exclamation-triangle text-danger', 'エラーが発生しました', '希望休入力画面でエラーが発生しました')}"></div>
 
     <div class="alert alert-danger" role="alert">
         <i class="bi bi-exclamation-triangle"></i> 

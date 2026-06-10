@@ -110,10 +110,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-person-lines-fill"></i> 従業員個人シフト表示</h1>
-    <p class="mb-0">従業員を指定して1カ月のシフトと勤務時間を確認できます</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-person-lines-fill', '従業員個人シフト表示', '従業員を指定して1カ月のシフトと勤務時間を確認できます')}"></div>
 
   <!-- 検索条件カード -->
   <div class="card mb-4">

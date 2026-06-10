@@ -282,10 +282,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-    <div class="content-header">
-        <h1><i class="bi bi-calendar-x"></i> 希望休入力</h1>
-        <p class="mb-0">従業員の希望休を月単位で管理できます</p>
-    </div>
+    <div th:replace="~{fragments/page-header :: page-header('bi bi-calendar-x', '希望休入力', '従業員の希望休を月単位で管理できます')}"></div>
 
     <!-- 検索条件 -->
     <div class="card search-card">

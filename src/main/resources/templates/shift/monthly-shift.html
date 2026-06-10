@@ -227,10 +227,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-    <div class="content-header">
-        <h1><i class="bi bi-calendar3"></i> 月次シフト</h1>
-        <p class="mb-0">従業員別の勤務時間を一覧で確認できます</p>
-    </div>
+    <div th:replace="~{fragments/page-header :: page-header('bi bi-calendar3', '月次シフト', '従業員別の勤務時間を一覧で確認できます')}"></div>
 
     <div class="card search-card">
         <div class="card-header">

@@ -6,10 +6,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-upload"></i> CSV取り込み</h1>
-    <p class="mb-0">各CSVファイルを個別にアップロードし、既存データに対してアップサート（挿入または更新）します。</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-upload', 'CSV取り込み', '各CSVファイルを個別にアップロードし、既存データに対してアップサート（挿入または更新）します。')}"></div>
 
   <div th:if="${message}" th:classappend="${success} ? 'alert alert-success' : 'alert alert-danger'" class="alert" role="alert">
     <span th:text="${message}">結果</span>

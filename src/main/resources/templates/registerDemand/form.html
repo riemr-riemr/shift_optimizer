@@ -50,10 +50,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-bar-chart"></i> 需要予測登録</h1>
-    <p class="mb-0">時間帯別の必要レジスター台数を設定できます</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-bar-chart', '需要予測登録', '時間帯別の必要レジスター台数を設定できます')}"></div>
 
   <!-- 検索条件カード -->
   <div class="card mb-4">

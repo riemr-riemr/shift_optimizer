@@ -113,10 +113,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-grid-3x3-gap"></i> レジ担当一覧</h1>
-    <p class="mb-0">従業員のレジスター習熟度を設定・管理できます</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-grid-3x3-gap', 'レジ担当一覧', '従業員のレジスター習熟度を設定・管理できます')}"></div>
 
   <div th:replace="~{skill/skill-matrix-fragment :: matrix('regMatrix', 'レジ担当一覧', ${matrixDto.registers}, ${matrixDto.employees}, ${matrixDto.levelMap}, 'register')}"></div>
 

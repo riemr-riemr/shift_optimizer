@@ -6,10 +6,7 @@
 </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-shield-lock"></i> 画面権限管理</h1>
-    <p class="mb-0">役割ごとに各画面の参照・更新権限を設定します</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-shield-lock', '画面権限管理', '役割ごとに各画面の参照・更新権限を設定します')}"></div>
 
   <div class="card mb-4">
     <div class="card-header">権限マスタ作成・編集</div>

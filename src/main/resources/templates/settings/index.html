@@ -6,10 +6,7 @@
   </head>
 <body>
 <div layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-gear"></i> 汎用設定</h1>
-    <p class="mb-0">シフトサイクルの開始日を設定します</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-gear', '汎用設定', 'シフトサイクルの開始日を設定します')}"></div>
 
   <div class="row">
     <div class="col-lg-6">

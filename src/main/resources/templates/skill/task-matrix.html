@@ -42,10 +42,7 @@
 </head>
 <body>
 <main layout:fragment="content">
-  <div class="content-header">
-    <h1><i class="bi bi-grid-3x3-gap"></i> 作業担当一覧</h1>
-    <p class="mb-0">従業員別の作業スキルレベルを設定できます</p>
-  </div>
+  <div th:replace="~{fragments/page-header :: page-header('bi bi-grid-3x3-gap', '作業担当一覧', '従業員別の作業スキルレベルを設定できます')}"></div>
 
   <div th:replace="~{skill/skill-matrix-fragment :: matrix('taskMatrix', '作業担当一覧', ${tasks}, ${employees}, ${matrix}, 'task')}"></div>
 </main>
