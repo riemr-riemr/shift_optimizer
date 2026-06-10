@@ -87,14 +87,10 @@
 </head>
 <body>
 <main layout:fragment="content">
-  <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span>作業カテゴリマスタ</span>
-      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-        <i class="bi bi-plus-lg"></i> 追加
-      </button>
-    </div>
-    <div class="card-body">
+  <div th:replace="~{fragments/master-layout :: master-list-modal('作業カテゴリマスタ', 'bi bi-tags', ~{::add-modal}, ~{::data-table}, ~{::edit-modal})}">
+
+    <!-- Data Table -->
+    <div th:fragment="data-table" class="table-responsive">
       <table class="table table-sm">
         <thead>
           <tr>
@@ -145,10 +141,9 @@
         </tbody>
       </table>
     </div>
-  </div>
 
-  <!-- 追加モーダル -->
-  <div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <!-- 追加モーダル -->
+    <div th:fragment="add-modal" class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -277,8 +272,8 @@
     </div>
   </div>
 
-  <!-- 編集モーダル -->
-  <div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <!-- 編集モーダル -->
+    <div th:fragment="edit-modal" class="modal fade" id="editCategoryModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -405,6 +400,7 @@
         </form>
       </div>
     </div>
+    </div>
   </div>
 
   <script>
@@ -413,7 +409,7 @@
       // 追加モーダルの色選択
       const addColorInput = document.getElementById('addColorInput');
       const addColorPreview = document.getElementById('addColorPreview');
-      const addPredefinedColors = document.querySelectorAll('#addCategoryModal .color-option');
+      const addPredefinedColors = document.querySelectorAll('#addModal .color-option');
       
       addColorInput.addEventListener('input', function() {
         addColorPreview.style.backgroundColor = this.value;
@@ -463,7 +459,7 @@
       });
       
       // アイコン選択機能
-      setupIconSelector('#addCategoryModal', '#addIconInput');
+      setupIconSelector('#addModal', '#addIconInput');
       setupIconSelector('#editCategoryModal', '#editIconInput');
     });
     
