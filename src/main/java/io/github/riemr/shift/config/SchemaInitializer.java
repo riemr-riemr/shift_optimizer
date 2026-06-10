@@ -17,6 +17,13 @@ public class SchemaInitializer {
     @PostConstruct
     public void ensureTables() {
         try {
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master ADD COLUMN IF NOT EXISTS authority_level INTEGER NOT NULL DEFAULT 0");
+            jdbc.execute("UPDATE authority_master SET authority_level = 90 WHERE authority_code = 'ADMIN' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("UPDATE authority_master SET authority_level = 50 WHERE authority_code = 'MANAGER' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("UPDATE authority_master SET authority_level = 10 WHERE authority_code = 'USER' AND (authority_level IS NULL OR authority_level = 0)");
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master DROP CONSTRAINT IF EXISTS chk_authority_master_level");
+            jdbc.execute("ALTER TABLE IF EXISTS authority_master ADD CONSTRAINT chk_authority_master_level CHECK (authority_level BETWEEN 0 AND 99)");
+
             // Department tables (ensure exist for batch imports)
             jdbc.execute("CREATE TABLE IF NOT EXISTS department_master (" +
                     "department_code VARCHAR(32) PRIMARY KEY, " +
@@ -43,6 +50,47 @@ public class SchemaInitializer {
                     "skill_level SMALLINT NOT NULL, " +
                     "PRIMARY KEY (employee_code, department_code)" +
                     ")");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS authority_department_permission (" +
+                    "authority_code VARCHAR(20) NOT NULL REFERENCES authority_master(authority_code) ON DELETE CASCADE, " +
+                    "department_code VARCHAR(32) NOT NULL REFERENCES department_master(department_code) ON DELETE CASCADE, " +
+                    "PRIMARY KEY (authority_code, department_code)" +
+                    ")");
+            jdbc.execute("INSERT INTO authority_department_permission(authority_code, department_code) " +
+                    "SELECT a.authority_code, d.department_code " +
+                    "FROM authority_master a CROSS JOIN department_master d " +
+                    "ON CONFLICT (authority_code, department_code) DO NOTHING");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS org_node (" +
+                    "node_id BIGSERIAL PRIMARY KEY, " +
+                    "node_code VARCHAR(32) NOT NULL UNIQUE, " +
+                    "node_name VARCHAR(100) NOT NULL, " +
+                    "parent_node_id BIGINT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT, " +
+                    "hierarchy_level SMALLINT NOT NULL DEFAULT 0, " +
+                    "display_order INTEGER, " +
+                    "is_active BOOLEAN NOT NULL DEFAULT TRUE, " +
+                    "CHECK (hierarchy_level >= 0), " +
+                    "CHECK (parent_node_id IS NULL OR parent_node_id <> node_id)" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_org_node_parent ON org_node(parent_node_id)");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS store_org_node (" +
+                    "store_code VARCHAR(10) PRIMARY KEY REFERENCES store(store_code) ON DELETE CASCADE, " +
+                    "node_id BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT" +
+                    ")");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_store_org_node_node ON store_org_node(node_id)");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS authority_node_permission (" +
+                    "authority_code VARCHAR(20) NOT NULL REFERENCES authority_master(authority_code) ON DELETE CASCADE, " +
+                    "node_id BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE CASCADE, " +
+                    "can_view_store BOOLEAN NOT NULL DEFAULT FALSE, " +
+                    "can_manage_store BOOLEAN NOT NULL DEFAULT FALSE, " +
+                    "PRIMARY KEY (authority_code, node_id)" +
+                    ")");
+            jdbc.execute("INSERT INTO org_node(node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active) " +
+                    "VALUES ('ROOT','全社',NULL,0,0,TRUE) ON CONFLICT (node_code) DO NOTHING");
+            jdbc.execute("INSERT INTO store_org_node(store_code, node_id) " +
+                    "SELECT s.store_code, r.node_id FROM store s CROSS JOIN org_node r WHERE r.node_code = 'ROOT' " +
+                    "ON CONFLICT (store_code) DO NOTHING");
+            jdbc.execute("INSERT INTO authority_node_permission(authority_code, node_id, can_view_store, can_manage_store) " +
+                    "SELECT 'ADMIN', r.node_id, TRUE, TRUE FROM org_node r WHERE r.node_code = 'ROOT' " +
+                    "ON CONFLICT (authority_code, node_id) DO NOTHING");
             // Ensure department_master has register department '520' (legacy)
             jdbc.execute("INSERT INTO department_master(department_code, department_name, is_register) VALUES ('520','Register', TRUE) ON CONFLICT (department_code) DO NOTHING");
 

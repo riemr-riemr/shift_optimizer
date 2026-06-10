@@ -44,13 +44,14 @@ CREATE TABLE register (
 CREATE TABLE authority_master (
     authority_code   VARCHAR(20) PRIMARY KEY,
     authority_name   VARCHAR(50) NOT NULL,
-    description      TEXT
+    description      TEXT,
+    authority_level  INTEGER NOT NULL DEFAULT 0 CHECK (authority_level BETWEEN 0 AND 99)
 );
 
-INSERT INTO authority_master(authority_code, authority_name, description) VALUES
-    ('ADMIN',   '管理者',          '全機能へのアクセス'),
-    ('MANAGER', '店長/管理者',     '店舗運用・最適化・設定の一部'),
-    ('USER',    '一般ユーザ',      '閲覧・自身に関する操作')
+INSERT INTO authority_master(authority_code, authority_name, description, authority_level) VALUES
+    ('ADMIN',   '管理者',          '全機能へのアクセス', 90),
+    ('MANAGER', '店長/管理者',     '店舗運用・最適化・設定の一部', 50),
+    ('USER',    '一般ユーザ',      '閲覧・自身に関する操作', 10)
 ON CONFLICT (authority_code) DO NOTHING;
 
 -- 2.6 authority_screen_permission : 画面権限 (参照/更新)
@@ -60,6 +61,13 @@ CREATE TABLE IF NOT EXISTS authority_screen_permission (
     can_view       BOOLEAN NOT NULL DEFAULT FALSE,
     can_update     BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (authority_code, screen_code)
+);
+
+-- 2.7 authority_department_permission : 閲覧可能部門
+CREATE TABLE IF NOT EXISTS authority_department_permission (
+    authority_code VARCHAR(20) REFERENCES authority_master(authority_code) ON DELETE CASCADE,
+    department_code VARCHAR(32) NOT NULL,
+    PRIMARY KEY (authority_code, department_code)
 );
 
 -- 既定権限付与
@@ -343,6 +351,62 @@ CREATE TABLE IF NOT EXISTS employee_department_skill (
   skill_level       SMALLINT    NOT NULL,
   PRIMARY KEY (employee_code, department_code)
 );
+
+-- 既定: 後方互換のため、既存権限は全ての部門を閲覧可能にする
+INSERT INTO authority_department_permission(authority_code, department_code)
+SELECT a.authority_code, d.department_code
+  FROM authority_master a
+ CROSS JOIN department_master d
+ON CONFLICT (authority_code, department_code) DO NOTHING;
+
+-- ------------------------------------------------
+-- 11.5 org_node / store_org_node / authority_node_permission
+-- ------------------------------------------------
+CREATE TABLE IF NOT EXISTS org_node (
+  node_id           BIGSERIAL PRIMARY KEY,
+  node_code         VARCHAR(32) NOT NULL UNIQUE,
+  node_name         VARCHAR(100) NOT NULL,
+  parent_node_id    BIGINT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT,
+  hierarchy_level   SMALLINT NOT NULL DEFAULT 0 CHECK (hierarchy_level >= 0),
+  display_order     INTEGER,
+  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+  CHECK (parent_node_id IS NULL OR parent_node_id <> node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_org_node_parent ON org_node(parent_node_id);
+
+CREATE TABLE IF NOT EXISTS store_org_node (
+  store_code        VARCHAR(10) PRIMARY KEY REFERENCES store(store_code) ON DELETE CASCADE,
+  node_id           BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_store_org_node_node ON store_org_node(node_id);
+
+CREATE TABLE IF NOT EXISTS authority_node_permission (
+  authority_code    VARCHAR(20) NOT NULL REFERENCES authority_master(authority_code) ON DELETE CASCADE,
+  node_id           BIGINT NOT NULL REFERENCES org_node(node_id) ON DELETE CASCADE,
+  can_view_store    BOOLEAN NOT NULL DEFAULT FALSE,
+  can_manage_store  BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (authority_code, node_id)
+);
+
+-- 初期ルートノード（既存店舗の受け皿）
+INSERT INTO org_node(node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active)
+VALUES ('ROOT', '全社', NULL, 0, 0, TRUE)
+ON CONFLICT (node_code) DO NOTHING;
+
+-- 既存店舗をROOTへ割当
+INSERT INTO store_org_node(store_code, node_id)
+SELECT s.store_code, r.node_id
+  FROM store s
+ CROSS JOIN org_node r
+ WHERE r.node_code = 'ROOT'
+ON CONFLICT (store_code) DO NOTHING;
+
+-- ADMINはROOT配下を参照・管理可
+INSERT INTO authority_node_permission(authority_code, node_id, can_view_store, can_manage_store)
+SELECT 'ADMIN', r.node_id, TRUE, TRUE
+  FROM org_node r
+ WHERE r.node_code = 'ROOT'
+ON CONFLICT (authority_code, node_id) DO NOTHING;
 
 -- 12. work_demand_interval (non-register demand)
 CREATE TABLE IF NOT EXISTS work_demand_interval (

@@ -1,6 +1,9 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.EmployeeService;
+import io.github.riemr.shift.infrastructure.mapper.AuthorityMasterMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
+import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster;
 import io.github.riemr.shift.presentation.form.EmployeeForm;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyHoursSettingMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeMonthlyOffdaysSettingMapper;
@@ -14,6 +17,8 @@ import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.time.Year;
@@ -29,6 +34,8 @@ import java.util.HashMap;
 @RequiredArgsConstructor
 public class EmployeeController {
     private final EmployeeService service;
+    private final AuthorityMasterMapper authorityMasterMapper;
+    private final EmployeeMapper employeeMapper;
     private final EmployeeMonthlyHoursSettingMapper monthlyHoursMapper;
     private final EmployeeMonthlyOffdaysSettingMapper monthlyOffdaysMapper;
 
@@ -59,9 +66,16 @@ public class EmployeeController {
         for (int i = 0; i < 3; i++) form.getMonthlyHours().add(new EmployeeForm.MonthlyHoursRow());
         // 年選択の初期値（今年）
         form.setSelectedYear(Year.now().getValue());
+        var roles = getAssignableAuthorityOptions();
+        if (roles.stream().anyMatch(r -> "USER".equalsIgnoreCase(r.getAuthorityCode()))) {
+            form.setAuthorityCode("USER");
+        } else if (!roles.isEmpty()) {
+            form.setAuthorityCode(roles.get(0).getAuthorityCode());
+        }
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", false);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("authorityOptions", roles);
         model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
@@ -105,12 +119,17 @@ public class EmployeeController {
         // 年選択の初期値設定とテーブル形式データ変換
         Integer currentYear = Year.now().getValue();
         form.setSelectedYear(currentYear);
+        var auth = service.findAuth(code);
+        if (auth != null && auth.getAuthorityCode() != null && !auth.getAuthorityCode().isBlank()) {
+            form.setAuthorityCode(auth.getAuthorityCode());
+        }
         loadMonthlyHoursForYear(form, code, currentYear);
         loadMonthlyOffdaysForYear(form, code, currentYear);
         
         model.addAttribute("employeeForm", form);
         model.addAttribute("edit", true);
         model.addAttribute("stores", service.findAllStores());
+        model.addAttribute("authorityOptions", getAssignableAuthorityOptions());
         model.addAttribute("availableYears", getAvailableYears());
         return "employee/form";
     }
@@ -120,9 +139,13 @@ public class EmployeeController {
     @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).EMPLOYEE_LIST)")
     public String save(@Valid @ModelAttribute("employeeForm") EmployeeForm form,
                        BindingResult result, @RequestParam("edit") boolean edit, Model model) {
+        if (!canAssignAuthority(form.getAuthorityCode())) {
+            result.rejectValue("authorityCode", "authorityCode.forbidden", "設定可能な権限レベルを超えています");
+        }
         if (result.hasErrors()) {
             model.addAttribute("edit", edit);
             model.addAttribute("stores", service.findAllStores());
+            model.addAttribute("authorityOptions", getAssignableAuthorityOptions());
             model.addAttribute("availableYears", getAvailableYears());
             return "employee/form";
         }
@@ -179,7 +202,7 @@ public class EmployeeController {
                 }
             }
         }
-        service.save(form.toEntity(), !edit, prefs, monthly, offdays);
+        service.save(form.toEntity(), !edit, form.getAuthorityCode(), prefs, monthly, offdays);
         return "redirect:/employees";
     }
 
@@ -305,6 +328,47 @@ public class EmployeeController {
     private List<Integer> getAvailableYears() {
         Integer currentYear = Year.now().getValue();
         return java.util.Arrays.asList(currentYear - 1, currentYear, currentYear + 1);
+    }
+
+    private List<AuthorityMaster> getAssignableAuthorityOptions() {
+        Integer currentLevel = currentUserAuthorityLevel();
+        if (currentLevel == null) {
+            return List.of();
+        }
+        int maxAssignableLevel = currentLevel - 1;
+        if (maxAssignableLevel < 0) {
+            return List.of();
+        }
+        return authorityMasterMapper.selectAll().stream()
+                .filter(a -> a.getAuthorityLevel() != null && a.getAuthorityLevel() <= maxAssignableLevel)
+                .toList();
+    }
+
+    private boolean canAssignAuthority(String authorityCode) {
+        if (authorityCode == null || authorityCode.isBlank()) {
+            return false;
+        }
+        Integer currentLevel = currentUserAuthorityLevel();
+        if (currentLevel == null || currentLevel <= 0) {
+            return false;
+        }
+        AuthorityMaster target = authorityMasterMapper.findByCode(authorityCode);
+        return target != null
+                && target.getAuthorityLevel() != null
+                && target.getAuthorityLevel() <= currentLevel - 1;
+    }
+
+    private Integer currentUserAuthorityLevel() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            return null;
+        }
+        var me = employeeMapper.selectAuthByEmployeeCode(auth.getName());
+        if (me == null || me.getAuthorityCode() == null || me.getAuthorityCode().isBlank()) {
+            return null;
+        }
+        AuthorityMaster master = authorityMasterMapper.findByCode(me.getAuthorityCode());
+        return master != null ? master.getAuthorityLevel() : null;
     }
     
     // （重複回避）上のloadMonthlyHoursForYearを使用

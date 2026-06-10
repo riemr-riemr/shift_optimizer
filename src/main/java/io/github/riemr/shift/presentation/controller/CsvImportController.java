@@ -6,22 +6,41 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.server.ResponseStatusException;
 
 import io.github.riemr.shift.application.service.CsvImportService;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/csv-import")
 @RequiredArgsConstructor
 @ConditionalOnProperty(value = "shift.csv-import.enabled", havingValue = "true", matchIfMissing = true)
 public class CsvImportController {
+    private static final Map<String, String> TEMPLATE_FILES = Map.of(
+            "store", "store.csv",
+            "register-type", "register_type.csv",
+            "register", "register.csv",
+            "employee", "employee.csv",
+            "employee-weekly-preference", "employee_weekly_preference.csv",
+            "employee-register-skill", "employee_register_skill.csv",
+            "register-demand-interval", "register_demand_interval.csv");
 
     private final JobLauncher jobLauncher;
     private final Job masterImportJob;
@@ -31,6 +50,24 @@ public class CsvImportController {
     @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
     public String view() {
         return "csv/import";
+    }
+
+    @GetMapping("/template/{templateType}")
+    @PreAuthorize("@screenAuth.hasViewPermission(T(io.github.riemr.shift.util.ScreenCodes).CSV_IMPORT)")
+    public ResponseEntity<Resource> downloadTemplate(@PathVariable String templateType) {
+        String fileName = TEMPLATE_FILES.get(templateType);
+        if (fileName == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "テンプレートが見つかりません");
+        }
+        ClassPathResource resource = new ClassPathResource("csv-template/" + fileName);
+        if (!resource.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "テンプレートが見つかりません");
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv"));
+        headers.setContentDisposition(
+                ContentDisposition.attachment().filename(fileName, StandardCharsets.UTF_8).build());
+        return ResponseEntity.ok().headers(headers).body(resource);
     }
 
     @PostMapping

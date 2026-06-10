@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.OrgNodeMapper">
+  <resultMap id="BaseMap" type="io.github.riemr.shift.infrastructure.persistence.entity.OrgNode">
+    <id column="node_id" property="nodeId" />
+    <result column="node_code" property="nodeCode" />
+    <result column="node_name" property="nodeName" />
+    <result column="parent_node_id" property="parentNodeId" />
+    <result column="hierarchy_level" property="hierarchyLevel" />
+    <result column="display_order" property="displayOrder" />
+    <result column="is_active" property="isActive" />
+  </resultMap>
+
+  <select id="selectAll" resultMap="BaseMap">
+    SELECT node_id, node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active
+      FROM org_node
+     ORDER BY hierarchy_level, COALESCE(display_order, 9999), node_code
+  </select>
+
+  <select id="selectById" resultMap="BaseMap">
+    SELECT node_id, node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active
+      FROM org_node
+     WHERE node_id = #{nodeId}
+     LIMIT 1
+  </select>
+
+  <select id="selectByCode" resultMap="BaseMap">
+    SELECT node_id, node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active
+      FROM org_node
+     WHERE node_code = #{nodeCode}
+     LIMIT 1
+  </select>
+
+  <select id="selectChildren" resultMap="BaseMap">
+    SELECT node_id, node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active
+      FROM org_node
+     WHERE parent_node_id = #{parentNodeId}
+     ORDER BY COALESCE(display_order, 9999), node_code
+  </select>
+
+  <insert id="insert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.OrgNode" useGeneratedKeys="true" keyProperty="nodeId">
+    INSERT INTO org_node(node_code, node_name, parent_node_id, hierarchy_level, display_order, is_active)
+    VALUES(#{nodeCode}, #{nodeName}, #{parentNodeId}, #{hierarchyLevel}, #{displayOrder}, COALESCE(#{isActive}, TRUE))
+  </insert>
+
+  <update id="update" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.OrgNode">
+    UPDATE org_node
+       SET node_name = #{nodeName},
+           parent_node_id = #{parentNodeId},
+           hierarchy_level = #{hierarchyLevel},
+           display_order = #{displayOrder},
+           is_active = #{isActive}
+     WHERE node_id = #{nodeId}
+  </update>
+
+  <delete id="deleteById">
+    DELETE FROM org_node
+     WHERE node_id = #{nodeId}
+  </delete>
+</mapper>

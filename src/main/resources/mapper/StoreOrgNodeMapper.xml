@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.riemr.shift.infrastructure.mapper.StoreOrgNodeMapper">
+  <resultMap id="BaseMap" type="io.github.riemr.shift.infrastructure.persistence.entity.StoreOrgNode">
+    <id column="store_code" property="storeCode" />
+    <result column="node_id" property="nodeId" />
+  </resultMap>
+
+  <select id="selectAll" resultMap="BaseMap">
+    SELECT store_code, node_id
+      FROM store_org_node
+     ORDER BY store_code
+  </select>
+
+  <select id="findByStoreCode" resultMap="BaseMap">
+    SELECT store_code, node_id
+      FROM store_org_node
+     WHERE store_code = #{storeCode}
+     LIMIT 1
+  </select>
+
+  <select id="findStoreCodesByNode" resultType="string">
+    SELECT store_code
+      FROM store_org_node
+     WHERE node_id = #{nodeId}
+     ORDER BY store_code
+  </select>
+
+  <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.StoreOrgNode">
+    INSERT INTO store_org_node(store_code, node_id)
+    VALUES(#{storeCode}, #{nodeId})
+    ON CONFLICT(store_code)
+    DO UPDATE SET node_id = EXCLUDED.node_id
+  </insert>
+
+  <delete id="deleteByStoreCode">
+    DELETE FROM store_org_node
+     WHERE store_code = #{storeCode}
+  </delete>
+</mapper>

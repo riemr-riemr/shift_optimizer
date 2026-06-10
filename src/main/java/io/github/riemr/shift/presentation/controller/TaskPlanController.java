@@ -3,8 +3,10 @@ package io.github.riemr.shift.presentation.controller;
 import io.github.riemr.shift.application.repository.TaskPlanRepository;
 import io.github.riemr.shift.application.service.TaskPlanService;
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.application.service.AppSettingService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.infrastructure.persistence.entity.TaskPlan;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import io.github.riemr.shift.infrastructure.mapper.TaskCategoryMasterMapper;
@@ -37,24 +39,30 @@ public class TaskPlanController {
     private final TaskPlanService planService;
     private final TaskMasterService taskMasterService;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
     private final StoreMapper storeMapper;
     private final TaskCategoryMasterMapper taskCategoryMasterMapper;
     private final AppSettingService appSettingService;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     public TaskPlanController(TaskPlanRepository planRepository,
                               TaskPlanService planService,
                               TaskMasterService taskMasterService,
                               DepartmentSkillMatrixService departmentSkillMatrixService,
+                              DepartmentAuthorizationService departmentAuthorizationService,
                               StoreMapper storeMapper,
                               TaskCategoryMasterMapper taskCategoryMasterMapper,
-                              AppSettingService appSettingService) {
+                              AppSettingService appSettingService,
+                              StoreAuthorizationService storeAuthorizationService) {
         this.planRepository = planRepository;
         this.planService = planService;
         this.taskMasterService = taskMasterService;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
+        this.departmentAuthorizationService = departmentAuthorizationService;
         this.storeMapper = storeMapper;
         this.taskCategoryMasterMapper = taskCategoryMasterMapper;
         this.appSettingService = appSettingService;
+        this.storeAuthorizationService = storeAuthorizationService;
     }
 
     @InitBinder
@@ -81,11 +89,20 @@ public class TaskPlanController {
                             @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                             @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                             Model model) {
+        if (departmentCode != null && !departmentCode.isBlank() && !departmentAuthorizationService.canAccessDepartment(departmentCode)) {
+            departmentCode = null;
+            model.addAttribute("error", "部門の閲覧権限がありません。");
+        }
         // Inject time resolution for UI
         try {
             int res = (appSettingService != null) ? appSettingService.getTimeResolutionMinutes() : 15;
             model.addAttribute("timeResolutionMinutes", res);
         } catch (Exception ignored) { model.addAttribute("timeResolutionMinutes", 15); }
+        var stores = storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null));
+        if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+            storeCode = null;
+            model.addAttribute("error", "店舗の参照権限がありません。");
+        }
         model.addAttribute("storeCode", storeCode);
         model.addAttribute("mode", mode);
         model.addAttribute("day", dayOfWeek);
@@ -93,10 +110,10 @@ public class TaskPlanController {
         model.addAttribute("dept", departmentCode);
         model.addAttribute("from", from);
         model.addAttribute("to", to);
-        model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
+        model.addAttribute("departments", departmentAuthorizationService.filterAccessibleDepartments(departmentSkillMatrixService.listDepartments()));
         
         // 店舗リストを追加
-        model.addAttribute("stores", storeMapper.selectByExample(null));
+        model.addAttribute("stores", stores);
         
         // カテゴリリストを追加
         model.addAttribute("categories", taskCategoryMasterMapper.selectAll());
@@ -165,6 +182,16 @@ public class TaskPlanController {
     public Object create(@RequestParam("mode") String mode,
                          @ModelAttribute("form") TaskPlan form,
                          HttpServletRequest request) {
+        if (form.getDepartmentCode() != null && !form.getDepartmentCode().isBlank()
+                && !departmentAuthorizationService.canAccessDepartment(form.getDepartmentCode())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "部門の閲覧権限がありません"));
+        }
+        if (!storeAuthorizationService.canManageStore(form.getStoreCode())) {
+            if (isAjax(request)) {
+                return ResponseEntity.status(403).body(Map.of("error", "店舗の更新権限がありません"));
+            }
+            return "redirect:/tasks/plan";
+        }
         // Set safe defaults for quick grid posts
         if (form.getActive() == null) form.setActive(Boolean.TRUE);
         if (form.getRequiredStaffCount() == null) form.setRequiredStaffCount(1);
@@ -213,6 +240,9 @@ public class TaskPlanController {
                          @RequestParam(name = "dept", required = false) String departmentCode,
                          @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                          @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (!storeAuthorizationService.canManageStore(storeCode)) {
+            return "redirect:/tasks/plan";
+        }
         TaskPlan p = planRepository.find(id);
         if (p == null) {
             String redirect = "redirect:/tasks/plan?store=" + storeCode + "&mode=" + mode;
@@ -272,6 +302,9 @@ public class TaskPlanController {
                          @RequestParam(name = "dept", required = false) String departmentCode,
                          @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                          @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (!storeAuthorizationService.canManageStore(storeCode)) {
+            return "redirect:/tasks/plan";
+        }
         planRepository.delete(id);
         String redirect = "redirect:/tasks/plan?store=" + storeCode + "&mode=" + mode;
         if ("weekly".equalsIgnoreCase(mode)) {
@@ -297,6 +330,9 @@ public class TaskPlanController {
                             @RequestParam(name = "targetDow", required = false) List<Short> targetDows,
                             @RequestParam(name = "targetDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) List<LocalDate> targetDates,
                             @RequestParam(name = "dates", required = false) String datesCsv) {
+        if (!storeAuthorizationService.canManageStore(storeCode)) {
+            return "redirect:/tasks/plan";
+        }
         // Parse datesCsv if provided (comma/space/newline separated)
         if ((targetDates == null || targetDates.isEmpty()) && datesCsv != null && !datesCsv.isBlank()) {
             String[] parts = datesCsv.split("[\\s,;]+");

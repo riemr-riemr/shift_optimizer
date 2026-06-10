@@ -7,5 +7,5 @@ public class AuthorityMaster {
     private String authorityCode;
     private String authorityName;
     private String description;
+    private Integer authorityLevel;
 }
-

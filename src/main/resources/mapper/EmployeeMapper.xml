@@ -287,6 +287,12 @@
      WHERE employee_code = #{employeeCode}
   </update>
 
+  <update id="updateAuthorityCode">
+    UPDATE public.employee
+       SET authority_code = #{authorityCode}
+     WHERE employee_code = #{employeeCode}
+  </update>
+
   <!-- custom upsert (excluding auth fields) -->
   <insert id="upsert" parameterType="io.github.riemr.shift.infrastructure.persistence.entity.Employee">
     INSERT INTO public.employee (
@@ -305,4 +311,8 @@
       min_work_minutes_day  = EXCLUDED.min_work_minutes_day,
       max_work_minutes_day  = EXCLUDED.max_work_minutes_day
   </insert>
+
+  <select id="countByAuthorityCode" resultType="long">
+    SELECT COUNT(*) FROM public.employee WHERE authority_code = #{authorityCode}
+  </select>
 </mapper>

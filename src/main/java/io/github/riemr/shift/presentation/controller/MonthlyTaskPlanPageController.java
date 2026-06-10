@@ -1,9 +1,11 @@
 package io.github.riemr.shift.presentation.controller;
 
 import io.github.riemr.shift.application.service.DepartmentSkillMatrixService;
+import io.github.riemr.shift.application.service.DepartmentAuthorizationService;
 import io.github.riemr.shift.application.service.TaskMasterService;
 import io.github.riemr.shift.application.service.TaskCategoryMasterService;
 import io.github.riemr.shift.application.service.AppSettingService;
+import io.github.riemr.shift.application.service.StoreAuthorizationService;
 import io.github.riemr.shift.infrastructure.mapper.StoreMapper;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -16,31 +18,41 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class MonthlyTaskPlanPageController {
     private final StoreMapper storeMapper;
     private final DepartmentSkillMatrixService departmentSkillMatrixService;
+    private final DepartmentAuthorizationService departmentAuthorizationService;
     private final TaskMasterService taskMasterService;
     private final TaskCategoryMasterService taskCategoryMasterService;
     private final AppSettingService appSettingService;
+    private final StoreAuthorizationService storeAuthorizationService;
 
     public MonthlyTaskPlanPageController(StoreMapper storeMapper,
                                          DepartmentSkillMatrixService departmentSkillMatrixService,
+                                         DepartmentAuthorizationService departmentAuthorizationService,
                                          TaskMasterService taskMasterService,
                                          TaskCategoryMasterService taskCategoryMasterService,
-                                         AppSettingService appSettingService) {
+                                         AppSettingService appSettingService,
+                                         StoreAuthorizationService storeAuthorizationService) {
         this.storeMapper = storeMapper;
         this.departmentSkillMatrixService = departmentSkillMatrixService;
+        this.departmentAuthorizationService = departmentAuthorizationService;
         this.taskMasterService = taskMasterService;
         this.taskCategoryMasterService = taskCategoryMasterService;
         this.appSettingService = appSettingService;
+        this.storeAuthorizationService = storeAuthorizationService;
     }
 
     @GetMapping
     public String index(@RequestParam(name = "store", required = false) String storeCode,
                         @RequestParam(name = "dept", required = false) String departmentCode,
                         Model model) {
+        if (storeCode != null && !storeCode.isBlank() && !storeAuthorizationService.canViewStore(storeCode)) {
+            storeCode = null;
+            model.addAttribute("error", "店舗の参照権限がありません。");
+        }
         model.addAttribute("storeCode", storeCode);
         model.addAttribute("dept", departmentCode);
         model.addAttribute("timeResolutionMinutes", appSettingService.getTimeResolutionMinutes());
-        model.addAttribute("stores", storeMapper.selectByExample(null));
-        model.addAttribute("departments", departmentSkillMatrixService.listDepartments());
+        model.addAttribute("stores", storeAuthorizationService.filterViewableStores(storeMapper.selectByExample(null)));
+        model.addAttribute("departments", departmentAuthorizationService.filterAccessibleDepartments(departmentSkillMatrixService.listDepartments()));
         model.addAttribute("masters", taskMasterService.list());
         model.addAttribute("categories", taskCategoryMasterService.list());
         return "tasks/monthly";
