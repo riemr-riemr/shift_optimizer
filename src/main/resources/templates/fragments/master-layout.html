@@ -100,7 +100,6 @@
     <div th:replace="${addButton}"></div>
   </div>
   <div class="card-body">
-    <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
     <div th:replace="${table}"></div>
   </div>
 </div>
@@ -117,7 +116,6 @@
     </button>
   </div>
   <div class="card-body">
-    <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
     <div th:replace="${table}"></div>
   </div>
   
@@ -197,8 +195,9 @@
 <div th:fragment="color-picker(inputId, previewId)" class="mb-3">
   <label class="form-label">色</label>
   <div class="color-picker-wrapper">
-    <div class="color-preview" th:id="${previewId}" style="background-color: #007bff;" 
-         th:onclick="'document.getElementById(\'' + ${inputId} + '\').click()'"></div>
+    <div class="color-preview" th:id="${previewId}" style="background-color: #007bff;"
+         th:data-input-id="${inputId}"
+         onclick="document.getElementById(this.dataset.inputId).click()"></div>
     <input type="color" class="color-input" name="color" th:id="${inputId}" value="#007bff">
   </div>
   <div class="predefined-colors">

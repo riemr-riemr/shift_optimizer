@@ -391,6 +391,10 @@
                     </div>
                 </div>
 
+                <!-- Flash messages (PRGパターンの success / error を全画面共通で表示) -->
+                <div th:if="${success}" class="alert alert-success" role="alert" th:text="${success}"></div>
+                <div th:if="${error}" class="alert alert-danger" role="alert" th:text="${error}"></div>
+
                 <!-- Content from child templates goes here -->
                 <main layout:fragment="content">
                     <div class="card">

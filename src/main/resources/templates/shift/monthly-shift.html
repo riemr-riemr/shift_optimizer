@@ -313,11 +313,6 @@
         <strong>店舗を選択してください。</strong> 月次シフトを表示するには、まず上の検索条件で店舗を選択する必要があります。
     </div>
     
-    <!-- エラー表示 -->
-    <div th:if="${error}" class="alert alert-danger" role="alert">
-        <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}">エラーメッセージ</span>
-    </div>
-
     <!-- 月次シフト一覧表 -->
     <div class="card grid-container">
         <div class="card-header grid-header d-flex justify-content-between align-items-center">
