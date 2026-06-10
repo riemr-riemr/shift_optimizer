@@ -16,9 +16,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import io.github.riemr.shift.application.dto.StaffingBalanceDto;
 import io.github.riemr.shift.application.service.StaffingBalanceService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Controller
 @RequiredArgsConstructor
+@Slf4j
 @RequestMapping("/staffing-balance")
 public class StaffingBalanceController {
 
@@ -40,17 +42,11 @@ public class StaffingBalanceController {
     public List<StaffingBalanceDto> getStaffingBalance(
             @PathVariable("storeCode") String storeCode,
             @PathVariable("date") String dateString) {
-        System.out.println("API called with storeCode: " + storeCode + ", date: " + dateString);
-        try {
-            LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
-            List<StaffingBalanceDto> result = staffingBalanceService.getStaffingBalance(storeCode, date);
-            System.out.println("Returning " + result.size() + " records");
-            return result;
-        } catch (Exception e) {
-            System.err.println("Error in getStaffingBalance: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+        log.debug("getStaffingBalance called with storeCode: {}, date: {}", storeCode, dateString);
+        LocalDate date = LocalDate.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE);
+        List<StaffingBalanceDto> result = staffingBalanceService.getStaffingBalance(storeCode, date);
+        log.debug("getStaffingBalance returning {} records", result.size());
+        return result;
     }
 
     @GetMapping("/api/balance/{storeCode}/month/{month}")

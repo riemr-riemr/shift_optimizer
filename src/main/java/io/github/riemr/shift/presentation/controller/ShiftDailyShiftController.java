@@ -152,8 +152,7 @@ public class ShiftDailyShiftController {
         LocalDate cycleStart = computeCycleStart(base, startDay);
         
         log.info("Starting shift optimization for month={}, store={}, dept={}", req.month(), req.storeCode(), req.departmentCode());
-        System.out.println("DEBUG: Received request - month: " + req.month() + ", storeCode: " + req.storeCode() + ", departmentCode: " + req.departmentCode());
-        
+
         // 事前準備処理はShiftScheduleService内で実行されるため、ここでは実行しない
         
         // 既存の最適化（作業割当まで）

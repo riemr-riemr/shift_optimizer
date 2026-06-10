@@ -226,26 +226,20 @@ public class ShiftScheduleService {
                 LocalDate cycleEnd = month.plusMonths(1);
                 
                 log.info("Executing task plan materialization for store: {}, dept: {}", storeCode, departmentCode);
-                System.out.println("DEBUG: ShiftScheduleService executing task plan materialization for store: " + storeCode + ", dept: " + departmentCode);
-                
+
                 if (departmentCode != null && !departmentCode.isBlank()) {
-                    System.out.println("DEBUG: Processing specific department: " + departmentCode);
                     // 部門タスク割当（従業員未割当の枠）も物質化しておく
                     try {
                         int createdDeptAssign = taskPlanService.materializeDepartmentAssignments(storeCode, departmentCode, cycleStart, cycleEnd, "optimization_prep");
                         log.info("✅ Materialized {} department task assignments for dept: {}", createdDeptAssign, departmentCode);
-                        System.out.println("DEBUG: Materialized " + createdDeptAssign + " department task assignments for dept: " + departmentCode);
                     } catch (Exception ex) {
                         log.warn("Department task assignment materialization failed for dept {}: {}", departmentCode, ex.getMessage());
                     }
                     int createdWorkDemands = taskPlanService.materializeWorkDemands(storeCode, departmentCode, cycleStart, cycleEnd);
                     log.info("✅ Created {} work demand intervals for dept: {}", createdWorkDemands, departmentCode);
-                    System.out.println("DEBUG: Created " + createdWorkDemands + " work demand intervals for dept: " + departmentCode);
                 } else {
-                    System.out.println("DEBUG: Processing ALL departments (departmentCode is null or blank)");
                     int createdWorkDemands = taskPlanService.materializeWorkDemandsForAllDepartments(storeCode, cycleStart, cycleEnd);
                     log.info("✅ Created {} work demand intervals for all departments", createdWorkDemands);
-                    System.out.println("DEBUG: Created " + createdWorkDemands + " work demand intervals for all departments");
                 }
             } catch (Exception e) {
                 log.error("❌ Task plan materialization failed", e);
