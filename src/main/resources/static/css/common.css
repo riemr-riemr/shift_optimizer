@@ -477,3 +477,189 @@
 .border-task-stock { border-color: var(--color-stock); }
 .border-task-clean { border-color: var(--color-clean); }
 .border-task-default { border-color: var(--color-default); }
+/* ==========================================
+   Shared component styles
+   (extracted from duplicated inline <style> blocks)
+   ========================================== */
+
+.category-color-sample {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid #ddd;
+  margin-right: 8px;
+}
+
+.color-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-option {
+  width: 25px;
+  height: 25px;
+  border: 2px solid #ddd;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.color-option.selected {
+  border-color: #007bff;
+  border-width: 3px;
+}
+
+.color-option:hover {
+  border-color: #007bff;
+}
+
+.color-picker-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.color-preview {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  display: inline-block;
+  cursor: pointer;
+  position: relative;
+}
+
+.icon-option {
+  text-align: center;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: white;
+}
+
+.icon-option i {
+  font-size: 24px;
+  color: #495057;
+}
+
+.icon-option.selected {
+  border-color: #007bff;
+  background-color: #e3f2fd;
+}
+
+.icon-option:hover {
+  border-color: #007bff;
+  background-color: #e3f2fd;
+}
+
+.icon-selector {
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  background-color: #f8f9fa;
+}
+
+.plan-block {
+  position: absolute;
+  border: 1px solid #333;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  z-index: 4;
+  cursor: pointer;
+}
+
+.plan-block .resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 10px;
+  height: 10px;
+  background: rgba(0,0,0,0.35);
+  border-radius: 2px;
+  cursor: se-resize;
+}
+
+.plan-block .task-label {
+  font-size: 10px;
+  color: #fff;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 16px 2px 4px;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+}
+
+.plan-window {
+  position: absolute;
+  border: 1px dashed rgba(0,0,0,0.2);
+  border-radius: 3px;
+  z-index: 3;
+}
+
+.predefined-colors {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.range-selector-panel.show {
+  display: block;
+}
+
+.skill-matrix-table {
+  font-size: 0.9rem;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.table td, .table th {
+  vertical-align: middle;
+}
+
+.time-grid {
+  display: grid;
+  grid-auto-rows: 28px;
+  position: relative;
+}
+
+.time-grid .cell {
+  border-right: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f7f7f7;
+  cursor: pointer;
+}
+
+.time-grid .cell.selected-range {
+  background: #b6e0fe;
+}
+
+.time-grid .cell.selecting {
+  background: #ffe599;
+}
+
+.time-grid .cell:hover {
+  background: #f1f5ff;
+}
+
+.time-grid .header-hour {
+  border-right: 1px solid #eee;
+}
+
+.time-grid-wrapper {
+  overflow-x: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  background: #fff;
+}
