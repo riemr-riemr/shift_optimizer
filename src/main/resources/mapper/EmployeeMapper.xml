@@ -311,4 +311,8 @@
       min_work_minutes_day  = EXCLUDED.min_work_minutes_day,
       max_work_minutes_day  = EXCLUDED.max_work_minutes_day
   </insert>
+
+  <select id="countByAuthorityCode" resultType="long">
+    SELECT COUNT(*) FROM public.employee WHERE authority_code = #{authorityCode}
+  </select>
 </mapper>

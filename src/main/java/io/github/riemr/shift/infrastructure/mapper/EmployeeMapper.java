@@ -111,4 +111,6 @@ public interface EmployeeMapper {
 
     // custom upsert (does not touch auth fields)
     int upsert(Employee row);
+
+    long countByAuthorityCode(@Param("authorityCode") String authorityCode);
 }

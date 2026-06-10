@@ -5,6 +5,7 @@ import io.github.riemr.shift.infrastructure.mapper.AuthorityScreenPermissionMapp
 import io.github.riemr.shift.infrastructure.mapper.AuthorityDepartmentPermissionMapper;
 import io.github.riemr.shift.infrastructure.mapper.AuthorityNodePermissionMapper;
 import io.github.riemr.shift.infrastructure.mapper.DepartmentMasterMapper;
+import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.OrgNodeMapper;
 import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityMaster;
 import io.github.riemr.shift.infrastructure.persistence.entity.AuthorityDepartmentPermission;
@@ -40,6 +41,7 @@ public class PermissionController {
     private final AuthorityDepartmentPermissionMapper authorityDepartmentPermissionMapper;
     private final OrgNodeMapper orgNodeMapper;
     private final AuthorityNodePermissionMapper authorityNodePermissionMapper;
+    private final EmployeeMapper employeeMapper;
 
     private static final List<String> SCREENS = List.of(
             ScreenCodes.SHIFT_MONTHLY,
@@ -149,6 +151,24 @@ public class PermissionController {
         }
 
         redirectAttributes.addFlashAttribute("success", "権限マスタを更新しました。");
+        return "redirect:/permissions";
+    }
+
+    @PostMapping("/roles/delete")
+    @PreAuthorize("@screenAuth.hasUpdatePermission(T(io.github.riemr.shift.util.ScreenCodes).SCREEN_PERMISSION)")
+    public String deleteRole(@RequestParam("authorityCode") String authorityCode,
+                             RedirectAttributes redirectAttributes) {
+        String code = normalizeCode(authorityCode);
+        if (code == null || authorityMasterMapper.findByCode(code) == null) {
+            redirectAttributes.addFlashAttribute("error", "指定された権限コードが存在しません。");
+            return "redirect:/permissions";
+        }
+        if (employeeMapper.countByAuthorityCode(code) > 0) {
+            redirectAttributes.addFlashAttribute("error", "この権限コードは従業員に割り当て済みのため削除できません。");
+            return "redirect:/permissions";
+        }
+        authorityMasterMapper.deleteByCode(code);
+        redirectAttributes.addFlashAttribute("success", "権限マスタを削除しました: " + code);
         return "redirect:/permissions";
     }
 

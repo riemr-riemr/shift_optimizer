@@ -12,4 +12,5 @@ public interface AuthorityMasterMapper {
     AuthorityMaster findByCode(@Param("authorityCode") String authorityCode);
     int insert(AuthorityMaster authorityMaster);
     int update(AuthorityMaster authorityMaster);
+    int deleteByCode(@Param("authorityCode") String authorityCode);
 }

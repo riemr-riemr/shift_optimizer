@@ -33,4 +33,9 @@
            authority_level = #{authorityLevel}
      WHERE authority_code = #{authorityCode}
   </update>
+
+  <delete id="deleteByCode">
+    DELETE FROM authority_master
+     WHERE authority_code = #{authorityCode}
+  </delete>
 </mapper>
