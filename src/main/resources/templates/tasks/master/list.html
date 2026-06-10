@@ -34,7 +34,6 @@
                       th:data-description="${m.description}"
                       th:data-default-required-duration-minutes="${m.defaultRequiredDurationMinutes}">編集</button>
               <form th:action="@{'/tasks/master/' + ${m.taskCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('このタスクを削除しますか？');">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <input type="hidden" name="departmentCode" th:value="${m.departmentCode}">
                 <button class="btn btn-sm btn-outline-danger">削除</button>
               </form>
@@ -53,7 +52,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form th:action="@{/tasks/master}" method="post">
-            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="modal-body">
               <div class="mb-3">
                 <label class="form-label">作業コード</label>

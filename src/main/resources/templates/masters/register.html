@@ -41,7 +41,6 @@
                       th:data-is-auto-open-target="${r.isAutoOpenTarget}"
                       th:data-max-allowance="${r.maxAllowance}">編集</button>
               <form th:action="@{'/masters/register/' + ${r.storeCode} + '/' + ${r.registerNo} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('このレジを削除しますか？');">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <button class="btn btn-sm btn-outline-danger">削除</button>
               </form>
             </td>
@@ -59,7 +58,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form th:action="@{/masters/register}" method="post">
-            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="modal-body">
               <div class="row">
                 <div class="col-md-6">

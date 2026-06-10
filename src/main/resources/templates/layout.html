@@ -382,7 +382,6 @@
                     <div>
                         <div sec:authorize="isAuthenticated()" class="d-inline">
                             <form th:action="@{/logout}" method="post" class="d-inline">
-                                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
                                 <span class="me-3 text-muted"><i class="bi bi-person-circle"></i> <span sec:authentication="name">user</span></span>
                                 <button class="btn btn-outline-light btn-sm" type="submit"><i class="bi bi-box-arrow-right"></i> ログアウト</button>
                             </form>

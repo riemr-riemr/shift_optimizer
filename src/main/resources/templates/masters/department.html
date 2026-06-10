@@ -42,7 +42,6 @@
                       th:data-is-active="${d.isActive}"
                       th:data-is-register="${d.isRegister}">編集</button>
               <form th:action="@{'/masters/department/' + ${d.departmentCode} + '/delete'}" method="post" class="d-inline" onsubmit="return confirm('この部門を削除しますか？')">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <button class="btn btn-sm btn-outline-danger">削除</button>
               </form>
             </td>
@@ -60,7 +59,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form th:action="@{/masters/department}" method="post">
-            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="modal-body">
               <div class="mb-3">
                 <label class="form-label">部門コード</label>

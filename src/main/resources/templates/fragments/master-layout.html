@@ -129,7 +129,6 @@
 <!-- Simple Add Form Fragment -->
 <div th:fragment="simple-add-form(action, fields, submitText)" class="mb-3">
   <form th:action="${action}" th:object="${form}" method="post" class="row g-2">
-    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
     <div th:each="field : ${fields}" th:class="'col-' + ${field.colSize ?: 'auto'}">
       <div th:switch="${field.type}">
         <!-- Text Input -->
@@ -315,7 +314,6 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form th:action="${formAction}" method="post">
-        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
         <div class="modal-body">
           <div th:replace="${formFields}"></div>
         </div>
