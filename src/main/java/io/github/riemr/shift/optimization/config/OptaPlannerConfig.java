@@ -26,7 +26,7 @@ import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicTy
 // pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.optaplanner.core.api.score.ScoreManager;
+import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
 import org.optaplanner.core.config.solver.termination.TerminationConfig;
@@ -58,7 +58,7 @@ public class OptaPlannerConfig {
 
     @Bean
     @ConditionalOnMissingBean(SolverFactory.class)
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings("rawtypes")
     public SolverFactory solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(ShiftSchedule.class)
@@ -164,11 +164,11 @@ public class OptaPlannerConfig {
         return SolverFactory.create(solverConfig);
     }
 
-    // ScoreManager は explainScore に利用（デバッグ用途）
+    // SolutionManager は explain に利用（デバッグ用途）
     @Bean
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public ScoreManager shiftScoreManager(SolverFactory solverFactory) {
-        return ScoreManager.create(solverFactory);
+    public SolutionManager shiftSolutionManager(SolverFactory solverFactory) {
+        return SolutionManager.create(solverFactory);
     }
 
     @Bean

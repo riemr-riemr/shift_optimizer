@@ -29,7 +29,7 @@ import io.github.riemr.shift.infrastructure.mapper.EmployeeMapper;
 import io.github.riemr.shift.infrastructure.mapper.EmployeeRegisterSkillMapper;
 import org.optaplanner.core.api.solver.SolverJob;
 import org.optaplanner.core.api.solver.SolverManager;
-import org.optaplanner.core.api.score.ScoreManager;
+import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.api.solver.SolverStatus;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.springframework.beans.factory.annotation.Value;
@@ -102,7 +102,7 @@ public class ShiftScheduleService {
     private final PlatformTransactionManager transactionManager;
     private final AttendanceService attendanceService;
     private final AssignmentService assignmentCandidateService;
-    private final ScoreManager<ShiftSchedule, HardSoftScore> shiftScoreManager;
+    private final SolutionManager<ShiftSchedule, HardSoftScore> shiftSolutionManager;
     @Value("${shift.solver.mode:ASSIGNMENT}")
     private String defaultStage;
 
@@ -123,7 +123,7 @@ public class ShiftScheduleService {
 
     /* === Runtime State === */
     private final Map<ProblemKey, Instant> startMap = new ConcurrentHashMap<>();
-    private final Map<ProblemKey, Object> jobMap = new ConcurrentHashMap<>();
+    private final Map<ProblemKey, SolverJob<?, ProblemKey>> jobMap = new ConcurrentHashMap<>();
     private final Map<ProblemKey, String> currentPhaseMap = new ConcurrentHashMap<>(); // 現在のフェーズ
     // 開発者向け: スコア推移の時系列
     private final Map<ProblemKey, List<ScorePoint>> scoreSeriesMap = new ConcurrentHashMap<>();
@@ -601,19 +601,13 @@ public class ShiftScheduleService {
     }
 
     private List<ShiftAssignmentView> internalFetchResult(ProblemKey key) {
-        Object anyJob = jobMap.get(key);
-        if (anyJob == null) return List.of();
-        if (!(anyJob instanceof SolverJob)) return List.of();
-        @SuppressWarnings("unchecked")
-        SolverJob<ShiftSchedule, ProblemKey> job = null;
+        SolverJob<?, ProblemKey> job = jobMap.get(key);
+        if (job == null) return List.of();
         try {
-            job = (SolverJob<ShiftSchedule, ProblemKey>) anyJob;
-        } catch (ClassCastException ex) {
             // ATTENDANCE ジョブの場合は結果形式が異なるため空を返す
-            return List.of();
-        }
-        try {
-            ShiftSchedule solved = job.getFinalBestSolution();
+            if (!(job.getFinalBestSolution() instanceof ShiftSchedule solved)) {
+                return List.of();
+            }
             return solved.getAssignmentList().stream()
                     .map(a -> new ShiftAssignmentView(
                             a.getOrigin().getStartAt().toString(),
@@ -1509,7 +1503,7 @@ public class ShiftScheduleService {
                 System.getenv().getOrDefault("SHIFT_SOLVER_DEBUG_EXPLAIN", "false")));
         if (debugExplain && best != null && best.getScore() != null) {
             try {
-                var exp = shiftScoreManager.explainScore(best);
+                var exp = shiftSolutionManager.explain(best);
                 log.info("[ExplainScore] score={}", best.getScore());
                 exp.getConstraintMatchTotalMap().entrySet().stream()
                         .sorted((a,b) -> b.getValue().getScore().compareTo(a.getValue().getScore()))

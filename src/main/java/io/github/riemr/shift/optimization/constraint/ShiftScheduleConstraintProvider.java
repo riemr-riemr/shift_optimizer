@@ -211,11 +211,10 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
                         Joiners.equal(RegisterDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
-                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
-                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
-                                && sa.getWorkKind() == WorkKind.REGISTER_OP
-                                && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
-                        ))
+                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo))
+                .filter((demand, sa) -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.REGISTER_OP
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
                 .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
                 // レジ需要を優先（不足: ×20、過多: ×1、基底重み 200）
                 .penalize(HardSoftScore.ofSoft(200),
@@ -234,6 +233,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Register demand balance");
     }
 
+    // ifNotExists は filtering を Joiner として渡す必要があり 5 個目で varargs の
+    // ジェネリック配列警告が出るが、Joiner はステートレスで配列に書き込まれないため安全
+    @SuppressWarnings("unchecked")
     private Constraint registerDemandShortageWhenNoneForAssignment(ConstraintFactory f) {
         return f.forEach(RegisterDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
@@ -265,11 +267,10 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                         Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(WorkDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
                         Joiners.equal(WorkDemandSlot::getDepartmentCode, ShiftAssignmentPlanningEntity::getDepartmentCode),
-                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
-                        Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
-                                && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
-                                && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
-                        ))
+                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime))
+                .filter((d, sa) -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
                 .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
                 // 部門作業はレジより優先度を下げる（不足: ×5、過多: ×1、基底重み 10）
                 .penalize(HardSoftScore.ofSoft(10), (d, assigned) -> {
