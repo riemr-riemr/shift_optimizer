@@ -36,7 +36,7 @@
       <form method="post" th:action="@{/permissions/roles/update}">
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle mb-0">
-            <thead class="table-light">
+            <thead>
               <tr>
                 <th style="width: 18%;">権限コード</th>
                 <th style="width: 22%;">権限名</th>
@@ -90,7 +90,7 @@
       <div class="card-header">画面権限マトリクス</div>
       <div class="card-body p-0">
         <table class="table table-hover mb-0">
-          <thead class="table-light">
+          <thead>
             <tr>
               <th>画面コード</th>
               <th th:each="r : ${roles}" th:text="${r.authorityCode}">ROLE</th>
@@ -125,7 +125,7 @@
       <div class="card-header">部門閲覧権限マトリクス</div>
       <div class="card-body p-0">
         <table class="table table-hover mb-0">
-          <thead class="table-light">
+          <thead>
             <tr>
               <th>部門</th>
               <th th:each="r : ${roles}" th:text="${r.authorityCode}">ROLE</th>
@@ -158,7 +158,7 @@
       <div class="card-header">店舗権限（組織ノード単位）</div>
       <div class="card-body p-0">
         <table class="table table-hover mb-0">
-          <thead class="table-light">
+          <thead>
           <tr>
             <th>組織ノード</th>
             <th th:each="r : ${roles}" th:text="${r.authorityCode}">ROLE</th>

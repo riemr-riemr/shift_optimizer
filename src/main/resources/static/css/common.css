@@ -40,6 +40,10 @@
   
   /* Hover effects */
   --hover-light: #f1f5ff;
+
+  /* Table header gradients (matrix-style screens) */
+  --table-col-header-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --table-row-header-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 /* ==========================================
@@ -612,6 +616,21 @@
   margin-top: 5px;
 }
 
+.range-selector-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 2px solid #0d6efd;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1500;
+  display: none;
+  min-width: 300px;
+}
+
 .range-selector-panel.show {
   display: block;
 }
@@ -662,4 +681,80 @@
   border: 1px solid #dee2e6;
   border-radius: 6px;
   background: #fff;
+}
+
+/* ==========================================
+   Unified Table Styles
+   標準テーブルは table-light 相当のヘッダー配色、
+   マトリクス型テーブルは列=青系/行=紫系グラデーションに全画面で統一する
+   ========================================== */
+.table > thead {
+  --bs-table-bg: var(--color-light);
+  --bs-table-color: var(--color-dark);
+}
+
+/* マトリクス型テーブルのスクロールコンテナ */
+.matrix-table-container {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--border-normal);
+  border-radius: 8px;
+}
+
+.skill-matrix-table thead th {
+  background: var(--table-col-header-gradient);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  vertical-align: middle;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.skill-matrix-table .task-header {
+  min-width: 140px;
+}
+
+.skill-matrix-table .task-header small {
+  display: block;
+  font-weight: normal;
+  color: #e9f5ff;
+}
+
+.skill-matrix-table .employee-header {
+  background: var(--table-row-header-gradient);
+  color: #fff;
+  position: sticky;
+  left: 0;
+  z-index: 11;
+  min-width: 180px;
+}
+
+.skill-matrix-table td {
+  text-align: center;
+  vertical-align: middle;
+  padding: 6px;
+}
+
+.skill-select {
+  width: 100%;
+  max-width: 80px;
+  font-size: 0.85rem;
+}
+
+.skill-cell {
+  user-select: none;
+  cursor: pointer;
+}
+
+.skill-cell.selecting {
+  background: rgba(13, 110, 253, 0.1) !important;
+  border: 2px solid #0d6efd !important;
+}
+
+.skill-cell.selected {
+  background: rgba(13, 110, 253, 0.2) !important;
+  border: 2px solid #0d6efd !important;
 }

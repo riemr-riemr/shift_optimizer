@@ -34,19 +34,18 @@
       </div>
       <div class="card-body p-0">
         <form th:action="${mode}=='register' ? @{/skills} : @{/skills/tasks}" method="post">
-          <div class="table-container" style="max-height: 70vh; overflow: auto; border: 1px solid #dee2e6; border-radius: 8px;">
+          <div class="matrix-table-container">
             <table class="table skill-matrix-table mb-0" th:attr="id=${id}">
               <thead>
                 <tr>
-                  <th class="employee-header" scope="col" style="min-width: 180px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; position:sticky; left:0; z-index:11;">
+                  <th class="employee-header" scope="col">
                     <i class="bi bi-person"></i> 従業員 ＼ <span th:text="${mode}=='task' ? '作業' : 'レジスター'"></span>
                   </th>
                   <th th:each="h,iter : ${headers}" class="task-header" scope="col"
-                      th:attr="data-task=${isTask ? h.taskCode : h.registerNo}, data-dept=${isTask ? h.departmentCode : '520'}, data-store=${isTask ? '' : h.storeCode}, data-col=${iter.index}"
-                      style="min-width: 140px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color:#fff; position: sticky; top:0; z-index:10; text-align:center;">
+                      th:attr="data-task=${isTask ? h.taskCode : h.registerNo}, data-dept=${isTask ? h.departmentCode : '520'}, data-store=${isTask ? '' : h.storeCode}, data-col=${iter.index}">
                     <span th:text="${isTask ? h.taskCode : h.registerNo}"></span>
                     <br>
-                    <small th:text="${isTask ? (h.name != null ? h.name : h.taskCode) : (h.registerName != null ? h.registerName : 'No.' + h.registerNo)}" style="display:block; color:#e9f5ff;"></small>
+                    <small th:text="${isTask ? (h.name != null ? h.name : h.taskCode) : (h.registerName != null ? h.registerName : 'No.' + h.registerNo)}"></small>
                   </th>
                 </tr>
               </thead>
@@ -212,12 +211,4 @@
         })();
       })();
     </script>
-
-    <style>
-      .skill-matrix-table td { text-align: center; vertical-align: middle; padding: 6px; }
-      .skill-select { width: 100%; max-width: 80px; font-size: 0.85rem; }
-      .range-selector-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #0d6efd; border-radius: 8px; padding: 16px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 1500; display: none; min-width: 300px; }
-      .skill-cell.selecting { background: rgba(13,110,253,0.1) !important; border: 2px solid #0d6efd !important; }
-      .skill-cell.selected { background: rgba(13,110,253,0.2) !important; border: 2px solid #0d6efd !important; }
-    </style>
   </div>
