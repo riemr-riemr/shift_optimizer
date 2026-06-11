@@ -49,7 +49,6 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 headcountBalance(f),
                 weeklyWorkHoursRange(f),
                 monthlyWorkHoursRange(f),
-                overstaffLightPenalty(f),
                 attendanceGroupMinOnDutyShortage(f),
                 attendanceGroupMinOnDutyShortageWhenNone(f),
                 attendanceGroupNoSameDayWork(f),
@@ -217,24 +216,6 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * 需要スロットに対して過剰配置がある場合に軽いペナルティを課す。
-     *
-     * @param f 制約ファクトリ
-     * @return 過剰配置ペナルティ制約
-     */
-    private Constraint overstaffLightPenalty(ConstraintFactory f) {
-        return f.forEach(RegisterDemandSlot.class)
-                .join(DailyPatternAssignmentEntity.class,
-                        Joiners.equal(RegisterDemandSlot::getStoreCode, DailyPatternAssignmentEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getDemandDate, DailyPatternAssignmentEntity::getDate),
-                        Joiners.filtering((d, e) -> e.getAssignedEmployee() != null && timeWithin(e, d.getSlotTime())))
-                .groupBy((d, e) -> d, ConstraintCollectors.countBi())
-                .filter((d, assigned) -> assigned > (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
-                .penalize(HardSoftScore.ofSoft(10), (d, assigned) -> assigned - (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())))
-                .asConstraint("Attendance: overstaff light penalty");
-    }
-
-    /**
      * 指定スロット時刻がパターンの時間帯に含まれるかを判定する。
      *
      * @param e パターン割当
@@ -356,10 +337,11 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                     // 月をまたぐ週は最小制約を無視
                     boolean crossesMonth = !YearMonth.from(weekStart)
                             .equals(YearMonth.from(weekStart.plusDays(6)));
-                    if (!crossesMonth && emp.getMinWorkHoursWeek() != null 
+                    if (!crossesMonth && emp.getMinWorkHoursWeek() != null
                             && totalMinutes < emp.getMinWorkHoursWeek() * 60) {
-                        // 最小時間制約（最高優先度）
-                        penalty += (emp.getMinWorkHoursWeek() * 60 - totalMinutes) * 500;
+                        // 不足分（分）をそのまま重みにする。旧実装の ×500 は基底重み200と合わせて
+                        // 1分あたり10万点となり、ソフトスコアの int オーバーフローを招くため撤去
+                        penalty += emp.getMinWorkHoursWeek() * 60 - totalMinutes;
                     }
                     return Math.max(penalty, 1);
                 })
@@ -393,8 +375,8 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .penalize(HardSoftScore.ofSoft(200), (setting, totalMinutes) -> {
                     int penalty = 0;
                     if (setting.getMinWorkHours() != null && totalMinutes < setting.getMinWorkHours() * 60) {
-                        // 最小時間制約（最高優先度）
-                        penalty += (setting.getMinWorkHours() * 60 - totalMinutes) * 500;
+                        // 不足分（分）をそのまま重みにする（×500 はオーバーフローリスクのため撤去）
+                        penalty += setting.getMinWorkHours() * 60 - totalMinutes;
                     }
                     return Math.max(penalty, 1);
                 })
