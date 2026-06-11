@@ -247,8 +247,9 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
                         ))
-                // 無配置（完全未割当）の場合はさらに強いペナルティ
-                .penalize(HardSoftScore.ofSoft(400), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
+                // 無配置（完全未割当）は部分不足（Register demand balance: 200×20/人）の極限ケース。
+                // 単価を揃えないと「1人だけ置く」より「全く置かない」方が安くなる逆転が起きる
+                .penalize(HardSoftScore.ofSoft(200), d -> (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())) * 20)
                 .asConstraint("Register demand shortage (no assignment)");
     }
 
