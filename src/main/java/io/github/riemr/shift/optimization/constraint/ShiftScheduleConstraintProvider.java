@@ -147,11 +147,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @return 従業員重複配置禁止制約
      */
     private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
+        // 従業員・日付・時間重なりを全て Joiner に載せてインデックス結合させる
+        // （filter での後段判定は同日全ペアの直積評価になり O(n^2) で遅い）
         return f.forEachUniquePair(ShiftAssignmentPlanningEntity.class,
-                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate))
+                Joiners.equal(sa -> sa.getAssignedEmployee() == null ? null : sa.getAssignedEmployee().getEmployeeCode()),
+                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
+                Joiners.overlapping(ShiftAssignmentPlanningEntity::getStartAt, ShiftAssignmentPlanningEntity::getEndAt))
                 .filter((a, b) -> a.getAssignedEmployee() != null && b.getAssignedEmployee() != null)
-                .filter((a, b) -> a.getAssignedEmployee().getEmployeeCode().equals(b.getAssignedEmployee().getEmployeeCode()))
-                .filter((a, b) -> overlaps(a, b))
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Employee overlapping assignments");
     }
@@ -171,16 +173,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter((emp, date, startAt, cnt) -> cnt != null && cnt > 1)
                 .penalize(HardSoftScore.ONE_HARD, (emp, date, startAt, cnt) -> cnt - 1)
                 .asConstraint("Forbid multiple registers in same slot");
-    }
-
-    private static boolean overlaps(ShiftAssignmentPlanningEntity a, ShiftAssignmentPlanningEntity b) {
-        if (a.getStartAt() == null || a.getEndAt() == null || b.getStartAt() == null || b.getEndAt() == null) {
-            return false;
-        }
-        // 境界が接している場合は重複ではない（9:00-9:15と9:15-9:30は重複しない）
-        // 真の重複は時間が内部的に交わる場合のみ
-        return a.getStartAt().before(b.getEndAt()) && b.getStartAt().before(a.getEndAt()) 
-            && !a.getEndAt().equals(b.getStartAt()) && !b.getEndAt().equals(a.getStartAt());
     }
 
     /**
@@ -220,8 +212,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .join(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getSlotTime,
-                                sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.equal(RegisterDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
@@ -250,8 +241,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getSlotTime,
-                                sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.equal(RegisterDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
@@ -275,11 +265,11 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .join(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(WorkDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
+                        Joiners.equal(WorkDemandSlot::getDepartmentCode, ShiftAssignmentPlanningEntity::getDepartmentCode),
+                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
-                                && d.getDepartmentCode().equals(sa.getDepartmentCode())
-                                && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
                         ))
                 .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
                 // 部門作業はレジより優先度を下げる（不足: ×5、過多: ×1、基底重み 10）
@@ -301,10 +291,10 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return f.forEach(WorkDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(WorkDemandSlot::getDepartmentCode, ShiftAssignmentPlanningEntity::getDepartmentCode),
+                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
-                                && d.getDepartmentCode().equals(sa.getDepartmentCode())
-                                && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
                         ))
                 .penalize(HardSoftScore.ofSoft(50), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
                 .asConstraint("Work demand shortage (no assignment)");
