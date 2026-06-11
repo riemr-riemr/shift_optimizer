@@ -416,7 +416,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter((emp, weekStart, totalMinutes) ->
                         emp.getMaxWorkHoursWeek() != null
                                 && totalMinutes > emp.getMaxWorkHoursWeek() * 60)
-                .penalize(HardSoftScore.ofSoft(200), (emp, weekStart, totalMinutes) -> {
+                .penalize(HardSoftScore.ONE_HARD, (emp, weekStart, totalMinutes) -> {
                     int overMinutes = totalMinutes - emp.getMaxWorkHoursWeek() * 60;
                     return Math.max(0, overMinutes);
                 })
@@ -445,7 +445,7 @@ public class AttendanceConstraintProvider implements ConstraintProvider {
                 .filter((setting, totalMinutes) ->
                         setting.getMaxWorkHours() != null
                                 && totalMinutes > setting.getMaxWorkHours() * 60)
-                .penalize(HardSoftScore.ofSoft(200), (setting, totalMinutes) -> {
+                .penalize(HardSoftScore.ONE_HARD, (setting, totalMinutes) -> {
                     int overMinutes = totalMinutes - setting.getMaxWorkHours() * 60;
                     return Math.max(0, overMinutes);
                 })
