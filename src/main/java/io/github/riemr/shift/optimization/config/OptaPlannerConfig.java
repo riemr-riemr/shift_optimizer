@@ -49,9 +49,12 @@ public class OptaPlannerConfig {
     // ATTENDANCE 未改善終了（既定: 30秒）
     @Value("${shift.attendance.unimproved-limit:PT30S}")
     private String attendanceUnimprovedLimit;
-    // アーリーストッピングを無効化
-    // @Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
-    // private Duration unimprovedScoreLimit;
+    // 共通（ASSIGNMENT）未改善終了（既定: 2分）。ベストスコアが更新されないまま経過したら打ち切る
+    @Value("${shift.solver.unimproved-limit:PT2M}")
+    private String solverUnimprovedLimit;
+    // ムーブ評価の並列スレッド数（NONE / AUTO / 数値）
+    @Value("${shift.solver.move-thread-count:AUTO}")
+    private String moveThreadCount;
 
     @Bean
     @ConditionalOnMissingBean(SolverFactory.class)
@@ -60,6 +63,7 @@ public class OptaPlannerConfig {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(ShiftSchedule.class)
                 .withEntityClasses(ShiftAssignmentPlanningEntity.class)
+                .withMoveThreadCount(moveThreadCount)
                 .withTerminationConfig(terminationConfig());
 
         // Constraint Streams を設定（ConstraintMatchはバージョン互換のためsetter使用）
@@ -97,6 +101,7 @@ public class OptaPlannerConfig {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(AttendanceSolution.class)
                 .withEntityClasses(DailyPatternAssignmentEntity.class)
+                .withMoveThreadCount(moveThreadCount)
                 // ATTENDANCEは専用の時間上限＋未改善終了を使用
                 .withTerminationConfig(new TerminationConfig()
                         .withSpentLimit(parseDurationTolerant(attendanceSpentLimit, Duration.ofMinutes(2)))
@@ -174,14 +179,10 @@ public class OptaPlannerConfig {
 
 
     private TerminationConfig terminationConfig() {
-        // アーリーストッピングを無効化して時間制限のみで実行
-        TerminationConfig t = new TerminationConfig().withSpentLimit(parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)));
-        // アーリーストッピングのコードをコメントアウト
-        // if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
-        //     // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
-        //     t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
-        // }
-        return t;
+        // 時間上限＋未改善終了（改善が止まったら上限前でも打ち切る）
+        return new TerminationConfig()
+                .withSpentLimit(parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)))
+                .withUnimprovedSpentLimit(parseDurationTolerant(solverUnimprovedLimit, Duration.ofMinutes(2)));
     }
 
     private Duration parseDurationTolerant(String raw, Duration def) {
