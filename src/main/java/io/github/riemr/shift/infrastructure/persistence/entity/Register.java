@@ -1,8 +1,6 @@
 package io.github.riemr.shift.infrastructure.persistence.entity;
 
-import java.io.Serializable;
-
-public class Register extends RegisterKey implements Serializable {
+public class Register extends RegisterKey {
     
 
     /**

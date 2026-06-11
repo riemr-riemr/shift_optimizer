@@ -46,16 +46,14 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             forbidAssignmentNearShiftBoundaries(factory),
 
             // Soft constraints (ASSIGNMENT only)
-            penalizeUnassignedSlotForAssignment(factory),
             registerDemandBalanceForAssignment(factory),
             registerDemandShortageWhenNoneForAssignment(factory),
             workDemandBalanceForAssignment(factory),
             workDemandShortageWhenNoneForAssignment(factory),
             preferHigherSkillLevelForAssignment(factory),
             preferDepartmentHigherSkillForAssignment(factory),
-            
+
             balanceWorkload(factory),
-            minimizeRegisterSwitching(factory),
             preferConsistentRegisterAssignment(factory),
             preferConsistentDepartmentAssignment(factory)
         };
@@ -147,11 +145,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @return 従業員重複配置禁止制約
      */
     private Constraint employeeNotDoubleBooked(ConstraintFactory f) {
+        // 従業員・日付・時間重なりを全て Joiner に載せてインデックス結合させる
+        // （filter での後段判定は同日全ペアの直積評価になり O(n^2) で遅い）
         return f.forEachUniquePair(ShiftAssignmentPlanningEntity.class,
-                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate))
+                Joiners.equal(sa -> sa.getAssignedEmployee() == null ? null : sa.getAssignedEmployee().getEmployeeCode()),
+                Joiners.equal(ShiftAssignmentPlanningEntity::getShiftDate),
+                Joiners.overlapping(ShiftAssignmentPlanningEntity::getStartAt, ShiftAssignmentPlanningEntity::getEndAt))
                 .filter((a, b) -> a.getAssignedEmployee() != null && b.getAssignedEmployee() != null)
-                .filter((a, b) -> a.getAssignedEmployee().getEmployeeCode().equals(b.getAssignedEmployee().getEmployeeCode()))
-                .filter((a, b) -> overlaps(a, b))
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("Employee overlapping assignments");
     }
@@ -171,16 +171,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .filter((emp, date, startAt, cnt) -> cnt != null && cnt > 1)
                 .penalize(HardSoftScore.ONE_HARD, (emp, date, startAt, cnt) -> cnt - 1)
                 .asConstraint("Forbid multiple registers in same slot");
-    }
-
-    private static boolean overlaps(ShiftAssignmentPlanningEntity a, ShiftAssignmentPlanningEntity b) {
-        if (a.getStartAt() == null || a.getEndAt() == null || b.getStartAt() == null || b.getEndAt() == null) {
-            return false;
-        }
-        // 境界が接している場合は重複ではない（9:00-9:15と9:15-9:30は重複しない）
-        // 真の重複は時間が内部的に交わる場合のみ
-        return a.getStartAt().before(b.getEndAt()) && b.getStartAt().before(a.getEndAt()) 
-            && !a.getEndAt().equals(b.getStartAt()) && !b.getEndAt().equals(a.getStartAt());
     }
 
     /**
@@ -220,13 +210,11 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .join(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getSlotTime,
-                                sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
-                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
-                        Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
-                                && sa.getWorkKind() == WorkKind.REGISTER_OP
-                                && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
-                        ))
+                        Joiners.equal(RegisterDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
+                        Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo))
+                .filter((demand, sa) -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.REGISTER_OP
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
                 .groupBy((demand, sa) -> demand, ConstraintCollectors.countBi())
                 // レジ需要を優先（不足: ×20、過多: ×1、基底重み 200）
                 .penalize(HardSoftScore.ofSoft(200),
@@ -245,20 +233,23 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .asConstraint("Register demand balance");
     }
 
+    // ifNotExists は filtering を Joiner として渡す必要があり 5 個目で varargs の
+    // ジェネリック配列警告が出るが、Joiner はステートレスで配列に書き込まれないため安全
+    @SuppressWarnings("unchecked")
     private Constraint registerDemandShortageWhenNoneForAssignment(ConstraintFactory f) {
         return f.forEach(RegisterDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(RegisterDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(RegisterDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.equal(RegisterDemandSlot::getSlotTime,
-                                sa -> sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime()),
+                        Joiners.equal(RegisterDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.equal(RegisterDemandSlot::getRegisterNo, ShiftAssignmentPlanningEntity::getRegisterNo),
                         Joiners.filtering((demand, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.REGISTER_OP
                                 && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
                         ))
-                // 無配置（完全未割当）の場合はさらに強いペナルティ
-                .penalize(HardSoftScore.ofSoft(400), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
+                // 無配置（完全未割当）は部分不足（Register demand balance: 200×20/人）の極限ケース。
+                // 単価を揃えないと「1人だけ置く」より「全く置かない」方が安くなる逆転が起きる
+                .penalize(HardSoftScore.ofSoft(200), d -> (d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits())) * 20)
                 .asConstraint("Register demand shortage (no assignment)");
     }
 
@@ -275,12 +266,11 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .join(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
                         Joiners.equal(WorkDemandSlot::getStoreCode, ShiftAssignmentPlanningEntity::getStoreCode),
-                        Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
-                                && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
-                                && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT"))
-                                && d.getDepartmentCode().equals(sa.getDepartmentCode())
-                                && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
-                        ))
+                        Joiners.equal(WorkDemandSlot::getDepartmentCode, ShiftAssignmentPlanningEntity::getDepartmentCode),
+                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime))
+                .filter((d, sa) -> sa.getAssignedEmployee() != null
+                        && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
                 .groupBy((d, sa) -> d, ConstraintCollectors.countBi())
                 // 部門作業はレジより優先度を下げる（不足: ×5、過多: ×1、基底重み 10）
                 .penalize(HardSoftScore.ofSoft(10), (d, assigned) -> {
@@ -301,25 +291,13 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         return f.forEach(WorkDemandSlot.class)
                 .ifNotExists(ShiftAssignmentPlanningEntity.class,
                         Joiners.equal(WorkDemandSlot::getDemandDate, ShiftAssignmentPlanningEntity::getShiftDate),
+                        Joiners.equal(WorkDemandSlot::getDepartmentCode, ShiftAssignmentPlanningEntity::getDepartmentCode),
+                        Joiners.equal(WorkDemandSlot::getSlotTime, ShiftAssignmentPlanningEntity::getSlotStartTime),
                         Joiners.filtering((d, sa) -> sa.getAssignedEmployee() != null
                                 && sa.getWorkKind() == WorkKind.DEPARTMENT_TASK
-                                && d.getDepartmentCode().equals(sa.getDepartmentCode())
-                                && d.getSlotTime().equals(sa.getStartAt().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalTime())
                         ))
                 .penalize(HardSoftScore.ofSoft(50), d -> d.getRequiredUnits() == null ? 0 : Math.max(0, d.getRequiredUnits()))
                 .asConstraint("Work demand shortage (no assignment)");
-    }
-
-    /**
-     * スロット未割当そのものに強いソフトペナルティを課す。
-     * 需要ベースの不足ペナルティに加えて、各スロットのNULL割当を直接的に抑制する。
-     */
-    private Constraint penalizeUnassignedSlotForAssignment(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() == null)
-                // 1スロット未割当につき極めて強いペナルティ
-                .penalize(HardSoftScore.ofSoft(100000))
-                .asConstraint("Penalize unassigned slot (ASSIGNMENT)");
     }
 
     /**
@@ -328,7 +306,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
     private Constraint preferHigherSkillLevelForAssignment(ConstraintFactory f) {
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null
-                        && (sa.getStage() == null || "ASSIGNMENT".equals(sa.getStage())))
+                        && (sa.getStage() == null || sa.getStage().startsWith("ASSIGNMENT")))
                 .join(EmployeeRegisterSkill.class,
                         Joiners.equal(sa -> sa.getAssignedEmployee().getEmployeeCode(), EmployeeRegisterSkill::getEmployeeCode),
                         Joiners.equal(ShiftAssignmentPlanningEntity::getRegisterNo, EmployeeRegisterSkill::getRegisterNo))
@@ -351,43 +329,23 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
      * @return 労働負荷均等化制約
      */
     private Constraint balanceWorkload(ConstraintFactory f) {
+        // 従業員×日単位で集計する。従業員単位だけで月間スロット数を 32 と比較すると
+        // 全員が常にキャップに張り付き、どのムーブでもスコアが変わらない死に制約になる
         return f.forEach(ShiftAssignmentPlanningEntity.class)
                 .filter(sa -> sa.getAssignedEmployee() != null)
-                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, ConstraintCollectors.count())
-                .penalize(HardSoftScore.ofSoft(1), (emp, cnt) -> {
-                    // 平均から離れるほど高ペナルティ（従業員間の公平性を促進）
-                    // 基準値を8時間分(32スロット)として設定
+                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
+                        ShiftAssignmentPlanningEntity::getShiftDate,
+                        ConstraintCollectors.count())
+                .penalize(HardSoftScore.ofSoft(1), (emp, date, cnt) -> {
+                    // 基準値を1日8時間分(32スロット)として、離れるほど高ペナルティ（公平性の緩い誘導）
                     int target = 32; // 8時間 * 4スロット/時間
                     int deviation = Math.abs(cnt.intValue() - target);
-                    // 性能向上のため線形ペナルティに変更
                     return Math.min(deviation, 50); // キャップ付き線形ペナルティ
                 })
                 .asConstraint("Balance workload");
     }
 
     // getWeekStartメソッドは未使用のため削除
-
-    /**
-     * レジ切り替え最小化制約（ソフト制約）
-     * レジ種別間の切り替わり頻度を最小化する制約
-     * 同一従業員が一日の中で異なるレジ番号に頻繁に切り替わることを避ける
-     * 業務効率向上と従業員の作業負荷軽減のための制約
-     * 
-     * @param f 制約ファクトリ
-     * @return レジ切り替え最小化制約
-     */
-    private Constraint minimizeRegisterSwitching(ConstraintFactory f) {
-        return f.forEach(ShiftAssignmentPlanningEntity.class)
-                .filter(sa -> sa.getAssignedEmployee() != null
-                        && sa.getWorkKind() == io.github.riemr.shift.optimization.entity.WorkKind.REGISTER_OP
-                        && sa.getRegisterNo() != null)
-                .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee, 
-                         ShiftAssignmentPlanningEntity::getShiftDate,
-                         ConstraintCollectors.toList())
-                .penalize(HardSoftScore.ofSoft(50),
-                          (emp, date, assignments) -> countRegisterSwitches(assignments))
-                .asConstraint("Minimize register switching");
-    }
 
     /**
      * レジ一貫性優先制約（ソフト制約・ペナルティ方式）
@@ -406,7 +364,8 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                 .groupBy(ShiftAssignmentPlanningEntity::getAssignedEmployee,
                          ShiftAssignmentPlanningEntity::getShiftDate,
                          ConstraintCollectors.toList())
-                .penalize(HardSoftScore.ofSoft(50),
+                // 旧 minimizeRegisterSwitching(50) と二重カウントだったため統合し、重みを 100 に集約
+                .penalize(HardSoftScore.ofSoft(100),
                         (emp, date, assignments) -> {
                             // 理想的なブロック数（1ブロック）からの差分をペナルティとする
                             int actualBlocks = countConsistentRegisterBlocks(assignments);
@@ -439,36 +398,6 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
                             return Math.max(0, actualBlocks - idealBlocks);
                         })
                 .asConstraint("Penalize department assignment fragmentation");
-    }
-
-    /**
-     * 一日の中でのレジ種別切り替え回数をカウント
-     * 時間順にソートして、隣接するタイムスロット間でレジ番号が変わる回数を数える
-     * 
-     * @param assignments 同一従業員・同一日の勤務割り当てリスト
-     * @return レジ種別切り替え回数
-     */
-    private static int countRegisterSwitches(List<ShiftAssignmentPlanningEntity> assignments) {
-        if (assignments.size() <= 1) return 0;
-        
-        assignments.sort(Comparator.comparing(ShiftAssignmentPlanningEntity::getStartAt));
-        int switches = 0;
-        
-        for (int i = 1; i < assignments.size(); i++) {
-            ShiftAssignmentPlanningEntity current = assignments.get(i);
-            ShiftAssignmentPlanningEntity previous = assignments.get(i - 1);
-            
-            // 連続するタイムスロットでレジ番号が異なる場合、切り替わりとしてカウント
-            Integer curReg = current.getRegisterNo();
-            Integer prevReg = previous.getRegisterNo();
-            if (curReg != null && prevReg != null &&
-                current.getStartAt().equals(previous.getEndAt()) && 
-                !curReg.equals(prevReg)) {
-                switches++;
-            }
-        }
-        
-        return switches;
     }
 
     /**

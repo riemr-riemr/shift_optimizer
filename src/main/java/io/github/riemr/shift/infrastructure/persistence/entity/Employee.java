@@ -3,10 +3,13 @@ package io.github.riemr.shift.infrastructure.persistence.entity;
 import java.io.Serializable;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
+import org.optaplanner.core.api.domain.lookup.PlanningId;
 
 @NoArgsConstructor
 @AllArgsConstructor
 public class Employee implements Serializable {
+    /** OptaPlanner のマルチスレッド探索でムーブを各スレッドへリベースする際のルックアップキー */
+    @PlanningId
     private String employeeCode;
     private String storeCode;
     private String employeeName;

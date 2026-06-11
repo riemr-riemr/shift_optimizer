@@ -11,6 +11,7 @@ import org.optaplanner.core.api.domain.variable.PlanningVariable;
 import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
@@ -41,6 +42,11 @@ public class ShiftAssignmentPlanningEntity {
     // エンティティ毎に可用な従業員候補（ATTENDANCE/ASSIGNMENTでフィルタリング）
     private List<Employee> candidateEmployees = Collections.emptyList();
 
+    // 制約評価のホットパスで毎回 Date→LocalDate/LocalTime 変換しないためのキャッシュ
+    // （origin.startAt は問題ロード後に変化しない前提）
+    private transient LocalDate cachedShiftDate;
+    private transient LocalTime cachedSlotStartTime;
+
     public ShiftAssignmentPlanningEntity() {
     }
 
@@ -51,8 +57,20 @@ public class ShiftAssignmentPlanningEntity {
     }
 
     public LocalDate getShiftDate() {
-        return origin.getStartAt() == null ? null :
-                origin.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        if (cachedShiftDate == null) {
+            cachedShiftDate = origin.getStartAt() == null ? null :
+                    origin.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+        return cachedShiftDate;
+    }
+
+    /** スロット開始時刻（需要スロットとの結合キー用） */
+    public LocalTime getSlotStartTime() {
+        if (cachedSlotStartTime == null) {
+            cachedSlotStartTime = origin.getStartAt() == null ? null :
+                    origin.getStartAt().toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
+        }
+        return cachedSlotStartTime;
     }
 
     public Integer getRegisterNo() {

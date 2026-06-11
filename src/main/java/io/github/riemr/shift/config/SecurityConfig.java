@@ -11,7 +11,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 @ConditionalOnWebApplication
@@ -33,8 +32,7 @@ public class SecurityConfig {
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider(UserDetailsService uds, PasswordEncoder encoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(uds);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(uds);
         provider.setPasswordEncoder(encoder);
         return provider;
     }
@@ -44,13 +42,13 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    new AntPathRequestMatcher("/login"),
-                    new AntPathRequestMatcher("/css/**"),
-                    new AntPathRequestMatcher("/js/**"),
-                    new AntPathRequestMatcher("/images/**"),
-                    new AntPathRequestMatcher("/webjars/**"),
-                    new AntPathRequestMatcher("/actuator/health"),
-                    new AntPathRequestMatcher("/")
+                    "/login",
+                    "/css/**",
+                    "/js/**",
+                    "/images/**",
+                    "/webjars/**",
+                    "/actuator/health",
+                    "/"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
@@ -69,9 +67,9 @@ public class SecurityConfig {
             // Keep CSRF enabled but temporarily ignore API endpoints used by fetch()
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
-                    new AntPathRequestMatcher("/shift/api/**"),
-                    new AntPathRequestMatcher("/employee-request/**"),
-                    new AntPathRequestMatcher("/tasks/api/**")
+                    "/shift/api/**",
+                    "/employee-request/**",
+                    "/tasks/api/**"
                 )
             );
 

@@ -26,7 +26,7 @@ import org.optaplanner.core.config.constructionheuristic.ConstructionHeuristicTy
 // pillar move APIs are not available in current OptaPlanner public config; use standard Change/Swap instead
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.optaplanner.core.api.score.ScoreManager;
+import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.config.score.director.ScoreDirectorFactoryConfig;
 import org.optaplanner.core.config.solver.SolverConfig;
 import org.optaplanner.core.config.solver.termination.TerminationConfig;
@@ -49,17 +49,21 @@ public class OptaPlannerConfig {
     // ATTENDANCE 未改善終了（既定: 30秒）
     @Value("${shift.attendance.unimproved-limit:PT30S}")
     private String attendanceUnimprovedLimit;
-    // アーリーストッピングを無効化
-    // @Value("${shift.solver.unimproved-soft-spent-limit:PT30S}")
-    // private Duration unimprovedScoreLimit;
+    // 共通（ASSIGNMENT）未改善終了（既定: 2分）。ベストスコアが更新されないまま経過したら打ち切る
+    @Value("${shift.solver.unimproved-limit:PT2M}")
+    private String solverUnimprovedLimit;
+    // ムーブ評価の並列スレッド数（NONE / AUTO / 数値）
+    @Value("${shift.solver.move-thread-count:AUTO}")
+    private String moveThreadCount;
 
     @Bean
     @ConditionalOnMissingBean(SolverFactory.class)
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings("rawtypes")
     public SolverFactory solverFactory() {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(ShiftSchedule.class)
                 .withEntityClasses(ShiftAssignmentPlanningEntity.class)
+                .withMoveThreadCount(moveThreadCount)
                 .withTerminationConfig(terminationConfig());
 
         // Constraint Streams を設定（ConstraintMatchはバージョン互換のためsetter使用）
@@ -97,6 +101,7 @@ public class OptaPlannerConfig {
         SolverConfig solverConfig = new SolverConfig()
                 .withSolutionClass(AttendanceSolution.class)
                 .withEntityClasses(DailyPatternAssignmentEntity.class)
+                .withMoveThreadCount(moveThreadCount)
                 // ATTENDANCEは専用の時間上限＋未改善終了を使用
                 .withTerminationConfig(new TerminationConfig()
                         .withSpentLimit(parseDurationTolerant(attendanceSpentLimit, Duration.ofMinutes(2)))
@@ -159,11 +164,11 @@ public class OptaPlannerConfig {
         return SolverFactory.create(solverConfig);
     }
 
-    // ScoreManager は explainScore に利用（デバッグ用途）
+    // SolutionManager は explain に利用（デバッグ用途）
     @Bean
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public ScoreManager shiftScoreManager(SolverFactory solverFactory) {
-        return ScoreManager.create(solverFactory);
+    public SolutionManager shiftSolutionManager(SolverFactory solverFactory) {
+        return SolutionManager.create(solverFactory);
     }
 
     @Bean
@@ -174,14 +179,10 @@ public class OptaPlannerConfig {
 
 
     private TerminationConfig terminationConfig() {
-        // アーリーストッピングを無効化して時間制限のみで実行
-        TerminationConfig t = new TerminationConfig().withSpentLimit(parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)));
-        // アーリーストッピングのコードをコメントアウト
-        // if (unimprovedScoreLimit != null && !unimprovedScoreLimit.isZero() && !unimprovedScoreLimit.isNegative()) {
-        //     // OptaPlanner 9.x: 未改善終了は withUnimprovedSpentLimit で設定（ベストスコア未更新の経過時間）
-        //     t = t.withUnimprovedSpentLimit(unimprovedScoreLimit);
-        // }
-        return t;
+        // 時間上限＋未改善終了（改善が止まったら上限前でも打ち切る）
+        return new TerminationConfig()
+                .withSpentLimit(parseDurationTolerant(solverSpentLimit, Duration.ofMinutes(30)))
+                .withUnimprovedSpentLimit(parseDurationTolerant(solverUnimprovedLimit, Duration.ofMinutes(2)));
     }
 
     private Duration parseDurationTolerant(String raw, Duration def) {
